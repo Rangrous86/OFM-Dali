@@ -114,11 +114,12 @@
                 <TypeNumber Type="unsignedInt" minInclusive="1" maxInclusive="64" SizeInBit="7" />
               </ParameterType>
               <ParameterType Id="%AID%_PT-colorType" Name="colorType" op:headerExport="define">
-                <TypeRestriction Base="Value" SizeInBit="2">
+                <TypeRestriction Base="Value" SizeInBit="3">
                   <Enumeration Text="HSV" Value="0" Id="%ENID%" />
                   <Enumeration Text="RGB" Value="1" Id="%ENID%" />
                   <Enumeration Text="TW" Value="2" Id="%ENID%" />
                   <Enumeration Text="xyY / xy" Value="3" Id="%ENID%" op:headerName="XYY" />
+                  <Enumeration Text="RGBW" Value="4" Id="%ENID%" op:headerName="RGBW" />
                 </TypeRestriction>
               </ParameterType>
               <ParameterType Id="%AID%_PT-colorSpace" Name="colorSpace" op:headerExport="define">

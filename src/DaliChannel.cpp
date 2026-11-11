@@ -1,4 +1,5 @@
 #include "DaliChannel.h"
+#include "RgbwHelper.h"
 #include "OpenKNX.h"
 
 DaliChannel::DaliChannel(Dali::Master &_daliMaster) : daliMaster(_daliMaster) {}
@@ -738,6 +739,11 @@ void DaliChannel::koHandleColor(GroupObject &ko)
         case PT_colorType_XYY:
             handleColorXYY(ko);
             break;
+
+        case PT_colorType_RGBW:
+            if (!handleColorRGBW(ko))
+                return; // Telegram changes nothing (no valid channel) -> do not touch the light
+            break;
     }
 
     if(!currentState)
@@ -778,6 +784,47 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
     sendKoStateOnChange(DGW_Kocolor_blue_state, currentColor[2], Dpt(5, 4));
 
     sendColor();
+}
+
+bool DaliChannel::handleColorRGBW(GroupObject &ko)
+{
+    // DPT 251.600 has 6 bytes: R, G, B, W, reserved, validity bits (mR, mG, mB, mW)
+    if (ko.valueSize() != RgbwHelper::DataLength)
+    {
+        logErrorP("RGBW: unexpected object size %i", (int)ko.valueSize());
+        return false;
+    }
+
+    const uint8_t valid = RgbwHelper::decode(ko.valueRef(), currentColor);
+    if (valid == 0)
+    {
+        logDebugP("RGBW: no valid channel in telegram, ignored");
+        return false;
+    }
+
+    logDebugP("Got RGBW: %i %i %i %i (valid %X)", currentColor[0], currentColor[1], currentColor[2], currentColor[3], valid);
+
+    sendRgbwState();
+    sendColor();
+    return true;
+}
+
+void DaliChannel::sendRgbwState()
+{
+    GroupObject &ko = knx.getGroupObject(calcKoNumber(DGW_Kocolor_rgb_state));
+    if (ko.valueSize() != RgbwHelper::DataLength)
+        return;
+
+    uint8_t data[RgbwHelper::DataLength];
+    RgbwHelper::encode(currentColor, data);
+
+    // sendKoStateOnChange() has no DPT for 6 byte colour objects -> compare and write raw
+    uint8_t *state = ko.valueRef();
+    if (memcmp(state, data, RgbwHelper::DataLength) != 0)
+    {
+        memcpy(state, data, RgbwHelper::DataLength);
+        ko.objectWritten();
+    }
 }
 
 void DaliChannel::handleColorTW(GroupObject &ko)
@@ -872,6 +919,13 @@ void DaliChannel::sendColor()
     // TODO only send every 100ms?
     uint8_t r, g, b;
     uint8_t colorType = _isGroup ? ParamDGWG_colorType : ParamDGW_colorType;
+    if (colorType == PT_colorType_RGBW)
+    {
+        // RGBW is always transmitted as RGB level + white level, "colorSpace" does not apply
+        sendColorAsRGBW(currentColor[0], currentColor[1], currentColor[2], currentColor[3]);
+        return;
+    }
+
     if (colorType == PT_colorType_HSV)
     {
         ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
@@ -902,6 +956,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
     daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR1, g);
     daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR2, b);
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_RGB_LEVEL, _isGroup);
+    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
+}
+
+void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
+{
+    r = RgbwHelper::daliLevel(r);
+    g = RgbwHelper::daliLevel(g);
+    b = RgbwHelper::daliLevel(b);
+    w = RgbwHelper::daliLevel(w);
+    logDebugP("Send RGBW: %i %i %i %i", r, g, b, w);
+
+    // 1. RGB level (DTR0 = R, DTR1 = G, DTR2 = B)
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, r);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR1, g);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR2, b);
+    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_RGB_LEVEL, _isGroup);
+
+    // 2. WAF level (DTR0 = W, DTR1 = Amber, DTR2 = Freecolour); 255 = MASK = leave unchanged
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, w);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR1, 255);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR2, 255);
+    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_WAF_LEVEL, _isGroup);
+
+    // 3. Apply both temporary values at once
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
 }
 
@@ -1002,6 +1080,12 @@ void DaliChannel::updateCurrentDimmValue()
 
         case DimmType::Color:
         {
+            if ((_isGroup ? ParamDGWG_colorType : ParamDGW_colorType) == PT_colorType_RGBW)
+            {
+                sendRgbwState();
+                break;
+            }
+
             uint32_t value = currentColor[2];
             value |= currentColor[1] << 8;
             value |= currentColor[0] << 16;

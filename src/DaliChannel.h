@@ -106,8 +106,8 @@ class DaliChannel : public OpenKNX::Channel
 		uint8_t currentStep = 0;
 		//Current lock state
 		bool currentIsLocked = false;
-		//Current color
-		uint8_t currentColor[4];
+		//Current color (R, G, B, W). With xyY the 4 bytes are used as two 16 bit values.
+		uint8_t currentColor[4] = {0, 0, 0, 0};
 
 		//Querying current state
 		uint32_t _queryId = 0;
@@ -131,6 +131,8 @@ class DaliChannel : public OpenKNX::Channel
 		void updateCurrentDimmValue();
 		void sendColor();
 		void sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b);
+		void sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w);
+		void sendRgbwState();
 		void sendColorAsXY(uint8_t r, uint8_t g, uint8_t b);
 		void sendKoStateOnChange(uint16_t koNr, const KNXValue &value, const Dpt &type);
 		void setTemperature(uint16_t value);
@@ -148,6 +150,7 @@ class DaliChannel : public OpenKNX::Channel
 		void handleColorRGB(GroupObject &ko);
 		void handleColorTW(GroupObject &ko);
 		void handleColorXYY(GroupObject &ko);
+		bool handleColorRGBW(GroupObject &ko);
 		void koHandleColorRel(GroupObject &ko, ColorChannel channel);
 		void koHandleColorAbs(GroupObject &ko, ColorChannel channel);
 		void koHandleHclCurve(GroupObject &ko);

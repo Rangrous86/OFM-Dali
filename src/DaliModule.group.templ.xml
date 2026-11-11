@@ -44,7 +44,7 @@
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="7" />
               </Parameter>
               <Parameter Id="%AID%_P-%T%3%CC%019" Name="%C%colorType" ParameterType="%AID%_PT-colorType" Text="Farbe ansteuern per" Value="0">
-                <Memory CodeSegment="%AID%_RS-04-00000" Offset="4" BitOffset="2" />
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="17" BitOffset="2" />
               </Parameter>
               <Parameter Id="%AID%_P-%T%3%CC%020" Name="%C%colorSpace" ParameterType="%AID%_PT-colorSpace" Text="Farbe übertragen per" Value="1">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="3" BitOffset="7" />
@@ -173,6 +173,8 @@
               <ComObjectRef RefId="%AID%_O-%T%3%CC%007" Id="%AID%_O-%T%3%CC%007_R-%T%3%CC%00703" FunctionText="Farbtemperatur Status" DatapointType="DPST-7-600" ObjectSize="2 Bytes" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
               <ComObjectRef RefId="%AID%_O-%T%3%CC%006" Id="%AID%_O-%T%3%CC%006_R-%T%3%CC%00604" FunctionText="Farbe xyY / xy" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
               <ComObjectRef RefId="%AID%_O-%T%3%CC%007" Id="%AID%_O-%T%3%CC%007_R-%T%3%CC%00704" FunctionText="Farbe xyY / xy Status" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
+              <ComObjectRef RefId="%AID%_O-%T%3%CC%006" Id="%AID%_O-%T%3%CC%006_R-%T%3%CC%00605" FunctionText="Farbe RGBW" DatapointType="DPST-251-600" ObjectSize="6 Bytes" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
+              <ComObjectRef RefId="%AID%_O-%T%3%CC%007" Id="%AID%_O-%T%3%CC%007_R-%T%3%CC%00705" FunctionText="Farbe RGBW Status" DatapointType="DPST-251-600" ObjectSize="6 Bytes" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
               <ComObjectRef RefId="%AID%_O-%T%3%CC%017" Id="%AID%_O-%T%3%CC%017_R-%T%3%CC%01701" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
               <ComObjectRef RefId="%AID%_O-%T%3%CC%018" Id="%AID%_O-%T%3%CC%018_R-%T%3%CC%01801" TextParameterRefId="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" />
             </ComObjectRefs>
@@ -287,6 +289,10 @@
                           <ParameterRefRef RefId="%AID%_P-%T%3%CC%020_R-%T%3%CC%02001" />
                           <ComObjectRefRef RefId="%AID%_O-%T%3%CC%006_R-%T%3%CC%00604" />
                           <ComObjectRefRef RefId="%AID%_O-%T%3%CC%007_R-%T%3%CC%00704" />
+                        </when>
+                        <when test="=4">
+                          <ComObjectRefRef RefId="%AID%_O-%T%3%CC%006_R-%T%3%CC%00605" />
+                          <ComObjectRefRef RefId="%AID%_O-%T%3%CC%007_R-%T%3%CC%00705" />
                         </when>
                       </choose>
                       <choose ParamRefId="%AID%_P-%T%3%CC%020_R-%T%3%CC%02001">
