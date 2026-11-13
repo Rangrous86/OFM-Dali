@@ -66,6 +66,7 @@ Nachher: RGBW verzweigt vorab und sendet **RGB + Weiß**:
 | 1 | `SET_DTR`, `SET_DTR1`, `SET_DTR2` + `SET TEMPORARY RGB DIMLEVEL` (235, DT8) | R, G, B |
 | 2 | `SET_DTR`, `SET_DTR1`, `SET_DTR2` + `SET TEMPORARY WAF DIMLEVEL` (236, DT8) | W, 255, 255 (255 = MASK = unverändert) |
 | 3 | `ACTIVATE` (226, DT8) | übernimmt beide Werte gemeinsam |
+| 4 | 3× `SET_DTR 0` (Füll-Frames), dann `ACTIVATE` erneut | Test-Stand: beim DA4-M wirkte das erste `ACTIVATE` auf die Werte des vorherigen Telegramms |
 
 ### 3.3 Statusobjekt
 
@@ -196,7 +197,7 @@ namespace RgbwHelper
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..d578faa 100644
+index dffeaaf..c35608b 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -340,7 +341,7 @@ index dffeaaf..d578faa 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1006,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1006,37 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -366,12 +367,19 @@ index dffeaaf..d578faa 100644
 +
 +    // 3. Apply both temporary values at once
 +    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
++
++    // 4. Hardware test (DA4-M): the first ACTIVATE applied the values of the *previous* telegram, a second,
++    //    identical telegram was needed. Probably the driver commits "SET TEMPORARY" with a small delay.
++    //    Repeat ACTIVATE after a few harmless frames (SET_DTR only changes the scratch register).
++    for (int i = 0; i < 3; i++)
++        daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, 0);
++    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
 +}
 +
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -1002,6 +1127,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1134,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {

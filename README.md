@@ -36,6 +36,7 @@ In der ETS zeigt *„Wert schreiben“* dafür je Kanal ein Häkchen (= Gültigk
 1. `DTR0=R, DTR1=G, DTR2=B` → `SET TEMPORARY RGB DIMLEVEL` (DT8, Befehl 235)
 2. `DTR0=W, DTR1=255, DTR2=255` → `SET TEMPORARY WAF DIMLEVEL` (DT8, Befehl 236; 255 = MASK = Amber/Freecolour unverändert)
 3. `ACTIVATE` (Befehl 226) – beide temporären Werte werden gemeinsam übernommen
+4. drei Füll-Frames (`SET_DTR 0`), dann **`ACTIVATE` noch einmal**. Hintergrund: Beim DA4-M übernahm das erste `ACTIVATE` zunächst die Werte des *vorherigen* Telegramms (erst ein zweites, identisches Telegramm griff). Vermutlich übernimmt der Treiber `SET TEMPORARY …` mit kleiner Verzögerung. *(Test-Stand, nach der Hardware-Prüfung zu bestätigen.)*
 
 Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI „MASK“ (nicht ändern) bedeutet. Die Helligkeit läuft weiterhin über die normalen Objekte *Schalten* und *Dimmen*.
 

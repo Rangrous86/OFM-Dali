@@ -1028,6 +1028,13 @@ void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
 
     // 3. Apply both temporary values at once
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
+
+    // 4. Hardware test (DA4-M): the first ACTIVATE applied the values of the *previous* telegram, a second,
+    //    identical telegram was needed. Probably the driver commits "SET TEMPORARY" with a small delay.
+    //    Repeat ACTIVATE after a few harmless frames (SET_DTR only changes the scratch register).
+    for (int i = 0; i < 3; i++)
+        daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, 0);
+    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
 }
 
 void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
