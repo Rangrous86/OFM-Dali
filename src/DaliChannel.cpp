@@ -142,6 +142,8 @@ void DaliChannel::loopDiag()
 
 // Sends the delayed final "on value" of an RGBW colour switch-on (see koHandleColor).
 // Any other command for this channel cancels it (processInputKo, handleColorRGBW).
+uint16_t DaliChannel::rgbwSettleMs = RgbwSettleMs;
+
 void DaliChannel::loopPendingOn()
 {
     if (!_onArcPending)
@@ -349,16 +351,19 @@ void DaliChannel::processInputKo(GroupObject &ko)
         //logDebugP("Got SHORT KO %i", chanIndex);
     }
 
-    // Every command except a colour telegram replaces the delayed "on value" of an RGBW switch-on
-    if (chanIndex != DGW_Kocolor)
+    // A command that sets the level replaces the delayed "on value" of an RGBW switch-on.
+    // Not every KO counts: writing our own status objects (e.g. KO 1 = switch state) also arrives here
+    // (seen in the log), and a colour telegram only moves the timer (handleColorRGBW).
+    if (_onArcPending &&
+        (chanIndex == DGW_Koswitch || chanIndex == DGW_Kodimm_relative || chanIndex == DGW_Kodimm_absolute ||
+         chanIndex == DGW_Kolock || chanIndex == DGW_Koscene))
     {
-        if (_onArcPending)
-            logDebugP("RGBW: pending on value cancelled by KO %i", chanIndex);
+        logDebugP("RGBW: pending on value cancelled by KO %i", chanIndex);
         _onArcPending = false;
     }
 
-    // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are read-only
-    // *_state KOs and are never received as input here.
+    // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are the *_state KOs; they are handed to us
+    // when we write them ourselves and are ignored here.
     switch (chanIndex)
     {
     case DGW_Koswitch:
@@ -824,9 +829,9 @@ void DaliChannel::koHandleColor(GroupObject &ko)
             daliMaster.sendArc(_channelIndex, onValue, _isGroup);
             sendColor();
             _onArcValue = onValue;
-            _onArcAt = millis() + RgbwSettleMs;
+            _onArcAt = millis() + rgbwSettleMs;
             _onArcPending = true;
-            logDebugP("RGBW: final on value %i scheduled in %i ms", onValue, RgbwSettleMs);
+            logDebugP("RGBW: final on value %i scheduled in %i ms", onValue, rgbwSettleMs);
 #ifdef RGBW_DIAG
             _diagStart = millis();
             _diagStep = 0;
@@ -919,7 +924,7 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
     {
         sendColor();
         if (_onArcPending)
-            _onArcAt = millis() + RgbwSettleMs; // another colour change is running: wait for it as well
+            _onArcAt = millis() + rgbwSettleMs; // another colour change is running: wait for it as well
     }
     return true;
 }

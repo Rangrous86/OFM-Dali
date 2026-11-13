@@ -373,6 +373,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("stepUp", "stepUp xyy => send x times StepUp to evg y");
     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
+    openknx.console.printHelpLine("settle", "settle nnnn => RGBW pause in ms before the final on value (0-5000)");
 }
 
 bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
@@ -418,6 +419,21 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
     if (command == "stepDown")
     {
         cmdHandleStepDown(hasArg, arg);
+        return true;
+    }
+
+    if (command == "settle")
+    {
+        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
+        {
+            logErrorP("settle nnnn (ms, 0-5000), now %i", DaliChannel::rgbwSettleMs);
+            return true;
+        }
+        int v = std::stoi(arg);
+        if (v > 5000)
+            v = 5000;
+        DaliChannel::rgbwSettleMs = v;
+        logInfoP("RGBW settle time = %i ms", v);
         return true;
     }
 
