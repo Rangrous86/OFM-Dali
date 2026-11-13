@@ -39,6 +39,8 @@ In der ETS zeigt *„Wert schreiben“* dafür je Kanal ein Häkchen (= Gültigk
 
 Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI „MASK“ (nicht ändern) bedeutet. Die Helligkeit läuft weiterhin über die normalen Objekte *Schalten* und *Dimmen*.
 
+**Farbe = Mischung, Helligkeit = Dimmwert.** Wie bei DALI-DT8 üblich legt das RGBW-Objekt nur das Mischungsverhältnis der Kanäle fest, die Gesamthelligkeit kommt ausschließlich vom DALI-Pegel (*Dimmen absolut*). Ein Farbtelegramm mit kleineren Beträgen (z. B. 50 % statt 100 % Rot) dimmt eine eingeschaltete Leuchte deshalb nicht (am DA4-M gemessen). Visualisierungen, die RGBW-Werte „helligkeitsskaliert“ senden, brauchen daher zusätzlich eine Adresse für die Helligkeit (z. B. `brightness_address` in Home Assistant) auf *Dimmen absolut*.
+
 ### Ein-/Ausschaltverhalten
 
 | Ereignis | Verhalten bei RGBW-Kanälen |
