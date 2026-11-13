@@ -4,7 +4,7 @@ Dieser Fork ergänzt das OpenKNX-DALI-Gateway um **RGBW (4. Kanal „Weiß“)**
 
 Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (Commit `6e7aca5`). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
 
-> **Status: auf Hardware in Test.** Gebaut, geflasht und mit einem echten Treiber (DA4-M, 4-Kanal-Konstantspannungs-Dimmer im Modus RGBW) am `GW-REG1-Dali` erprobt (13.11.2026): ETS-Import, Programmierung, DALI-Adressierung, Farbtelegramme, Gültigkeitsbits, Statusrückmeldung, Dimmen. Siehe [Testfälle](#5-testfälle) für den genauen Stand.
+> **Status: auf Hardware in Test.** Gebaut, geflasht und mit einem echten Treiber (DA4-M, 4-Kanal-Konstantspannungs-Dimmer im Modus RGBW) am `GW-REG1-Dali` erprobt (13./14.11.2026): ETS-Import, Programmierung, DALI-Adressierung, Farbtelegramme, Statusrückmeldung, Ein-/Ausschalten, Dimmen. Der RGBW-Kanal für sich läuft; die Wechselwirkungen mit anderen Objekten und Kanälen (Szenen, Gruppen, Broadcast, relatives Dimmen u. a.) sind noch offen. Siehe [Testfälle](#5-testfälle) und den dortigen Teststand.
 
 Details zu allen Änderungen im Vergleich zum Ausgangscode: [`doc/RGBW-Gegenueberstellung.md`](doc/RGBW-Gegenueberstellung.md).
 
@@ -132,6 +132,39 @@ Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kei
 | 12 | *Dimmen absolut* 0 %, danach ein Farbtelegramm | Leuchte schaltet wieder ein (Merker bleibt nicht auf *Ein* hängen) |
 | 13 | Rot gesetzt, dann *Dimmen absolut* 25 % | Rot mit 25 % Helligkeit |
 | 14 | RGB/HSV/TW/xyY-Kanäle nachtesten | verhalten sich wie vorher |
+
+#### Teststand (14.11.2026, Firmware-Tag `v6`, DA4-M im Modus RGBW)
+
+Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirkungen mit den übrigen Objekten und Kanälen sind noch offen und werden in der nächsten Sitzung abgehakt (gegebenenfalls mit Anpassungen).
+
+**Auf Hardware bestätigt (v6):**
+
+- Einschalten aus Aus mit Einzelfarben Rot/Grün/Blau/Weiß und halben Werten (Test 2–5, 11): sofort die neue Farbe, keine alte Farbe, kein Weiß-Blitz, weiches Hochfaden bis 100 %; Mischfarben (Lila = R + B) ebenso.
+- Ausschalten (Test 9): sauber, kein Blitz; *Schalten Status* Aus, *Dimmen Status* 0 %.
+- *Dimmen absolut* aus brennender Lampe (Test 13): 50 % und 10 % wirken, der DALI-Pegel stimmt (`getLvl`), Status-Objekte folgen.
+- Status-Rückmeldung *Farbe RGBW Status*, *Schalten Status*, *Dimmen Status*.
+- **Festgelegt:** Farbe = Mischung, Helligkeit = *Dimmen absolut*. Kleinere Beträge im RGBW-Telegramm dimmen eine brennende Lampe nicht (am DA4-M gemessen).
+
+**Nach den Änderungen von v6 erneut prüfen (früher getestet):** Test 1, 6, 7, 8, 10, 12.
+
+**Noch offen – Wechselwirkung mit anderen Objekten/Kanälen:**
+
+| Bereich | Zu prüfen |
+|---------|-----------|
+| *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
+| *Dimmen relativ* (heller/dunkler) | besonders von Aus (`RECALL_MIN`) bei gespeicherter Farbe, bekannte Lücke |
+| Weißkanal in Mischungen | z. B. RGB + W gleichzeitig, nur W ändern bei brennender Lampe |
+| Gültigkeitsbits | Test 6–8 mit v6 wiederholen |
+| Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
+| HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
+| Szenen | KNX-Szene mit Farbe; im Treiber gespeicherte Szenen (Farbe gilt danach als unbekannt) |
+| Gruppen und Broadcast | Gruppenadresse mit RGBW-Kanälen, Broadcast Ein/Aus, verzögertes Broadcast-Aus |
+| Mehrere RGBW-Kanäle gleichzeitig | Auslastung der DALI-Warteschlange (Farbsequenz ≈ 300 ms pro Kanal), Reihenfolge |
+| Treppenhauslicht, Funktionstasten, Identify, ETS-Funktionen | bewusst nicht angefasst, Verhalten dokumentieren |
+| Regression | Test 14: RGB, HSV, TW, xyY wie vorher |
+| Home Assistant | `brightness_address` auf *Dimmen absolut*, reiner RGBW-Slider ohne Helligkeitsadresse (siehe README „Farbe = Mischung“) |
+
+**Vor einem Pull Request:** `RGBW_DIAG`-Diagnosecode entfernen oder deaktiviert lassen, offene Fragen an den Maintainer (Abschnitt 6 der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md)) klären; PR erst nach ausdrücklichem Go.
 
 Rohdaten-Beispiele (Byte 0–5, z. B. für Home Assistant `knx.send` mit `payload: [0, 0, 0, 255, 0, 15]`): rein Weiß `00 00 00 FF 00 0F`, nur Weiß ändern (50 %) `00 00 00 80 00 01`, nur Rot ändern `FF 00 00 00 00 08`, alles aus `00 00 00 00 00 0F`.
 
