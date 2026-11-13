@@ -181,7 +181,7 @@ uint16_t DaliChannel::rgbwSettleMs = RgbwSettleMs;
 uint16_t DaliChannel::rgbwMarginMs = RgbwMarginMs;
 uint8_t DaliChannel::rgbwOnMode = 1;
 bool DaliChannel::rgbwBlackOff = false;
-uint16_t DaliChannel::rgbwOnDelayMs = 1100;
+uint16_t DaliChannel::rgbwOnDelayMs = 0; // 0 = automatic: wait until the driver reports that the colour fade is over
 
 // ---------------------------------------------------------------------------------------------------------
 // RGBW switch on/off (DA4-M findings, all from hardware tests):
@@ -282,11 +282,23 @@ void DaliChannel::rgbwOn(uint8_t onValue)
     if (_driverBlack || rgbwOnMode == 1)
     {
         // Colour first (fades unseen at level 0, if the driver takes it), then the level
-        logDebugP("RGBW: on, colour first, level %i in %i ms", onValue, rgbwOnDelayMs);
         sendColor();
         _onArcValue = onValue;
-        _onArcAt = millis() + rgbwOnDelayMs;
         _onArcPending = true;
+        if (rgbwOnDelayMs > 0)
+        {
+            logDebugP("RGBW: on, colour first, level %i in %i ms (fixed)", onValue, rgbwOnDelayMs);
+            _onArcAt = millis() + rgbwOnDelayMs;
+        }
+        else
+        {
+            // The level follows as soon as QUERY_STATUS reports that the colour fade is over (bit 4 "fade running").
+            // Fallback when no answer comes: transmission + fade time + reserve + a little extra.
+            _onArcAt = millis() + rgbwOffWaitMs() + 300;
+            logDebugP("RGBW: on, colour first, level %i when the colour fade is over (latest in %i ms)", onValue, rgbwOffWaitMs() + 300);
+            _fadePolling = true;
+            _fadePollAt = millis() + RgbwTxMs;
+        }
 #ifdef RGBW_DIAG
         diagStart();
 #endif
@@ -369,8 +381,58 @@ void DaliChannel::loopFadeQuery()
 
 // Sends the delayed final "on value" of an RGBW colour switch-on (see rgbwOn).
 
+// Asks the driver (QUERY_STATUS, bit 4 = fade running) whether the colour fade of an RGBW switch-on is over.
+// The answer was verified to cover colour fades at level 0.
+void DaliChannel::loopFadePoll()
+{
+    if (_fadePollId != 0)
+    {
+        Dali::Response response = daliMaster.getResponse(_fadePollId);
+        if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
+            return;
+        _fadePollId = 0;
+        if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
+            (response.frame.flags & DALI_FRAME_ERROR))
+        {
+            _fadePolling = false; // no answer: the fallback time of _onArcAt applies
+            return;
+        }
+        uint8_t st = response.frame.data & 0xFF;
+        if (_onArcPending && _fadePolling)
+        {
+            if (!((st >> 4) & 1))
+            {
+                logDebugP("RGBW: colour fade over (status 0x%02X)", st);
+                _fadePolling = false;
+                _onArcAt = millis();
+            }
+            else
+                _fadePollAt = millis() + 100;
+        }
+        return;
+    }
+    if (!_fadePolling)
+        return;
+    if (!_onArcPending)
+    {
+        _fadePolling = false;
+        return;
+    }
+    if ((long)(millis() - _fadePollAt) < 0)
+        return;
+    if (_isGroup && _dimmReferenceAddress == NoDimmReference)
+    {
+        _fadePolling = false;
+        return;
+    }
+    _fadePollId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_STATUS, false, true);
+    if (_fadePollId == 0)
+        _fadePolling = false;
+}
+
 void DaliChannel::loopPendingOn()
 {
+    loopFadePoll();
     if (!_onArcPending)
         return;
     if ((long)(millis() - _onArcAt) < 0)
@@ -1166,7 +1228,10 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
         {
             sendColor();
             if (_onArcPending)
+            {
                 _onArcAt = millis() + rgbwOffWaitMs(); // another colour change is running: wait for it as well
+                _fadePolling = false;                  // fixed time again, a poll answer could be about the old colour
+            }
         }
     }
     return true;

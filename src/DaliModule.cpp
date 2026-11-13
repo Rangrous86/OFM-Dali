@@ -381,7 +381,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
     openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
     openknx.console.printHelpLine("blackoff", "blackoff 0|1 => RGBW: 1 = fade colour to 0/0/0/0 before level off (default 0)");
-    openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on from black: 0 = level first, 1 = colour first, level after nnnn ms");
+    openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on: 0 = level first, 1 = colour first; nnnn = fixed ms before the level (0 = automatic)");
 }
 
 bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)

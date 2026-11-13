@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 #define RGBW_DIAG
-#define RGBW_BUILD_TAG "diag4"
+#define RGBW_BUILD_TAG "diag5"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -148,6 +148,11 @@ class DaliChannel : public OpenKNX::Channel
 		void loopPendingOn();
 		void loopRgbwSeq();
 		void loopFadeQuery();
+		void loopFadePoll();
+		// switch-on with colour first: wait for the end of the colour fade (QUERY_STATUS) before the level
+		bool _fadePolling = false;
+		unsigned long _fadePollAt = 0;
+		uint32_t _fadePollId = 0;
 
 		// Driver colour is known to be black: we sent R=G=B=W=0 last and nothing changed it since
 		bool _driverBlack = false;
