@@ -84,8 +84,10 @@ Nachher:
 
 | Stelle | Änderung |
 |--------|----------|
-| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(onValue)` → `sendColor()`, dann wird `sendArc(onValue)` **verzögert** (`RgbwSettleMs` = 1000 ms, nicht blockierend über `loopPendingOn()` in `loop1()`) als letztes Kommando nachgeschoben; `setDimmState(onValue,…)` und `currentState = true` sofort. Jeder andere Befehl für den Kanal (`processInputKo` außer Farbe) und „alles 0“ verwirft den ausstehenden Wert, ein weiteres Farbtelegramm verlängert die Pause. `onValue` (`_onDay`/`_onNight`/`_lastXValue`) ist bereits ein DALI-Wert, keine erneute Umrechnung. Reihenfolge aus dem Hardware-Test (DA4-M): bei Pegel 0 und bei Minimalpegel wird eine Farbe nicht übernommen, bei eingeschalteter Leuchte schon; ein `ACTIVATE` bricht ein laufendes Hochdimmen ab (Pegel bleibt bei ca. 20 % hängen), deshalb der Einschaltwert noch einmal am Ende; sofort gesendet bricht er seinerseits das Überblenden der Farbe ab (alte Farbe bleibt), deshalb die Pause. Nachteil: alte Farbe ca. 0,3–0,5 s sichtbar. `handleColorRGBW` sendet die Farbe nur direkt, wenn der Kanal schon an ist. Die anderen Farbtypen behalten das alte Verhalten. |
-| `handleColorRGBW` | Telegramm wird zuerst in eine Kopie dekodiert. Sind danach R, G, B und W alle 0 (`RgbwHelper::isOff`), wird `sendArc(0)` gesendet, `setDimmState(0,…)` setzt *Schalten Status* = Aus und *Dimmen Status* = 0 %, `currentState = false`. Die Farbe 0/0/0/0 geht **nicht** an den Treiber, die gespeicherte Farbe bleibt erhalten. |
+| `rgbwOff()` / `rgbwOn()` (nur RGBW, neu) | Jedes Aus blendet zuerst die Farbe auf Schwarz (`sendColorAsRGBW(0,0,0,0)`, setzt `_driverBlack`), wartet `RgbwTxMs` (310) + Fade-Zeit des Treibers (`QUERY_FADE_SPEEDS`, `_fadeMs`, Standard 1000) + `rgbwMarginMs` (100) und sendet dann `DAPC 0` (nicht blockierend in `loopRgbwSeq()` in `loop1()`). Beim Einschalten aus Schwarz geht zuerst der Pegel raus, die Farbe folgt nach Fade-Zeit + Reserve − Übertragungszeit; `onmode 1` testet die umgekehrte Reihenfolge. Unbekannte Farbe im Treiber (`_driverBlack` false und Farbe unbekannt): alter Ablauf mit Pause `rgbwSettleMs` (1500). Grund aus dem Hardware-Test (DA4-M): der Treiber hat **eine** Fade-Engine, jedes neue Fade-Kommando (DAPC oder `ACTIVATE`) bricht das laufende ab; die Farbe wird nur bei eingeschalteter Leuchte sicher übernommen. |
+| `koHandleColor` (nur RGBW) | Ist `currentState` false: `rgbwOn(onValue)`, `setDimmState(onValue,…)`, `currentState = true`. `onValue` (`_onDay`/`_onNight`/`_lastXValue`) ist bereits ein DALI-Wert. |
+| `handleSwitchNormal`, `loopDimming`, `koHandleDimmAbs`, `koHandleScene`, `koHandleLock` | RGBW: Aus → `rgbwOff()`, Ein → `rgbwOn()` (ein bereits laufendes Einschalten wird nicht wiederholt); Szene/Sperre verwerfen ausstehende Schritte. `DaliModule`: `broadcastOn()`/`broadcastOff()` (Broadcast-Aus nach Ausblenden aller RGBW-Kanäle), Szenen markieren die Farben als unbekannt. |
+| `handleColorRGBW` | Telegramm wird zuerst in eine Kopie dekodiert. Sind danach R, G, B und W alle 0 (`RgbwHelper::isOff`), wird `rgbwOff()` aufgerufen (Farbe → Schwarz → Aus), `setDimmState(0,…)` setzt *Schalten Status* = Aus und *Dimmen Status* = 0 %, `currentState = false`. Die gespeicherte Farbe bleibt erhalten. Bei eingeschaltetem Kanal wird die Farbe direkt gesendet. |
 | `koHandleDimmAbs` | `currentState = (arc > 0)` (außer Treppenhauslicht). Wirkt für alle Kanaltypen. |
 
 ## 4. Vorher/Nachher: ETS-Applikation
@@ -194,9 +196,11 @@ namespace RgbwHelper
 
 ## 8. Vollständiges Diff gegenüber `v1dev`
 
+Ohne `src/RgbwHelper.h` (siehe Abschnitt 7). Enthält den temporären Diagnose-Code (`RGBW_DIAG`), der vor einem Pull Request entfällt.
+
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..84a80f4 100644
+index dffeaaf..735301e 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -205,15 +209,267 @@ index dffeaaf..84a80f4 100644
  #include "OpenKNX.h"
  
  DaliChannel::DaliChannel(Dali::Master &_daliMaster) : daliMaster(_daliMaster) {}
-@@ -109,6 +110,20 @@ void DaliChannel::loop1()
+@@ -109,6 +110,272 @@ void DaliChannel::loop1()
      loopDimming();
      loopError();
      loopQueryLevel();
 +    loopPendingOn();
++    loopRgbwSeq();
++    loopFadeQuery();
++#ifdef RGBW_DIAG
++    loopDiag();
++#endif
 +}
 +
-+// Sends the delayed final "on value" of an RGBW colour switch-on (see koHandleColor).
-+// Any other command for this channel cancels it (processInputKo, handleColorRGBW).
++#ifdef RGBW_DIAG
++// Asks the driver for its real level at fixed times after an RGBW colour switch-on and logs the answers
++// (the answer is logged in loopQueryLevel and also updates the "Dimmen Status" object).
++void DaliChannel::loopDiag()
++{
++    static const uint16_t times[] = {300, 700, 1100, 1500, 2000, 3000, 5000};
++    static const uint16_t statusTimes[] = {150, 500, 900, 1300, 1700, 2300, 3300};
++    const uint8_t count = sizeof(times) / sizeof(times[0]);
++
++    // answer of a QUERY_STATUS probe: bit 4 = "fade running"
++    if (_diagStatusId != 0)
++    {
++        Dali::Response response = daliMaster.getResponse(_diagStatusId);
++        if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER)
++        {
++            logDebugP("DIAG status: no answer");
++            _diagStatusId = 0;
++        }
++        else if (response.state != Dali::ResponseState::SENT && response.state != Dali::ResponseState::WAITING)
++        {
++            uint8_t st = response.frame.data & 0xFF;
++            logDebugP("DIAG status 0x%02X fadeRunning=%i (t+%lu ms)", st, (st >> 4) & 1, millis() - _diagStart);
++            _diagStatusId = 0;
++        }
++    }
++
++    if (!_diagActive)
++        return;
++    if (_diagStep >= count && _diagStatusStep >= count)
++    {
++        _diagActive = false;
++        return;
++    }
++
++    unsigned long t = millis() - _diagStart;
++    if (_diagStatusStep < count && _diagStatusId == 0 && _queryId == 0 && t >= statusTimes[_diagStatusStep])
++    {
++        _diagStatusStep++;
++        if (!_isGroup)
++            _diagStatusId = daliMaster.sendCommand(_channelIndex, Dali::Command::QUERY_STATUS, false, true);
++        return;
++    }
++    if (_diagStep < count && _queryId == 0 && _diagStatusId == 0 && t >= times[_diagStep])
++    {
++        logDebugP("DIAG t+%lu ms: query actual level", t);
++        queryActualLevel();
++        _diagStep++;
++    }
++}
++
++void DaliChannel::diagStart()
++{
++    _diagStart = millis();
++    _diagStep = 0;
++    _diagStatusStep = 0;
++    _diagActive = true;
++}
++#endif
++
++uint16_t DaliChannel::rgbwSettleMs = RgbwSettleMs;
++uint16_t DaliChannel::rgbwMarginMs = RgbwMarginMs;
++uint8_t DaliChannel::rgbwOnMode = 0;
++uint16_t DaliChannel::rgbwOnDelayMs = 1100;
++
++// ---------------------------------------------------------------------------------------------------------
++// RGBW switch on/off (DA4-M findings, all from hardware tests):
++// - The driver fades level AND colour changes (fade time, ~1 s) and has ONE fade at a time: every new fade
++//   command (DAPC, ACTIVATE) aborts the running one and the driver stays where it is.
++// - A colour is only stored/shown correctly when it is sent while the lamp is on.
++// So "off" is done in two steps: the colour fades to black (stored colour = black), then the level goes to 0.
++// The next switch-on starts with a black colour: level first (dark), when its fade is over the colour fades
++// in. If the stored colour is not known to be black (first use, scenes, other DALI masters) the old sequence
++// "level, colour, pause, level" is used (rgbwSettleMs).
++// ---------------------------------------------------------------------------------------------------------
++bool DaliChannel::isRgbw()
++{
++    return (_isGroup ? ParamDGWG_colorType : ParamDGW_colorType) == PT_colorType_RGBW;
++}
++
++// Time (ms, from queueing the colour sequence) until the colour change is complete: bus time of the
++// sequence up to its ACTIVATE + fade time of the driver + reserve
++uint16_t DaliChannel::rgbwOffWaitMs()
++{
++    return RgbwTxMs + _fadeMs + rgbwMarginMs;
++}
++
++void DaliChannel::markColourUnknown()
++{
++    _driverBlack = false;
++}
++
++void DaliChannel::rgbwOff()
++{
++    // A channel that is off for us gets the plain level off: a colour sent at level 0 may not be taken over
++    // by the driver, so "stored colour is black" could not be guaranteed.
++    bool wasOn = currentState;
++    currentState = false;
++    _onArcPending = false;
++    _colorPending = false;
++    if (_offPending)
++        return; // already on its way (e.g. repeated off commands while dimming down)
++
++    if (_driverBlack || !wasOn)
++    {
++        logDebugP("RGBW: off (%s)", _driverBlack ? "stored colour is black" : "channel was off");
++        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
++        return;
++    }
++
++    uint16_t wait = rgbwOffWaitMs();
++    logDebugP("RGBW: off: colour to black first, level off in %i ms", wait);
++    sendColorAsRGBW(0, 0, 0, 0); // sets _driverBlack
++    _offPending = true;
++    _offAt = millis() + wait;
++#ifdef RGBW_DIAG
++    diagStart();
++#endif
++}
++
++// The channel is off from the gateway's point of view and has to be switched on with the stored colour.
++// onValue is a DALI arc value. Callers set currentState and the status objects.
++void DaliChannel::rgbwOn(uint8_t onValue)
++{
++    bool colourValid = !RgbwHelper::isOff(currentColor);
++
++    if (_offPending)
++    {
++        // The lamp still shines and its colour fades to black: bring the colour back, then the level.
++        _offPending = false;
++        logDebugP("RGBW: on while fading out");
++        if (colourValid)
++            sendColor();
++        _onArcValue = onValue;
++        _onArcAt = millis() + rgbwOffWaitMs();
++        _onArcPending = true;
++        return;
++    }
++
++    if (!colourValid)
++    {
++        // no colour ever received: nothing to restore, plain switch on
++        daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++        return;
++    }
++
++    if (_driverBlack && rgbwOnMode == 0)
++    {
++        // Level first. The lamp stays dark (black). The colour is sent so that its ACTIVATE (at the end of the
++        // sequence) comes after the level fade, because ACTIVATE would abort it.
++        uint16_t wait = _fadeMs + rgbwMarginMs;
++        _colorAt = millis() + (wait > RgbwTxMs ? wait - RgbwTxMs : 0);
++        _colorPending = true;
++        logDebugP("RGBW: on from black: level %i, colour in %lu ms", onValue, (unsigned long)(_colorAt - millis()));
++        daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++#ifdef RGBW_DIAG
++        diagStart();
++#endif
++        return;
++    }
++
++    if (_driverBlack)
++    {
++        // Test mode: colour first (fades unseen at level 0, if the driver takes it), then the level
++        logDebugP("RGBW: on from black: colour first, level %i in %i ms", onValue, rgbwOnDelayMs);
++        sendColor();
++        _onArcValue = onValue;
++        _onArcAt = millis() + rgbwOnDelayMs;
++        _onArcPending = true;
++#ifdef RGBW_DIAG
++        diagStart();
++#endif
++        return;
++    }
++
++    // Stored colour unknown: level, colour, pause, level (the old colour is visible for a moment)
++    logDebugP("RGBW: on, stored colour unknown: level, colour, level in %i ms", rgbwSettleMs);
++    daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++    sendColor();
++    _onArcValue = onValue;
++    _onArcAt = millis() + rgbwSettleMs;
++    _onArcPending = true;
++#ifdef RGBW_DIAG
++    diagStart();
++#endif
++}
++
++// Broadcast on: the level command went out to everybody already, the colour of an RGBW channel is restored here
++void DaliChannel::rgbwBroadcastOn()
++{
++    if (currentState)
++        return;
++    rgbwOn(0xFE);
++    currentState = true;
++}
++
++void DaliChannel::loopRgbwSeq()
++{
++    if (_offPending && (long)(millis() - _offAt) >= 0)
++    {
++        _offPending = false;
++        logDebugP("RGBW: level off");
++        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
++    }
++    if (_colorPending && (long)(millis() - _colorAt) >= 0)
++    {
++        _colorPending = false;
++        logDebugP("RGBW: colour after level");
++        sendColor();
++    }
++}
++
++// Reads the fade time of the driver once (QUERY_FADE_SPEEDS: high nibble = fade time, low = fade rate)
++void DaliChannel::loopFadeQuery()
++{
++    static const uint16_t fadeTimes[16] = {0, 700, 1000, 1400, 2000, 2800, 4000, 5700, 8000, 11300, 16000, 22600, 32000, 45300, 64000, 90500};
++
++    if (!_fadeQueried)
++    {
++        _fadeQueried = true;
++        if (!isRgbw())
++            return;
++        if (_isGroup && _dimmReferenceAddress == NoDimmReference)
++        {
++            logDebugP("RGBW: no dimm reference address for the group, fade time stays %i ms", _fadeMs);
++            return;
++        }
++        _fadeQueryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_FADE_SPEEDS, false, true);
++        return;
++    }
++    if (_fadeQueryId == 0)
++        return;
++
++    Dali::Response response = daliMaster.getResponse(_fadeQueryId);
++    if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
++        return;
++    _fadeQueryId = 0;
++    if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
++        (response.frame.flags & DALI_FRAME_ERROR))
++    {
++        logDebugP("RGBW: fade time query failed, using %i ms", _fadeMs);
++        return;
++    }
++    uint8_t raw = response.frame.data & 0xFF;
++    _fadeMs = fadeTimes[raw >> 4];
++    logInfoP("RGBW: fade time x=%i = %i ms (raw 0x%02X)", raw >> 4, _fadeMs, raw);
++}
++
++// Sends the delayed final "on value" of an RGBW colour switch-on (see rgbwOn).
++
 +void DaliChannel::loopPendingOn()
 +{
 +    if (!_onArcPending)
@@ -226,20 +482,107 @@ index dffeaaf..84a80f4 100644
  }
  
  void DaliChannel::loopStaircase()
-@@ -303,6 +318,10 @@ void DaliChannel::processInputKo(GroupObject &ko)
+@@ -169,7 +436,10 @@ void DaliChannel::loopDimming()
+                         _dimmDirection = DimmDirection::None;
+                     } else {
+                         logDebugP("Turn off device");
+-                        daliMaster.sendCommand(_channelIndex, Dali::Command::OFF, _isGroup);
++                        if (isRgbw())
++                            rgbwOff();
++                        else
++                            daliMaster.sendCommand(_channelIndex, Dali::Command::OFF, _isGroup);
+                     }
+                 }
+             }
+@@ -271,7 +541,11 @@ void DaliChannel::loopQueryLevel()
+                 return;
+             } else {
+                 uint8_t data = response.frame.data & 0xFF;
++#ifdef RGBW_DIAG
++                logDebugP("Got new actual level %i%%-%i (t+%lu ms)", DaliHelper::arcToPercent(data), data, millis() - _diagStart);
++#else
+                 logDebugP("Got new actual level %i%%-%i", DaliHelper::arcToPercent(data), data);
++#endif
+                 setDimmState(data, false, true);
+ 
+                 if(currentDimmType == DimmType::Brigthness)
+@@ -303,8 +577,8 @@ void DaliChannel::processInputKo(GroupObject &ko)
          //logDebugP("Got SHORT KO %i", chanIndex);
      }
  
-+    // Every command except a colour telegram replaces the delayed "on value" of an RGBW switch-on
-+    if (chanIndex != DGW_Kocolor)
-+        _onArcPending = false;
-+
-     // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are read-only
-     // *_state KOs and are never received as input here.
+-    // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are read-only
+-    // *_state KOs and are never received as input here.
++    // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are the *_state KOs; they are handed to us
++    // when we write them ourselves and are ignored here.
      switch (chanIndex)
-@@ -635,6 +654,9 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+     {
+     case DGW_Koswitch:
+@@ -382,6 +656,10 @@ void DaliChannel::koHandleScene(GroupObject &ko)
+         return;
+     }
+ 
++    // the driver executes the scene on its own: the colour it stores afterwards is not known to us
++    _driverBlack = false;
++    _onArcPending = false;
++    _colorPending = false;
+     daliMaster.sendCommand(_channelIndex, Dali::Command::GO_TO_SCENE | number, _isGroup);
+ }
+ 
+@@ -487,7 +765,16 @@ void DaliChannel::handleSwitchNormal(GroupObject &ko)
+         if(!hclBriActivated) {
+             logDebugP(isNight ? "Turning on night value" : "Turning on day value");
+         }
+-        daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++        if (isRgbw())
++        {
++            // see rgbwOn(): a switch-on already running (e.g. the colour telegram of the same command) is not repeated
++            if (!currentState)
++                rgbwOn(onValue);
++            else if (!_onArcPending && !_colorPending)
++                daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++        }
++        else
++            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
+ 
+         bool hclTempActivated = false;
+         if(_hclCurve != HclDisabled && _hclIsAutoMode)
+@@ -505,7 +792,10 @@ void DaliChannel::handleSwitchNormal(GroupObject &ko)
+     else
+     {
+         logDebugP("Turning off");
+-        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
++        if (isRgbw())
++            rgbwOff();
++        else
++            daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
+         setSwitchState(false);
+     }
+     currentState = value;
+@@ -633,8 +923,30 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+     uint8_t value = ko.value(Dpt(5, 1));
+     logDebugP("Dimming absolute to %i%%", value);
      uint8_t arc = DaliHelper::percentToArc(value);
-     daliMaster.sendArc(_channelIndex, arc, _isGroup);
+-    daliMaster.sendArc(_channelIndex, arc, _isGroup);
++    if (isRgbw() && !_isStaircase)
++    {
++        if (arc == 0)
++            rgbwOff();
++        else if (!currentState)
++            rgbwOn(arc);
++        else if (_colorPending)
++        {
++            // level first, colour follows: apply the new level after the colour fade
++            _onArcValue = arc;
++            _onArcAt = _colorAt + rgbwOffWaitMs();
++            _onArcPending = true;
++        }
++        else if (_onArcPending)
++            _onArcValue = arc; // a switch-on is running: just change its final level
++        else
++            daliMaster.sendArc(_channelIndex, arc, _isGroup);
++    }
++    else
++        daliMaster.sendArc(_channelIndex, arc, _isGroup);
      setDimmState(arc, true, true);
 +    // keep the on/off flag in sync, otherwise e.g. a colour telegram after "dimm to 0" is ignored
 +    if (!_isStaircase)
@@ -247,7 +590,24 @@ index dffeaaf..84a80f4 100644
  }
  
  void DaliChannel::koHandleLock(GroupObject &ko)
-@@ -738,11 +760,44 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -701,13 +1013,15 @@ void DaliChannel::koHandleLock(GroupObject &ko)
+     }
+     }
+     logDebugP("%i - %i", behavevalue, DaliHelper::percentToArc(behavevalue));
++    _onArcPending = false;
++    _colorPending = false;
+     daliMaster.sendArc(_channelIndex, behavevalue, _isGroup);
+     setDimmState(DaliHelper::percentToArc(behavevalue));
+ }
+ 
+ void DaliChannel::koHandleColor(GroupObject &ko)
+ {
+-    logDebugP("Color absolute");
++    logDebugP("Color absolute [%s]", RGBW_BUILD_TAG);
+     if (currentIsLocked)
+     {
+         logErrorP("is locked");
+@@ -738,11 +1052,33 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -271,19 +631,8 @@ index dffeaaf..84a80f4 100644
 +            if (onValue == 0)
 +                onValue = isNight ? _lastNightValue : _lastDayValue;
 +            logDebugP("RGBW: switching on with %i", onValue);
-+
-+            // Hardware test (DA4-M): the driver only takes over a colour when it is already switched on
-+            // (arc level "normal"), not at level 0 and not at the minimum level. So:
-+            // 1. switch on with the on value, 2. send the colour (takes ~0.3-0.5 s on the bus),
-+            // 3. send the on value AGAIN, but DELAYED (loopPendingOn): the colour change (ACTIVATE) aborts the
-+            //    level fade started in step 1, so without step 3 the channel stays at a partial level; sent
-+            //    immediately, step 3 in turn aborts the colour fade (old colour stays). Hence the pause.
 +            // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
-+            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
-+            sendColor();
-+            _onArcValue = onValue;
-+            _onArcAt = millis() + RgbwSettleMs;
-+            _onArcPending = true;
++            rgbwOn(onValue);
 +            setDimmState(onValue, true, true);
 +            currentState = true;
 +        }
@@ -294,7 +643,7 @@ index dffeaaf..84a80f4 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +835,72 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +1116,78 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -324,8 +673,7 @@ index dffeaaf..84a80f4 100644
 +        // The last colour stays stored in gateway and driver, so "Schalten = Ein" or the next
 +        // colour telegram brings the light back with that colour instead of staying dark.
 +        logDebugP("RGBW: all channels 0 -> switching off");
-+        _onArcPending = false;
-+        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
++        rgbwOff();
 +        setDimmState(0, true, true);
 +        currentState = false;
 +        return false; // already handled, do not switch on again
@@ -339,9 +687,16 @@ index dffeaaf..84a80f4 100644
 +    // koHandleColor() while the channel is switched on; here only for channels that are already on.
 +    if (currentState)
 +    {
-+        sendColor();
-+        if (_onArcPending)
-+            _onArcAt = millis() + RgbwSettleMs; // another colour change is running: wait for it as well
++        if (_colorPending)
++        {
++            // level first, colour follows: loopRgbwSeq sends the newest colour at its time
++        }
++        else
++        {
++            sendColor();
++            if (_onArcPending)
++                _onArcAt = millis() + rgbwOffWaitMs(); // another colour change is running: wait for it as well
++        }
 +    }
 +    return true;
 +}
@@ -367,7 +722,7 @@ index dffeaaf..84a80f4 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -872,6 +993,13 @@ void DaliChannel::sendColor()
+@@ -872,6 +1280,13 @@ void DaliChannel::sendColor()
      // TODO only send every 100ms?
      uint8_t r, g, b;
      uint8_t colorType = _isGroup ? ParamDGWG_colorType : ParamDGW_colorType;
@@ -381,7 +736,7 @@ index dffeaaf..84a80f4 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1033,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1320,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -392,6 +747,7 @@ index dffeaaf..84a80f4 100644
 +    b = RgbwHelper::daliLevel(b);
 +    w = RgbwHelper::daliLevel(w);
 +    logDebugP("Send RGBW: %i %i %i %i", r, g, b, w);
++    _driverBlack = (r | g | b | w) == 0;
 +
 +    // 1. RGB level (DTR0 = R, DTR1 = G, DTR2 = B)
 +    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, r);
@@ -412,7 +768,7 @@ index dffeaaf..84a80f4 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -1002,6 +1154,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1442,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {
@@ -426,19 +782,54 @@ index dffeaaf..84a80f4 100644
              value |= currentColor[1] << 8;
              value |= currentColor[0] << 16;
 diff --git a/src/DaliChannel.h b/src/DaliChannel.h
-index 19b49c9..bd80ff4 100644
+index 19b49c9..6098cb6 100644
 --- a/src/DaliChannel.h
 +++ b/src/DaliChannel.h
-@@ -8,6 +8,8 @@
+@@ -8,11 +8,27 @@
  #include "DaliConstants.h"
  
  #define DimmInterval 200
-+// RGBW: pause (ms, counted from queueing the colour sequence) before the final on value of a colour switch-on
-+#define RgbwSettleMs 1000
++// Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
++// colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
++#define RGBW_DIAG
++#define RGBW_BUILD_TAG "diag3"
++// RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
++// switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
++#define RgbwSettleMs 1500
++// RGBW: time the colour sequence (12 DALI frames) needs on the bus before its ACTIVATE is sent
++#define RgbwTxMs 310
++// RGBW: default reserve (ms) on top of the driver's fade time
++#define RgbwMarginMs 100
  #define DimmStatusInterval 500
  
  class DaliChannel : public OpenKNX::Channel
-@@ -106,14 +108,21 @@ class DaliChannel : public OpenKNX::Channel
+ {
+ 	public:
++		// RGBW timing, changeable at runtime through the console (settle / margin / onmode)
++		static uint16_t rgbwSettleMs;   // fallback pause when the stored driver colour is unknown
++		static uint16_t rgbwMarginMs;   // reserve on top of the fade time
++		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level
++		static uint16_t rgbwOnDelayMs;  // mode 1: pause before the level
+         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
+ 
+         DaliChannel(Dali::Master &master);
+@@ -20,6 +36,15 @@ class DaliChannel : public OpenKNX::Channel
+ 
+ 		void loop() override;
+ 		void loop1();
++
++		// RGBW (DPT 251.600) switch on/off sequences, see DaliChannel.cpp
++		bool isRgbw();
++		void rgbwOff();
++		void rgbwOn(uint8_t onValue);
++		uint16_t rgbwOffWaitMs();
++		void markColourUnknown();
++		void rgbwBroadcastOn();
++
+ 		void setup() override;
+ 		void processInputKo(GroupObject &ko) override;
+ 		const bool isConfigured();
+@@ -106,14 +131,45 @@ class DaliChannel : public OpenKNX::Channel
  		uint8_t currentStep = 0;
  		//Current lock state
  		bool currentIsLocked = false;
@@ -458,11 +849,35 @@ index 19b49c9..bd80ff4 100644
 +		uint8_t _onArcValue = 0;
 +		unsigned long _onArcAt = 0;
 +		void loopPendingOn();
++		void loopRgbwSeq();
++		void loopFadeQuery();
++
++		// Driver colour is known to be black: we sent R=G=B=W=0 last and nothing changed it since
++		bool _driverBlack = false;
++		// off sequence: colour fades to black, then the level is switched off (_offAt)
++		bool _offPending = false;
++		unsigned long _offAt = 0;
++		// on sequence from level 0: level first, the colour follows when the level fade is over (_colorAt)
++		bool _colorPending = false;
++		unsigned long _colorAt = 0;
++		// fade time of the driver (QUERY_FADE_SPEEDS), default 1 s
++		uint16_t _fadeMs = 1000;
++		bool _fadeQueried = false;
++		uint32_t _fadeQueryId = 0;
++#ifdef RGBW_DIAG
++		unsigned long _diagStart = 0;
++		uint8_t _diagStep = 0;
++		bool _diagActive = false;
++		uint8_t _diagStatusStep = 0;
++		uint32_t _diagStatusId = 0;
++		void loopDiag();
++		void diagStart();
++#endif
 +
  		//Turn-on with last value
  		uint8_t _lastDayValue = 100;
  		uint8_t _lastNightValue = 10;
-@@ -131,6 +140,8 @@ class DaliChannel : public OpenKNX::Channel
+@@ -131,6 +187,8 @@ class DaliChannel : public OpenKNX::Channel
  		void updateCurrentDimmValue();
  		void sendColor();
  		void sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b);
@@ -471,7 +886,7 @@ index 19b49c9..bd80ff4 100644
  		void sendColorAsXY(uint8_t r, uint8_t g, uint8_t b);
  		void sendKoStateOnChange(uint16_t koNr, const KNXValue &value, const Dpt &type);
  		void setTemperature(uint16_t value);
-@@ -148,6 +159,7 @@ class DaliChannel : public OpenKNX::Channel
+@@ -148,6 +206,7 @@ class DaliChannel : public OpenKNX::Channel
  		void handleColorRGB(GroupObject &ko);
  		void handleColorTW(GroupObject &ko);
  		void handleColorXYY(GroupObject &ko);
@@ -479,6 +894,220 @@ index 19b49c9..bd80ff4 100644
  		void koHandleColorRel(GroupObject &ko, ColorChannel channel);
  		void koHandleColorAbs(GroupObject &ko, ColorChannel channel);
  		void koHandleHclCurve(GroupObject &ko);
+diff --git a/src/DaliModule.cpp b/src/DaliModule.cpp
+index 47a905c..6b6ea9a 100644
+--- a/src/DaliModule.cpp
++++ b/src/DaliModule.cpp
+@@ -115,8 +115,30 @@ void DaliModule::handleFunc(uint8_t setting)
+ void DaliModule::setup1(bool conf) {
+     pinMode(REG1_APP_PIN7, INPUT);
+     daliMaster.init(REG1_APP_PIN6, REG1_APP_PIN7);
++#ifdef RGBW_DIAG
++    daliMaster.registerMonitor([this](Dali::Frame frame) {
++        uint8_t next = (_diagHead + 1) % DiagRingSize;
++        if (next == _diagTail)
++            return; // ring full: drop
++        _diagRing[_diagHead] = {millis(), frame.data, frame.size, frame.flags};
++        _diagHead = next;
++    });
++#endif
+ }
+ 
++#ifdef RGBW_DIAG
++void DaliModule::loopDiagFrames()
++{
++    uint8_t n = 0;
++    while (_diagTail != _diagHead && n++ < 8)
++    {
++        const DiagFrame &f = _diagRing[_diagTail];
++        logDebugP("DALI %lu ms: 0x%lX (%u bit, flags 0x%02X)", f.ms, f.data, f.size, f.flags);
++        _diagTail = (_diagTail + 1) % DiagRingSize;
++    }
++}
++#endif
++
+ #ifdef DALI_NO_TIMER
+ bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
+ {
+@@ -127,6 +149,14 @@ bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
+ 
+ void DaliModule::loop(bool configured)
+ {
++#ifdef RGBW_DIAG
++    loopDiagFrames();
++#endif
++    if (_broadcastOffPending && (long)(millis() - _broadcastOffAt) >= 0)
++    {
++        _broadcastOffPending = false;
++        daliMaster.sendArc(BroadcastAddress, 0x00, true);
++    }
+     OpenKNX::DateTime currentTime = openknx.time.getLocalTime();
+     if (currentTime.minute != _lastTimeMinute)
+     {
+@@ -348,6 +378,9 @@ void DaliModule::showHelp()
+     openknx.console.printHelpLine("stepUp", "stepUp xyy => send x times StepUp to evg y");
+     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
+     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
++    openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
++    openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
++    openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on from black: 0 = level first, 1 = colour first, level after nnnn ms");
+ }
+ 
+ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
+@@ -396,6 +429,56 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
+         return true;
+     }
+ 
++    if (command == "settle")
++    {
++        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
++        {
++            logErrorP("settle nnnn (ms, 0-5000), now %i", DaliChannel::rgbwSettleMs);
++            return true;
++        }
++        int v = std::stoi(arg);
++        if (v > 5000)
++            v = 5000;
++        DaliChannel::rgbwSettleMs = v;
++        logInfoP("RGBW settle time = %i ms", v);
++        return true;
++    }
++
++    if (command == "margin")
++    {
++        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
++        {
++            logErrorP("margin nnn (ms, 0-2000), now %i", DaliChannel::rgbwMarginMs);
++            return true;
++        }
++        int v = std::stoi(arg);
++        if (v > 2000)
++            v = 2000;
++        DaliChannel::rgbwMarginMs = v;
++        logInfoP("RGBW margin = %i ms", v);
++        return true;
++    }
++    if (command == "onmode")
++    {
++        // onmode m [nnnn]
++        bool ok = hasArg && arg.length() >= 1 && (arg[0] == '0' || arg[0] == '1');
++        if (ok && arg.length() > 1)
++            ok = arg[1] == ' ' && arg.length() <= 6 && arg.find_first_not_of("0123456789", 2) == std::string::npos && arg.length() > 2;
++        if (!ok)
++        {
++            logErrorP("onmode m [nnnn] (m = 0 level first, 1 colour first, nnnn = ms before the level), now %i %i", DaliChannel::rgbwOnMode, DaliChannel::rgbwOnDelayMs);
++            return true;
++        }
++        DaliChannel::rgbwOnMode = arg[0] - '0';
++        if (arg.length() > 2)
++        {
++            int v = std::stoi(arg.substr(2));
++            DaliChannel::rgbwOnDelayMs = v > 5000 ? 5000 : v;
++        }
++        logInfoP("RGBW on mode = %i, level delay = %i ms", DaliChannel::rgbwOnMode, DaliChannel::rgbwOnDelayMs);
++        return true;
++    }
++
+     if (command == "getLvl")
+     {
+         cmdHandleGetLvl(hasArg, arg);
+@@ -712,12 +795,87 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
+ {
+     bool value = ko.value(DPT_Switch);
+     logDebugP("Broadcast Switch %i", value);
+-    daliMaster.sendArc(BroadcastAddress, value ? 0xFE : 0x00, true);
++    if (value)
++        broadcastOn();
++    else
++        broadcastOff();
+ 
+     broadcastGroupState(value);
+     logDebugP("Broadcast Switch set");
+ }
+ 
++// Broadcast on: the level goes to everybody; RGBW channels additionally restore their colour (see DaliChannel::rgbwOn)
++void DaliModule::broadcastOn()
++{
++    _broadcastOffPending = false;
++    daliMaster.sendArc(BroadcastAddress, 0xFE, true);
++    for (int i = 0; i < ChannelCount; i++)
++        if (channels[i].isConfigured() && channels[i].isRgbw())
++            channels[i].rgbwBroadcastOn();
++    for (int i = 0; i < GroupCount; i++)
++        if (groups[i].isConfigured() && groups[i].isRgbw())
++            groups[i].rgbwBroadcastOn();
++}
++
++// Broadcast off. Without RGBW channels this is the single broadcast frame as before. Otherwise the RGBW
++// channels first fade their colour to black (then switch their level off themselves), all other configured
++// channels are switched off at once, and devices unknown to the gateway get a broadcast off afterwards.
++void DaliModule::broadcastOff()
++{
++    bool anyRgbw = false;
++    for (int i = 0; i < ChannelCount; i++)
++        if (channels[i].isConfigured() && channels[i].isRgbw())
++            anyRgbw = true;
++    for (int i = 0; i < GroupCount; i++)
++        if (groups[i].isConfigured() && groups[i].isRgbw())
++            anyRgbw = true;
++
++    if (!anyRgbw)
++    {
++        daliMaster.sendArc(BroadcastAddress, 0x00, true);
++        return;
++    }
++
++    uint16_t wait = 0;
++    for (int i = 0; i < ChannelCount; i++)
++    {
++        if (!channels[i].isConfigured())
++            continue;
++        if (channels[i].isRgbw())
++        {
++            channels[i].rgbwOff();
++            if (channels[i].rgbwOffWaitMs() > wait)
++                wait = channels[i].rgbwOffWaitMs();
++        }
++        else
++            daliMaster.sendArc(i, 0x00, false);
++    }
++    for (int i = 0; i < GroupCount; i++)
++    {
++        if (!groups[i].isConfigured())
++            continue;
++        if (groups[i].isRgbw())
++        {
++            groups[i].rgbwOff();
++            if (groups[i].rgbwOffWaitMs() > wait)
++                wait = groups[i].rgbwOffWaitMs();
++        }
++        else
++            daliMaster.sendArc(i, 0x00, true);
++    }
++    logDebugP("Broadcast off with RGBW channels: broadcast level off in %i ms", wait + 50);
++    _broadcastOffAt = millis() + wait + 50;
++    _broadcastOffPending = true;
++}
++
++void DaliModule::markAllColoursUnknown()
++{
++    for (int i = 0; i < ChannelCount; i++)
++        channels[i].markColourUnknown();
++    for (int i = 0; i < GroupCount; i++)
++        groups[i].markColourUnknown();
++}
++
+ void DaliModule::koHandleDimm(GroupObject &ko)
+ {
+     uint8_t value = ko.value(Dpt(5, 1));
+@@ -800,6 +958,7 @@ void DaliModule::koHandleScene(GroupObject &ko)
+             continue;
+ 
+         logDebugP("Found scene number: %u, save: %u", i, save);
++        markAllColoursUnknown(); // a scene may change the colours stored in the drivers
+         if (save && !ParamDGWS_save)
+         {
+             logDebugP("Save not allowed. Skip!");
 diff --git a/src/DaliModule.group.templ.xml b/src/DaliModule.group.templ.xml
 index 881dfd9..b0840ec 100644
 --- a/src/DaliModule.group.templ.xml
@@ -512,6 +1141,32 @@ index 881dfd9..b0840ec 100644
                        </choose>
                        <choose ParamRefId="%AID%_P-%T%3%CC%020_R-%T%3%CC%02001">
                          <when test="!=0">
+diff --git a/src/DaliModule.h b/src/DaliModule.h
+index 1206625..ff62133 100644
+--- a/src/DaliModule.h
++++ b/src/DaliModule.h
+@@ -63,6 +63,21 @@ class DaliModule : public OpenKNX::Module
+ 		uint8_t _currentIdentifyDevice = 0;
+ #endif
+ 		bool _currentLockState = false;
++		// RGBW: broadcast off for devices the gateway does not know, sent after the RGBW fade-out
++		bool _broadcastOffPending = false;
++		unsigned long _broadcastOffAt = 0;
++		void broadcastOff();
++		void broadcastOn();
++		void markAllColoursUnknown();
++#ifdef RGBW_DIAG
++		// Frames seen on the DALI bus (incl. our own echo), filled on core 1, logged on core 0
++		struct DiagFrame { unsigned long ms; unsigned long data; uint8_t size; uint8_t flags; };
++		static constexpr uint8_t DiagRingSize = 64;
++		DiagFrame _diagRing[DiagRingSize];
++		volatile uint8_t _diagHead = 0;
++		volatile uint8_t _diagTail = 0;
++		void loopDiagFrames();
++#endif
+ 		int16_t getInfo(byte address, uint8_t command, uint8_t additional = 0);
+ 	
+ 		DaliAddressing _addressing{daliMaster};
 diff --git a/src/DaliModule.share.xml b/src/DaliModule.share.xml
 index 1219e9f..500e71b 100644
 --- a/src/DaliModule.share.xml

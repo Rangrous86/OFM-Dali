@@ -11,16 +11,24 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 #define RGBW_DIAG
-#define RGBW_BUILD_TAG "diag2"
+#define RGBW_BUILD_TAG "diag3"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
-#define RgbwSettleMs 1000
+#define RgbwSettleMs 1500
+// RGBW: time the colour sequence (12 DALI frames) needs on the bus before its ACTIVATE is sent
+#define RgbwTxMs 310
+// RGBW: default reserve (ms) on top of the driver's fade time
+#define RgbwMarginMs 100
 #define DimmStatusInterval 500
 
 class DaliChannel : public OpenKNX::Channel
 {
 	public:
-		static uint16_t rgbwSettleMs;
+		// RGBW timing, changeable at runtime through the console (settle / margin / onmode)
+		static uint16_t rgbwSettleMs;   // fallback pause when the stored driver colour is unknown
+		static uint16_t rgbwMarginMs;   // reserve on top of the fade time
+		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level
+		static uint16_t rgbwOnDelayMs;  // mode 1: pause before the level
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 
         DaliChannel(Dali::Master &master);
@@ -28,6 +36,15 @@ class DaliChannel : public OpenKNX::Channel
 
 		void loop() override;
 		void loop1();
+
+		// RGBW (DPT 251.600) switch on/off sequences, see DaliChannel.cpp
+		bool isRgbw();
+		void rgbwOff();
+		void rgbwOn(uint8_t onValue);
+		uint16_t rgbwOffWaitMs();
+		void markColourUnknown();
+		void rgbwBroadcastOn();
+
 		void setup() override;
 		void processInputKo(GroupObject &ko) override;
 		const bool isConfigured();
@@ -128,11 +145,29 @@ class DaliChannel : public OpenKNX::Channel
 		uint8_t _onArcValue = 0;
 		unsigned long _onArcAt = 0;
 		void loopPendingOn();
+		void loopRgbwSeq();
+		void loopFadeQuery();
+
+		// Driver colour is known to be black: we sent R=G=B=W=0 last and nothing changed it since
+		bool _driverBlack = false;
+		// off sequence: colour fades to black, then the level is switched off (_offAt)
+		bool _offPending = false;
+		unsigned long _offAt = 0;
+		// on sequence from level 0: level first, the colour follows when the level fade is over (_colorAt)
+		bool _colorPending = false;
+		unsigned long _colorAt = 0;
+		// fade time of the driver (QUERY_FADE_SPEEDS), default 1 s
+		uint16_t _fadeMs = 1000;
+		bool _fadeQueried = false;
+		uint32_t _fadeQueryId = 0;
 #ifdef RGBW_DIAG
 		unsigned long _diagStart = 0;
 		uint8_t _diagStep = 0;
 		bool _diagActive = false;
+		uint8_t _diagStatusStep = 0;
+		uint32_t _diagStatusId = 0;
 		void loopDiag();
+		void diagStart();
 #endif
 
 		//Turn-on with last value

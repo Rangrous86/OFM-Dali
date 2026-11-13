@@ -63,6 +63,12 @@ class DaliModule : public OpenKNX::Module
 		uint8_t _currentIdentifyDevice = 0;
 #endif
 		bool _currentLockState = false;
+		// RGBW: broadcast off for devices the gateway does not know, sent after the RGBW fade-out
+		bool _broadcastOffPending = false;
+		unsigned long _broadcastOffAt = 0;
+		void broadcastOff();
+		void broadcastOn();
+		void markAllColoursUnknown();
 #ifdef RGBW_DIAG
 		// Frames seen on the DALI bus (incl. our own echo), filled on core 1, logged on core 0
 		struct DiagFrame { unsigned long ms; unsigned long data; uint8_t size; uint8_t flags; };
