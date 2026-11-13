@@ -36,7 +36,6 @@ In der ETS zeigt *„Wert schreiben“* dafür je Kanal ein Häkchen (= Gültigk
 1. `DTR0=R, DTR1=G, DTR2=B` → `SET TEMPORARY RGB DIMLEVEL` (DT8, Befehl 235)
 2. `DTR0=W, DTR1=255, DTR2=255` → `SET TEMPORARY WAF DIMLEVEL` (DT8, Befehl 236; 255 = MASK = Amber/Freecolour unverändert)
 3. `ACTIVATE` (Befehl 226) – beide temporären Werte werden gemeinsam übernommen
-4. drei Füll-Frames (`SET_DTR 0`), dann **`ACTIVATE` noch einmal**. Hintergrund: Beim DA4-M übernahm das erste `ACTIVATE` zunächst die Werte des *vorherigen* Telegramms (erst ein zweites, identisches Telegramm griff). Vermutlich übernimmt der Treiber `SET TEMPORARY …` mit kleiner Verzögerung. *(Test-Stand, nach der Hardware-Prüfung zu bestätigen.)*
 
 Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI „MASK“ (nicht ändern) bedeutet. Die Helligkeit läuft weiterhin über die normalen Objekte *Schalten* und *Dimmen*.
 
@@ -44,7 +43,7 @@ Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI 
 
 | Ereignis | Verhalten bei RGBW-Kanälen |
 |----------|----------------------------|
-| Farbtelegramm (mindestens ein Kanal > 0) an einen **ausgeschalteten** Kanal | Kanal **schaltet ein** (Einschaltwert Tag/Nacht wie bei *Schalten = Ein*). Ablauf auf dem Bus: erst Minimalpegel, dann die Farbe, zuletzt der Einschaltwert. Statusobjekte melden *Ein* und die Helligkeit. Gründe: Der getestete Treiber (DA4-M) ignoriert eine Farbe, solange er aus ist, und eine Farbänderung (`ACTIVATE`) bricht ein laufendes Hochdimmen ab. Bei Minimalpegel ist die alte Farbe praktisch nicht sichtbar. |
+| Farbtelegramm (mindestens ein Kanal > 0) an einen **ausgeschalteten** Kanal | Kanal **schaltet ein** (Einschaltwert Tag/Nacht wie bei *Schalten = Ein*). Ablauf auf dem Bus: Einschaltwert, dann die Farbe, dann der Einschaltwert noch einmal als letztes Kommando. Statusobjekte melden *Ein* und die Helligkeit. Gründe: Der getestete Treiber (DA4-M) übernimmt eine Farbe nur, wenn er schon eingeschaltet ist (nicht bei Pegel 0 und nicht bei Minimalpegel), und eine Farbänderung (`ACTIVATE`) bricht ein laufendes Hochdimmen ab. Nachteil: Die alte Farbe ist beim Einschalten für etwa 0,3–0,5 s zu sehen, bis die Farbe übertragen ist. |
 | Farbtelegramm an einen **eingeschalteten** Kanal | Nur die Farbe ändert sich, die Helligkeit bleibt. |
 | Farbtelegramm mit **R = G = B = W = 0** (nach Anwendung der Gültigkeitsbits) | Kanal **schaltet aus** (`Schalten Status` = Aus, `Dimmen Status` = 0 %): Es wird `DAPC 0` gesendet (die Leuchte fährt gemäß der im Treiber eingestellten Fade-Zeit herunter und schaltet dann ab). Die Farbe 0/0/0/0 wird **nicht** an den Treiber geschickt, die Leuchte geht also nicht auf „schwarz“ und bleibt nicht „an“. Die zuletzt gesetzte Farbe bleibt in Gateway und Treiber gespeichert, damit *Schalten = Ein* oder das nächste Farbtelegramm die Leuchte nicht schwarz einschaltet. Wird die Farbe stufenweise heruntergefahren (z. B. per Home-Assistant-Regler), schaltet das erste Telegramm mit 0/0/0/0 sauber aus. |
 | *Schalten* / *Dimmen absolut* | wie bisher. Die Farbe bleibt dabei erhalten (Rot, dann 25 % = Rot mit 25 %). |

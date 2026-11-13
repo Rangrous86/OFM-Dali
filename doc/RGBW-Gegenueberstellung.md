@@ -66,7 +66,6 @@ Nachher: RGBW verzweigt vorab und sendet **RGB + Weiß**:
 | 1 | `SET_DTR`, `SET_DTR1`, `SET_DTR2` + `SET TEMPORARY RGB DIMLEVEL` (235, DT8) | R, G, B |
 | 2 | `SET_DTR`, `SET_DTR1`, `SET_DTR2` + `SET TEMPORARY WAF DIMLEVEL` (236, DT8) | W, 255, 255 (255 = MASK = unverändert) |
 | 3 | `ACTIVATE` (226, DT8) | übernimmt beide Werte gemeinsam |
-| 4 | 3× `SET_DTR 0` (Füll-Frames), dann `ACTIVATE` erneut | Test-Stand: beim DA4-M wirkte das erste `ACTIVATE` auf die Werte des vorherigen Telegramms |
 
 ### 3.3 Statusobjekt
 
@@ -85,7 +84,7 @@ Nachher:
 
 | Stelle | Änderung |
 |--------|----------|
-| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(1)` (Minimalpegel) → `sendColor()` → `sendArc(onValue)` als **letztes** Kommando, dann `setDimmState(onValue,…)` und `currentState = true`. `onValue` (`_onDay`/`_onNight`/`_lastXValue`) ist bereits ein DALI-Wert, keine erneute Umrechnung (Fehler in einer Zwischenversion: Status zeigte 0,4 %). Reihenfolge aus dem Hardware-Test (DA4-M): bei Pegel 0 wird eine Farbe ignoriert (Leuchte schaltet mit alter Farbe ein), und ein `ACTIVATE` bricht ein laufendes Hochdimmen ab (Pegel bleibt bei ca. 20 % hängen). `handleColorRGBW` sendet die Farbe deshalb nur direkt, wenn der Kanal schon an ist. Die anderen Farbtypen behalten das alte Verhalten. |
+| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(onValue)` → `sendColor()` → `sendArc(onValue)` erneut als **letztes** Kommando, dann `setDimmState(onValue,…)` und `currentState = true`. `onValue` (`_onDay`/`_onNight`/`_lastXValue`) ist bereits ein DALI-Wert, keine erneute Umrechnung. Reihenfolge aus dem Hardware-Test (DA4-M): bei Pegel 0 und bei Minimalpegel wird eine Farbe nicht übernommen, bei eingeschalteter Leuchte schon; ein `ACTIVATE` bricht ein laufendes Hochdimmen ab (Pegel bleibt bei ca. 20 % hängen), deshalb der Einschaltwert noch einmal am Ende. Nachteil: alte Farbe ca. 0,3–0,5 s sichtbar. `handleColorRGBW` sendet die Farbe nur direkt, wenn der Kanal schon an ist. Die anderen Farbtypen behalten das alte Verhalten. |
 | `handleColorRGBW` | Telegramm wird zuerst in eine Kopie dekodiert. Sind danach R, G, B und W alle 0 (`RgbwHelper::isOff`), wird `sendArc(0)` gesendet, `setDimmState(0,…)` setzt *Schalten Status* = Aus und *Dimmen Status* = 0 %, `currentState = false`. Die Farbe 0/0/0/0 geht **nicht** an den Treiber, die gespeicherte Farbe bleibt erhalten. |
 | `koHandleDimmAbs` | `currentState = (arc > 0)` (außer Treppenhauslicht). Wirkt für alle Kanaltypen. |
 
@@ -197,7 +196,7 @@ namespace RgbwHelper
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..c35608b 100644
+index dffeaaf..883be98 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -216,7 +215,7 @@ index dffeaaf..c35608b 100644
  }
  
  void DaliChannel::koHandleLock(GroupObject &ko)
-@@ -738,11 +742,40 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -738,11 +742,41 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -241,12 +240,13 @@ index dffeaaf..c35608b 100644
 +                onValue = isNight ? _lastNightValue : _lastDayValue;
 +            logDebugP("RGBW: switching on with %i", onValue);
 +
-+            // 1. lowest level: the driver is "on" and accepts the colour, the old colour is hardly visible
-+            // 2. send the colour (takes ~0.5 s on the bus)
-+            // 3. dim to the on value as the LAST command. A colour change (ACTIVATE) aborts a running
-+            //    level fade, so a fade to the on value must not be running while the colour is sent.
++            // Hardware test (DA4-M): the driver only takes over a colour when it is already switched on
++            // (arc level "normal"), not at level 0 and not at the minimum level. So:
++            // 1. switch on with the on value, 2. send the colour (takes ~0.3-0.5 s on the bus),
++            // 3. send the on value AGAIN as the last command: the colour change (ACTIVATE) aborts the level
++            //    fade that started in step 1, so without this the channel stays at a partial level.
 +            // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
-+            daliMaster.sendArc(_channelIndex, 1, _isGroup);
++            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
 +            sendColor();
 +            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
 +            setDimmState(onValue, true, true);
@@ -259,7 +259,7 @@ index dffeaaf..c35608b 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +813,67 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +814,67 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -327,7 +327,7 @@ index dffeaaf..c35608b 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -872,6 +966,13 @@ void DaliChannel::sendColor()
+@@ -872,6 +967,13 @@ void DaliChannel::sendColor()
      // TODO only send every 100ms?
      uint8_t r, g, b;
      uint8_t colorType = _isGroup ? ParamDGWG_colorType : ParamDGW_colorType;
@@ -341,7 +341,7 @@ index dffeaaf..c35608b 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1006,37 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1007,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -367,19 +367,12 @@ index dffeaaf..c35608b 100644
 +
 +    // 3. Apply both temporary values at once
 +    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
-+
-+    // 4. Hardware test (DA4-M): the first ACTIVATE applied the values of the *previous* telegram, a second,
-+    //    identical telegram was needed. Probably the driver commits "SET TEMPORARY" with a small delay.
-+    //    Repeat ACTIVATE after a few harmless frames (SET_DTR only changes the scratch register).
-+    for (int i = 0; i < 3; i++)
-+        daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, 0);
-+    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
 +}
 +
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -1002,6 +1134,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1128,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {

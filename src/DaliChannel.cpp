@@ -761,12 +761,13 @@ void DaliChannel::koHandleColor(GroupObject &ko)
                 onValue = isNight ? _lastNightValue : _lastDayValue;
             logDebugP("RGBW: switching on with %i", onValue);
 
-            // 1. lowest level: the driver is "on" and accepts the colour, the old colour is hardly visible
-            // 2. send the colour (takes ~0.5 s on the bus)
-            // 3. dim to the on value as the LAST command. A colour change (ACTIVATE) aborts a running
-            //    level fade, so a fade to the on value must not be running while the colour is sent.
+            // Hardware test (DA4-M): the driver only takes over a colour when it is already switched on
+            // (arc level "normal"), not at level 0 and not at the minimum level. So:
+            // 1. switch on with the on value, 2. send the colour (takes ~0.3-0.5 s on the bus),
+            // 3. send the on value AGAIN as the last command: the colour change (ACTIVATE) aborts the level
+            //    fade that started in step 1, so without this the channel stays at a partial level.
             // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
-            daliMaster.sendArc(_channelIndex, 1, _isGroup);
+            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
             sendColor();
             daliMaster.sendArc(_channelIndex, onValue, _isGroup);
             setDimmState(onValue, true, true);
@@ -1027,13 +1028,6 @@ void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_WAF_LEVEL, _isGroup);
 
     // 3. Apply both temporary values at once
-    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
-
-    // 4. Hardware test (DA4-M): the first ACTIVATE applied the values of the *previous* telegram, a second,
-    //    identical telegram was needed. Probably the driver commits "SET TEMPORARY" with a small delay.
-    //    Repeat ACTIVATE after a few harmless frames (SET_DTR only changes the scratch register).
-    for (int i = 0; i < 3; i++)
-        daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, 0);
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
 }
 
