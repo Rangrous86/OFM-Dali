@@ -36,6 +36,12 @@ Details zu allen Änderungen im Vergleich zum Ausgangscode: [`doc/RGBW-Gegenuebe
 
 Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI „MASK“ (nicht ändern) bedeutet. Die Helligkeit läuft weiterhin über die normalen Dimm-Objekte.
 
+### Einschaltverhalten
+
+Ein Farbtelegramm an einen **ausgeschalteten** RGBW-Kanal schaltet ihn ein (auf den normalen Einschaltwert Tag/Nacht, wie bei *Schalten = Ein*). Ein reines Weiter-Dimmen ändert die Farbe nicht: Die Farbe bleibt im Treiber erhalten.
+
+Dafür wurde zusätzlich `koHandleDimmAbs` angepasst: Der interne Ein/Aus-Merker (`currentState`) folgt jetzt dem Wert von *Dimmen absolut* (0 % = aus). Ohne diese Korrektur blieb der Merker nach „Dimmen auf 0“ auf *Ein* stehen, und ein anschließendes Farbtelegramm wurde ignoriert. (Hardware-Test mit DA4-M am 13.11.2026.)
+
 ## Bekannte Einschränkungen
 
 - **Szenen/DCA-Konfiguration:** Die Szenen-Farbe (Konfigurationstransfer) kennt nur RGB. Bei RGBW-Kanälen wird dort das Weiß nicht mitgeschrieben. Szenen per KNX-Telegramm (Szenenobjekt) funktionieren über die im Treiber gespeicherten Szenen.

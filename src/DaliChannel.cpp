@@ -636,6 +636,9 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
     uint8_t arc = DaliHelper::percentToArc(value);
     daliMaster.sendArc(_channelIndex, arc, _isGroup);
     setDimmState(arc, true, true);
+    // keep the on/off flag in sync, otherwise e.g. a colour telegram after "dimm to 0" is ignored
+    if (!_isStaircase)
+        currentState = arc > 0;
 }
 
 void DaliChannel::koHandleLock(GroupObject &ko)
@@ -747,8 +750,24 @@ void DaliChannel::koHandleColor(GroupObject &ko)
     }
 
     if(!currentState)
-        setDimmState(_onDay, true, true); // TODO get real
-    
+    {
+        if (colorType == PT_colorType_RGBW)
+        {
+            // A colour telegram on a switched-off channel really switches it on (same on value as
+            // "Schalten = Ein"). setDimmState() alone only updates the KNX status objects and would
+            // report "On" while the luminaire stays dark.
+            uint8_t onValue = isNight ? _onNight : _onDay;
+            if (onValue == 0)
+                onValue = isNight ? _lastNightValue : _lastDayValue;
+            logDebugP("RGBW: switching on with %i", onValue);
+            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
+            setDimmState(DaliHelper::percentToArc(onValue), true, true);
+            currentState = true;
+        }
+        else
+            setDimmState(_onDay, true, true); // TODO get real
+    }
+
     logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
 }
 
