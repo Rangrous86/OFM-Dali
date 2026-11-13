@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 #define RGBW_DIAG
-#define RGBW_BUILD_TAG "diag3"
+#define RGBW_BUILD_TAG "diag4"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -27,7 +27,8 @@ class DaliChannel : public OpenKNX::Channel
 		// RGBW timing, changeable at runtime through the console (settle / margin / onmode)
 		static uint16_t rgbwSettleMs;   // fallback pause when the stored driver colour is unknown
 		static uint16_t rgbwMarginMs;   // reserve on top of the fade time
-		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level
+		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level (default)
+		static bool rgbwBlackOff;       // true: fade the colour to all 0 before the level off (the DA4-M shows white for all 0, so default false)
 		static uint16_t rgbwOnDelayMs;  // mode 1: pause before the level
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 

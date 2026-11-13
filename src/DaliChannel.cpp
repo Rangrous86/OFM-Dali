@@ -179,7 +179,8 @@ void DaliChannel::diagStart()
 
 uint16_t DaliChannel::rgbwSettleMs = RgbwSettleMs;
 uint16_t DaliChannel::rgbwMarginMs = RgbwMarginMs;
-uint8_t DaliChannel::rgbwOnMode = 0;
+uint8_t DaliChannel::rgbwOnMode = 1;
+bool DaliChannel::rgbwBlackOff = false;
 uint16_t DaliChannel::rgbwOnDelayMs = 1100;
 
 // ---------------------------------------------------------------------------------------------------------
@@ -220,9 +221,9 @@ void DaliChannel::rgbwOff()
     if (_offPending)
         return; // already on its way (e.g. repeated off commands while dimming down)
 
-    if (_driverBlack || !wasOn)
+    if (!rgbwBlackOff || _driverBlack || !wasOn)
     {
-        logDebugP("RGBW: off (%s)", _driverBlack ? "stored colour is black" : "channel was off");
+        logDebugP("RGBW: off (%s)", !rgbwBlackOff ? "plain level off" : (_driverBlack ? "stored colour is black" : "channel was off"));
         daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
         return;
     }
@@ -278,10 +279,10 @@ void DaliChannel::rgbwOn(uint8_t onValue)
         return;
     }
 
-    if (_driverBlack)
+    if (_driverBlack || rgbwOnMode == 1)
     {
-        // Test mode: colour first (fades unseen at level 0, if the driver takes it), then the level
-        logDebugP("RGBW: on from black: colour first, level %i in %i ms", onValue, rgbwOnDelayMs);
+        // Colour first (fades unseen at level 0, if the driver takes it), then the level
+        logDebugP("RGBW: on, colour first, level %i in %i ms", onValue, rgbwOnDelayMs);
         sendColor();
         _onArcValue = onValue;
         _onArcAt = millis() + rgbwOnDelayMs;

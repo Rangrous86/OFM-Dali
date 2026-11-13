@@ -380,6 +380,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
     openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
     openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
+    openknx.console.printHelpLine("blackoff", "blackoff 0|1 => RGBW: 1 = fade colour to 0/0/0/0 before level off (default 0)");
     openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on from black: 0 = level first, 1 = colour first, level after nnnn ms");
 }
 
@@ -456,6 +457,17 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
             v = 2000;
         DaliChannel::rgbwMarginMs = v;
         logInfoP("RGBW margin = %i ms", v);
+        return true;
+    }
+    if (command == "blackoff")
+    {
+        if (!hasArg || (arg != "0" && arg != "1"))
+        {
+            logErrorP("blackoff 0|1 (1 = fade colour to 0/0/0/0 before the level off), now %i", DaliChannel::rgbwBlackOff);
+            return true;
+        }
+        DaliChannel::rgbwBlackOff = arg == "1";
+        logInfoP("RGBW black before off = %i", DaliChannel::rgbwBlackOff);
         return true;
     }
     if (command == "onmode")
