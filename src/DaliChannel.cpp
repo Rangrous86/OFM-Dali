@@ -332,7 +332,7 @@ void DaliChannel::loopRgbwSeq()
 // Reads the fade time of the driver once (QUERY_FADE_SPEEDS: high nibble = fade time, low = fade rate)
 void DaliChannel::loopFadeQuery()
 {
-    static const uint16_t fadeTimes[16] = {0, 700, 1000, 1400, 2000, 2800, 4000, 5700, 8000, 11300, 16000, 22600, 32000, 45300, 64000, 90500};
+    static const uint32_t fadeTimes[16] = {0, 700, 1000, 1400, 2000, 2800, 4000, 5700, 8000, 11300, 16000, 22600, 32000, 45300, 64000, 90500};
 
     if (!_fadeQueried)
     {
@@ -361,7 +361,8 @@ void DaliChannel::loopFadeQuery()
         return;
     }
     uint8_t raw = response.frame.data & 0xFF;
-    _fadeMs = fadeTimes[raw >> 4];
+    uint32_t fade = fadeTimes[raw >> 4];
+    _fadeMs = fade > 65000 ? 65000 : fade; // member is 16 bit
     logInfoP("RGBW: fade time x=%i = %i ms (raw 0x%02X)", raw >> 4, _fadeMs, raw);
 }
 
