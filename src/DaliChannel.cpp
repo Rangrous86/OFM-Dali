@@ -814,15 +814,30 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
         return false;
     }
 
-    const uint8_t valid = RgbwHelper::decode(ko.valueRef(), currentColor);
+    // Decode into a copy first: all channels 0 means "off" and must not overwrite the stored colour
+    uint8_t newColor[4] = {currentColor[0], currentColor[1], currentColor[2], currentColor[3]};
+    const uint8_t valid = RgbwHelper::decode(ko.valueRef(), newColor);
     if (valid == 0)
     {
         logDebugP("RGBW: no valid channel in telegram, ignored");
         return false;
     }
 
-    logDebugP("Got RGBW: %i %i %i %i (valid %X)", currentColor[0], currentColor[1], currentColor[2], currentColor[3], valid);
+    logDebugP("Got RGBW: %i %i %i %i (valid %X)", newColor[0], newColor[1], newColor[2], newColor[3], valid);
 
+    if (RgbwHelper::isOff(newColor))
+    {
+        // R = G = B = W = 0 -> switch the channel off (status objects report "Off", 0 %).
+        // The last colour stays stored in gateway and driver, so "Schalten = Ein" or the next
+        // colour telegram brings the light back with that colour instead of staying dark.
+        logDebugP("RGBW: all channels 0 -> switching off");
+        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
+        setDimmState(0, true, true);
+        currentState = false;
+        return false; // already handled, do not switch on again
+    }
+
+    memcpy(currentColor, newColor, sizeof(currentColor));
     sendRgbwState();
     sendColor();
     return true;

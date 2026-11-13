@@ -3,14 +3,14 @@
 Vergleich des **Ausgangscodes** (`OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `6e7aca5`) mit dem Stand in `feature/rgbw`.
 Der Ausgangscode kennt die Farbtypen HSV, RGB, TW und xyY – **kein RGBW**.
 
-> Alle Änderungen sind ungetestet auf Hardware (siehe README). Die Spalte „Risiko“ benennt, was am ehesten schiefgehen kann.
+> Stand: gebaut, geflasht und am 13.11.2026 mit einem DA4-M (RGBW-Modus) am `GW-REG1-Dali` erprobt (siehe README). Die Spalte „Risiko“ benennt, was am ehesten schiefgehen kann.
 
 ## 1. Überblick
 
 | Datei | Art | Änderung | Risiko |
 |-------|-----|----------|--------|
-| `src/RgbwHelper.h` | **neu** | Reine Hilfsfunktionen für DPT 251.600: `decode` (Gültigkeitsbits), `encode` (Status), `daliLevel` (255→254). Ohne Arduino-Abhängigkeit, per Host-Test geprüft (`test/test_rgbw_helper.cpp`). | gering |
-| `src/DaliChannel.cpp` | geändert | `koHandleColor`: neuer Fall `PT_colorType_RGBW`. Neu: `handleColorRGBW`, `sendRgbwState`, `sendColorAsRGBW`; `sendColor` und `updateCurrentDimmValue` mit RGBW-Zweig. | mittel (nicht kompiliert) |
+| `src/RgbwHelper.h` | **neu** | Reine Hilfsfunktionen für DPT 251.600: `decode` (Gültigkeitsbits), `isOff` (alle vier Kanäle 0), `encode` (Status), `daliLevel` (255→254). Ohne Arduino-Abhängigkeit, per Host-Test geprüft (`test/test_rgbw_helper.cpp`). | gering |
+| `src/DaliChannel.cpp` | geändert | `koHandleColor`: neuer Fall `PT_colorType_RGBW`; bei RGBW schaltet ein Farbtelegramm einen ausgeschalteten Kanal wirklich ein (`sendArc`). Neu: `handleColorRGBW` (inkl. „alles 0 → aus“), `sendRgbwState`, `sendColorAsRGBW`; `sendColor` und `updateCurrentDimmValue` mit RGBW-Zweig. `koHandleDimmAbs`: `currentState` folgt jetzt dem Dimmwert (Fehlerkorrektur, wirkt für alle Kanaltypen außer Treppenhauslicht). | mittel (Ein-/Ausschaltverhalten nach Fix noch einmal auf Hardware zu bestätigen) |
 | `src/DaliChannel.h` | geändert | Deklarationen der neuen Methoden; `currentColor[4]` wird mit 0 initialisiert (vorher uninitialisiert). | gering |
 | `src/DaliModule.share.xml` | geändert | `colorType`: 2 → 3 Bit, neuer Eintrag `RGBW = 4` (erzeugt `PT_colorType_RGBW`). | gering |
 | `src/DaliModule.single.templ.xml` | geändert | `colorType` im Speicher von Byte 7/Bit 5 nach **Byte 21/Bit 5** (3 Bit). Zwei neue KO-Referenzen (DPST-251-600, 6 Byte). Neuer `<when test="4">` in der Farb-Dynamik. Szenen-Spalte „Farbe“ gilt auch für Typ 4 (`0 1 3` → `0 1 3 4`, 17×). | mittel (Producer nicht gelaufen) |
@@ -76,6 +76,18 @@ Nachher (nur RGBW): 6-Byte-Status `[R,G,B,W,0x00,0x0F]` direkt in den Objektspei
 
 Ein DPT-251.600-Telegramm kann einzelne Kanäle als „ungültig“ markieren. `RgbwHelper::decode` übernimmt nur markierte Kanäle; ein Telegramm ohne gültigen Kanal ändert nichts und löst keinen DALI-Befehl aus. Das ist ein Unterschied zu den anderen Farbtypen, die keine Gültigkeitsbits kennen.
 
+### 3.5 Ein-/Ausschalten (Fund aus dem Hardware-Test)
+
+Vorher (alle Farbtypen): `koHandleColor` rief bei ausgeschaltetem Kanal nur `setDimmState(_onDay, true, true)` auf. Das aktualisiert ausschließlich die KNX-Statusobjekte (*Schalten Status* = Ein, *Dimmen Status*), sendet aber **keinen DALI-Befehl** – die Leuchte blieb dunkel, obwohl das Gateway „Ein“ meldete (`// TODO get real`). Außerdem setzte `koHandleDimmAbs` den Merker `currentState` nie; nach „Schalten Ein“ und „Dimmen auf 0“ blieb er auf *Ein*, und ein folgendes Farbtelegramm wurde komplett übergangen.
+
+Nachher:
+
+| Stelle | Änderung |
+|--------|----------|
+| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(Einschaltwert Tag/Nacht bzw. letzter Wert)`, `setDimmState(percentToArc(..))`, `currentState = true`. Die anderen Farbtypen behalten das alte Verhalten. |
+| `handleColorRGBW` | Telegramm wird zuerst in eine Kopie dekodiert. Sind danach R, G, B und W alle 0 (`RgbwHelper::isOff`), wird `sendArc(0)` gesendet, `setDimmState(0,…)` setzt *Schalten Status* = Aus und *Dimmen Status* = 0 %, `currentState = false`. Die Farbe 0/0/0/0 geht **nicht** an den Treiber, die gespeicherte Farbe bleibt erhalten. |
+| `koHandleDimmAbs` | `currentState = (arc > 0)` (außer Treppenhauslicht). Wirkt für alle Kanaltypen. |
+
 ## 4. Vorher/Nachher: ETS-Applikation
 
 | Thema | Vorher | Nachher |
@@ -89,8 +101,9 @@ Ein DPT-251.600-Telegramm kann einzelne Kanäle als „ungültig“ markieren. `
 
 - Szenenfarbe per Konfigurationstransfer enthält kein Weiß.
 - Keine getrennten Einzelobjekte (R/G/B/W 8 Bit) bei RGBW.
-- Das DALI-Mapping des Weißkanals (WAF-Level, Kanalzuordnung) hängt vom Treiber ab; nur mit Hardware verifizierbar.
-- Firmware nicht kompiliert, OpenKNXproducer nicht ausgeführt.
+- Das DALI-Mapping des Weißkanals (WAF-Level, Kanalzuordnung) hängt vom Treiber ab. Getestet nur mit dem DA4-M (RGBW-Modus).
+- Bei HSV/RGB/TW/xyY meldet ein Farbtelegramm an einen ausgeschalteten Kanal weiterhin nur „Ein“ in den Statusobjekten, ohne DALI-Einschaltbefehl (Ausgangscode, `TODO get real`). Nur für RGBW korrigiert.
+- Die ETS-Applikation ist nicht in-place zu Geräten der Vorgängerversion updatebar (verschobener Parameter, `ReplacesVersions`).
 
 ## 6. Fragen an den Maintainer (thewhobox)
 
@@ -98,6 +111,7 @@ Ein DPT-251.600-Telegramm kann einzelne Kanäle als „ungültig“ markieren. `
 2. Soll das Weiß über `SET TEMPORARY WAF DIMLEVEL` (236) laufen, oder bevorzugst du `RGBWAF` (237)/einen anderen Weg?
 3. Sollen zusätzlich getrennte 8-Bit-Objekte für R/G/B/W angeboten werden (wie bei MDT)?
 4. Wie sollen Szenen/DCA-Konfiguration mit Weiß umgehen?
+5. Soll das Einschalten durch ein Farbtelegramm (echter `sendArc`) auch für HSV/RGB/TW/xyY gelten? Und ist die Korrektur von `currentState` in `koHandleDimmAbs` so in Ordnung?
 
 ## 7. Neue Datei `src/RgbwHelper.h` (vollständig)
 
@@ -148,6 +162,14 @@ namespace RgbwHelper
     }
 
     /*
+     * true, wenn alle vier Kanäle (R, G, B, W) 0 sind. Das gilt als "Aus".
+     */
+    inline bool isOff(const uint8_t *color)
+    {
+        return color[0] == 0 && color[1] == 0 && color[2] == 0 && color[3] == 0;
+    }
+
+    /*
      * Schreibt color[0..3] als 6-Byte-Telegramm (z.B. für das Statusobjekt). Alle Kanäle gelten als gültig.
      */
     inline void encode(const uint8_t *color, uint8_t *data)
@@ -174,7 +196,7 @@ namespace RgbwHelper
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..d512401 100644
+index dffeaaf..7fa4c5d 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -183,7 +205,17 @@ index dffeaaf..d512401 100644
  #include "OpenKNX.h"
  
  DaliChannel::DaliChannel(Dali::Master &_daliMaster) : daliMaster(_daliMaster) {}
-@@ -738,6 +739,11 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -635,6 +636,9 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+     uint8_t arc = DaliHelper::percentToArc(value);
+     daliMaster.sendArc(_channelIndex, arc, _isGroup);
+     setDimmState(arc, true, true);
++    // keep the on/off flag in sync, otherwise e.g. a colour telegram after "dimm to 0" is ignored
++    if (!_isStaircase)
++        currentState = arc > 0;
+ }
+ 
+ void DaliChannel::koHandleLock(GroupObject &ko)
+@@ -738,11 +742,32 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -195,7 +227,30 @@ index dffeaaf..d512401 100644
      }
  
      if(!currentState)
-@@ -780,6 +786,47 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+-        setDimmState(_onDay, true, true); // TODO get real
+-    
++    {
++        if (colorType == PT_colorType_RGBW)
++        {
++            // A colour telegram on a switched-off channel really switches it on (same on value as
++            // "Schalten = Ein"). setDimmState() alone only updates the KNX status objects and would
++            // report "On" while the luminaire stays dark.
++            uint8_t onValue = isNight ? _onNight : _onDay;
++            if (onValue == 0)
++                onValue = isNight ? _lastNightValue : _lastDayValue;
++            logDebugP("RGBW: switching on with %i", onValue);
++            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++            setDimmState(DaliHelper::percentToArc(onValue), true, true);
++            currentState = true;
++        }
++        else
++            setDimmState(_onDay, true, true); // TODO get real
++    }
++
+     logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
+ }
+ 
+@@ -780,6 +805,62 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -208,15 +263,30 @@ index dffeaaf..d512401 100644
 +        return false;
 +    }
 +
-+    const uint8_t valid = RgbwHelper::decode(ko.valueRef(), currentColor);
++    // Decode into a copy first: all channels 0 means "off" and must not overwrite the stored colour
++    uint8_t newColor[4] = {currentColor[0], currentColor[1], currentColor[2], currentColor[3]};
++    const uint8_t valid = RgbwHelper::decode(ko.valueRef(), newColor);
 +    if (valid == 0)
 +    {
 +        logDebugP("RGBW: no valid channel in telegram, ignored");
 +        return false;
 +    }
 +
-+    logDebugP("Got RGBW: %i %i %i %i (valid %X)", currentColor[0], currentColor[1], currentColor[2], currentColor[3], valid);
++    logDebugP("Got RGBW: %i %i %i %i (valid %X)", newColor[0], newColor[1], newColor[2], newColor[3], valid);
 +
++    if (RgbwHelper::isOff(newColor))
++    {
++        // R = G = B = W = 0 -> switch the channel off (status objects report "Off", 0 %).
++        // The last colour stays stored in gateway and driver, so "Schalten = Ein" or the next
++        // colour telegram brings the light back with that colour instead of staying dark.
++        logDebugP("RGBW: all channels 0 -> switching off");
++        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
++        setDimmState(0, true, true);
++        currentState = false;
++        return false; // already handled, do not switch on again
++    }
++
++    memcpy(currentColor, newColor, sizeof(currentColor));
 +    sendRgbwState();
 +    sendColor();
 +    return true;
@@ -243,7 +313,7 @@ index dffeaaf..d512401 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -872,6 +919,13 @@ void DaliChannel::sendColor()
+@@ -872,6 +953,13 @@ void DaliChannel::sendColor()
      // TODO only send every 100ms?
      uint8_t r, g, b;
      uint8_t colorType = _isGroup ? ParamDGWG_colorType : ParamDGW_colorType;
@@ -257,7 +327,7 @@ index dffeaaf..d512401 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +959,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +993,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -288,7 +358,7 @@ index dffeaaf..d512401 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -1002,6 +1080,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1114,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {

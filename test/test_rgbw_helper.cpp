@@ -47,6 +47,19 @@ int main()
       const uint8_t exp[6] = {1, 2, 3, 4, 0, 0x0F};
       CHECK(memcmp(d, exp, 6) == 0); }
 
+    // isOff: only true when R, G, B and W are all 0
+    { uint8_t z[4] = {0, 0, 0, 0}; CHECK(RgbwHelper::isOff(z)); }
+    { uint8_t w[4] = {0, 0, 0, 1}; CHECK(!RgbwHelper::isOff(w)); }
+    { uint8_t r[4] = {1, 0, 0, 0}; CHECK(!RgbwHelper::isOff(r)); }
+
+    // all channels 0 in the telegram -> "off", but a partial 0 (only white) is not "off" while RGB is set
+    { uint8_t c[4] = {10, 0, 0, 50}; uint8_t d[6] = {0, 0, 0, 0, 0, 0x01};
+      RgbwHelper::decode(d, c);
+      CHECK(!RgbwHelper::isOff(c)); }
+    { uint8_t c[4] = {0, 0, 0, 50}; uint8_t d[6] = {0, 0, 0, 0, 0, 0x01};
+      RgbwHelper::decode(d, c);
+      CHECK(RgbwHelper::isOff(c)); }
+
     // DALI level: 255 is MASK
     CHECK(RgbwHelper::daliLevel(255) == 254);
     CHECK(RgbwHelper::daliLevel(254) == 254);

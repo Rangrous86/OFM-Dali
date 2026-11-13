@@ -44,6 +44,14 @@ namespace RgbwHelper
     }
 
     /*
+     * true, wenn alle vier Kanäle (R, G, B, W) 0 sind. Das gilt als "Aus".
+     */
+    inline bool isOff(const uint8_t *color)
+    {
+        return color[0] == 0 && color[1] == 0 && color[2] == 0 && color[3] == 0;
+    }
+
+    /*
      * Schreibt color[0..3] als 6-Byte-Telegramm (z.B. für das Statusobjekt). Alle Kanäle gelten als gültig.
      */
     inline void encode(const uint8_t *color, uint8_t *data)
