@@ -297,7 +297,8 @@ void DaliChannel::rgbwOn(uint8_t onValue)
             _onArcAt = millis() + rgbwOffWaitMs() + 300;
             logDebugP("RGBW: on, colour first, level %i when the colour fade is over (latest in %i ms)", onValue, rgbwOffWaitMs() + 300);
             _fadePolling = true;
-            _fadePollAt = millis() + RgbwTxMs;
+            _fadePollAt = millis(); // the queue is FIFO: the first poll goes out right behind the ACTIVATE frame
+            _fadePollT0 = millis();
         }
 #ifdef RGBW_DIAG
         diagStart();
@@ -402,12 +403,12 @@ void DaliChannel::loopFadePoll()
         {
             if (!((st >> 4) & 1))
             {
-                logDebugP("RGBW: colour fade over (status 0x%02X)", st);
+                logDebugP("RGBW: colour fade over (status 0x%02X), %lu ms after the colour telegram", st, millis() - _fadePollT0);
                 _fadePolling = false;
                 _onArcAt = millis();
             }
             else
-                _fadePollAt = millis() + 100;
+                _fadePollAt = millis(); // next poll at once, a poll takes ~45 ms on the bus
         }
         return;
     }
