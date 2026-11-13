@@ -760,10 +760,17 @@ void DaliChannel::koHandleColor(GroupObject &ko)
             if (onValue == 0)
                 onValue = isNight ? _lastNightValue : _lastDayValue;
             logDebugP("RGBW: switching on with %i", onValue);
+
+            // 1. lowest level: the driver is "on" and accepts the colour, the old colour is hardly visible
+            // 2. send the colour (takes ~0.5 s on the bus)
+            // 3. dim to the on value as the LAST command. A colour change (ACTIVATE) aborts a running
+            //    level fade, so a fade to the on value must not be running while the colour is sent.
+            // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
+            daliMaster.sendArc(_channelIndex, 1, _isGroup);
+            sendColor();
             daliMaster.sendArc(_channelIndex, onValue, _isGroup);
-            setDimmState(DaliHelper::percentToArc(onValue), true, true);
+            setDimmState(onValue, true, true);
             currentState = true;
-            sendColor(); // after switching on, see handleColorRGBW()
         }
         else
             setDimmState(_onDay, true, true); // TODO get real
@@ -843,7 +850,7 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
 
     // Some drivers (seen with a DA4-M) ignore a colour change while the channel is off (arc level 0)
     // and light up with the old colour. For a switched-off channel the colour is therefore sent in
-    // koHandleColor() *after* the arc "on" command; here only for channels that are already on.
+    // koHandleColor() while the channel is switched on; here only for channels that are already on.
     if (currentState)
         sendColor();
     return true;
