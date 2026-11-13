@@ -84,7 +84,7 @@ Nachher:
 
 | Stelle | Änderung |
 |--------|----------|
-| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(Einschaltwert Tag/Nacht bzw. letzter Wert)`, `setDimmState(percentToArc(..))`, `currentState = true`. Die anderen Farbtypen behalten das alte Verhalten. |
+| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(Einschaltwert Tag/Nacht bzw. letzter Wert)`, `setDimmState(percentToArc(..))`, `currentState = true`, **danach** `sendColor()`. Reihenfolge „erst ein, dann Farbe“, weil der getestete DA4-M eine Farbe bei Pegel 0 ignoriert und sonst mit der alten Farbe einschaltet (Hardware-Test: Weiß aus → Rot senden → Weiß leuchtet, erst das zweite Rot greift). `handleColorRGBW` sendet die Farbe deshalb nur direkt, wenn der Kanal schon an ist. Die anderen Farbtypen behalten das alte Verhalten. |
 | `handleColorRGBW` | Telegramm wird zuerst in eine Kopie dekodiert. Sind danach R, G, B und W alle 0 (`RgbwHelper::isOff`), wird `sendArc(0)` gesendet, `setDimmState(0,…)` setzt *Schalten Status* = Aus und *Dimmen Status* = 0 %, `currentState = false`. Die Farbe 0/0/0/0 geht **nicht** an den Treiber, die gespeicherte Farbe bleibt erhalten. |
 | `koHandleDimmAbs` | `currentState = (arc > 0)` (außer Treppenhauslicht). Wirkt für alle Kanaltypen. |
 
@@ -196,7 +196,7 @@ namespace RgbwHelper
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..7fa4c5d 100644
+index dffeaaf..942d727 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -215,7 +215,7 @@ index dffeaaf..7fa4c5d 100644
  }
  
  void DaliChannel::koHandleLock(GroupObject &ko)
-@@ -738,11 +742,32 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -738,11 +742,33 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -242,6 +242,7 @@ index dffeaaf..7fa4c5d 100644
 +            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
 +            setDimmState(DaliHelper::percentToArc(onValue), true, true);
 +            currentState = true;
++            sendColor(); // after switching on, see handleColorRGBW()
 +        }
 +        else
 +            setDimmState(_onDay, true, true); // TODO get real
@@ -250,7 +251,7 @@ index dffeaaf..7fa4c5d 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +805,62 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +806,67 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -288,7 +289,12 @@ index dffeaaf..7fa4c5d 100644
 +
 +    memcpy(currentColor, newColor, sizeof(currentColor));
 +    sendRgbwState();
-+    sendColor();
++
++    // Some drivers (seen with a DA4-M) ignore a colour change while the channel is off (arc level 0)
++    // and light up with the old colour. For a switched-off channel the colour is therefore sent in
++    // koHandleColor() *after* the arc "on" command; here only for channels that are already on.
++    if (currentState)
++        sendColor();
 +    return true;
 +}
 +
@@ -313,7 +319,7 @@ index dffeaaf..7fa4c5d 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -872,6 +953,13 @@ void DaliChannel::sendColor()
+@@ -872,6 +959,13 @@ void DaliChannel::sendColor()
      // TODO only send every 100ms?
      uint8_t r, g, b;
      uint8_t colorType = _isGroup ? ParamDGWG_colorType : ParamDGW_colorType;
@@ -327,7 +333,7 @@ index dffeaaf..7fa4c5d 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +993,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +999,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -358,7 +364,7 @@ index dffeaaf..7fa4c5d 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -1002,6 +1114,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1120,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {

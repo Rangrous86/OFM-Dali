@@ -43,7 +43,7 @@ Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI 
 
 | Ereignis | Verhalten bei RGBW-Kanälen |
 |----------|----------------------------|
-| Farbtelegramm (mindestens ein Kanal > 0) an einen **ausgeschalteten** Kanal | Farbe wird gesendet, Kanal **schaltet ein** (Einschaltwert Tag/Nacht wie bei *Schalten = Ein*). Statusobjekte melden *Ein* und die Helligkeit. |
+| Farbtelegramm (mindestens ein Kanal > 0) an einen **ausgeschalteten** Kanal | Kanal **schaltet ein** (Einschaltwert Tag/Nacht wie bei *Schalten = Ein*) und **danach** wird die Farbe gesendet. Statusobjekte melden *Ein* und die Helligkeit. Grund: Der getestete Treiber (DA4-M) ignoriert eine Farbe, solange er aus ist, und würde sonst mit der alten Farbe einschalten. Je nach Fade-Zeit des Treibers kann deshalb die alte Farbe für den Bruchteil einer Sekunde aufblitzen. |
 | Farbtelegramm an einen **eingeschalteten** Kanal | Nur die Farbe ändert sich, die Helligkeit bleibt. |
 | Farbtelegramm mit **R = G = B = W = 0** (nach Anwendung der Gültigkeitsbits) | Kanal **schaltet aus** (`Schalten Status` = Aus, `Dimmen Status` = 0 %): Es wird `DAPC 0` gesendet (die Leuchte fährt gemäß der im Treiber eingestellten Fade-Zeit herunter und schaltet dann ab). Die Farbe 0/0/0/0 wird **nicht** an den Treiber geschickt, die Leuchte geht also nicht auf „schwarz“ und bleibt nicht „an“. Die zuletzt gesetzte Farbe bleibt in Gateway und Treiber gespeichert, damit *Schalten = Ein* oder das nächste Farbtelegramm die Leuchte nicht schwarz einschaltet. Wird die Farbe stufenweise heruntergefahren (z. B. per Home-Assistant-Regler), schaltet das erste Telegramm mit 0/0/0/0 sauber aus. |
 | *Schalten* / *Dimmen absolut* | wie bisher. Die Farbe bleibt dabei erhalten (Rot, dann 25 % = Rot mit 25 %). |
@@ -122,7 +122,7 @@ Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kei
 | 8 | Kein Häkchen / `… 00` in Byte 5 | **keine** gültigen Kanäle: Licht darf sich nicht ändern |
 | 9 | Alle vier Häkchen, alle 0 % | Leuchte **schaltet aus**; Schalten Status *Aus*, Dimmen Status 0 % |
 | 10 | Nach 9: *Schalten* Ein | Leuchte geht mit der **zuletzt gesetzten Farbe** an (nicht schwarz) |
-| 11 | Nach 9: Farbtelegramm (z. B. R 100 %) | Leuchte schaltet mit dieser Farbe wieder ein |
+| 11 | Nach 9 (zuletzt war z. B. Weiß gesetzt): Farbtelegramm R 100 % | Leuchte schaltet mit **Rot** ein, nicht mit der alten Farbe (Weiß); ein zweites Senden ist nicht nötig |
 | 12 | *Dimmen absolut* 0 %, danach ein Farbtelegramm | Leuchte schaltet wieder ein (Merker bleibt nicht auf *Ein* hängen) |
 | 13 | Rot gesetzt, dann *Dimmen absolut* 25 % | Rot mit 25 % Helligkeit |
 | 14 | RGB/HSV/TW/xyY-Kanäle nachtesten | verhalten sich wie vorher |

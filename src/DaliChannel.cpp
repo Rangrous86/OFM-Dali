@@ -763,6 +763,7 @@ void DaliChannel::koHandleColor(GroupObject &ko)
             daliMaster.sendArc(_channelIndex, onValue, _isGroup);
             setDimmState(DaliHelper::percentToArc(onValue), true, true);
             currentState = true;
+            sendColor(); // after switching on, see handleColorRGBW()
         }
         else
             setDimmState(_onDay, true, true); // TODO get real
@@ -839,7 +840,12 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
 
     memcpy(currentColor, newColor, sizeof(currentColor));
     sendRgbwState();
-    sendColor();
+
+    // Some drivers (seen with a DA4-M) ignore a colour change while the channel is off (arc level 0)
+    // and light up with the old colour. For a switched-off channel the colour is therefore sent in
+    // koHandleColor() *after* the arc "on" command; here only for channels that are already on.
+    if (currentState)
+        sendColor();
     return true;
 }
 
