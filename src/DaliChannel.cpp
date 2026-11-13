@@ -111,7 +111,34 @@ void DaliChannel::loop1()
     loopError();
     loopQueryLevel();
     loopPendingOn();
+#ifdef RGBW_DIAG
+    loopDiag();
+#endif
 }
+
+#ifdef RGBW_DIAG
+// Asks the driver for its real level at fixed times after an RGBW colour switch-on and logs the answers
+// (the answer is logged in loopQueryLevel and also updates the "Dimmen Status" object).
+void DaliChannel::loopDiag()
+{
+    static const uint16_t times[] = {300, 700, 1100, 1500, 2000, 3000, 5000};
+    if (!_diagActive)
+        return;
+    if (_diagStep >= sizeof(times) / sizeof(times[0]))
+    {
+        _diagActive = false;
+        return;
+    }
+    if (_queryId != 0)
+        return;
+    unsigned long t = millis() - _diagStart;
+    if (t < times[_diagStep])
+        return;
+    logDebugP("DIAG t+%lu ms: query actual level", t);
+    queryActualLevel();
+    _diagStep++;
+}
+#endif
 
 // Sends the delayed final "on value" of an RGBW colour switch-on (see koHandleColor).
 // Any other command for this channel cancels it (processInputKo, handleColorRGBW).
@@ -286,7 +313,11 @@ void DaliChannel::loopQueryLevel()
                 return;
             } else {
                 uint8_t data = response.frame.data & 0xFF;
+#ifdef RGBW_DIAG
+                logDebugP("Got new actual level %i%%-%i (t+%lu ms)", DaliHelper::arcToPercent(data), data, millis() - _diagStart);
+#else
                 logDebugP("Got new actual level %i%%-%i", DaliHelper::arcToPercent(data), data);
+#endif
                 setDimmState(data, false, true);
 
                 if(currentDimmType == DimmType::Brigthness)
@@ -320,7 +351,11 @@ void DaliChannel::processInputKo(GroupObject &ko)
 
     // Every command except a colour telegram replaces the delayed "on value" of an RGBW switch-on
     if (chanIndex != DGW_Kocolor)
+    {
+        if (_onArcPending)
+            logDebugP("RGBW: pending on value cancelled by KO %i", chanIndex);
         _onArcPending = false;
+    }
 
     // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are read-only
     // *_state KOs and are never received as input here.
@@ -729,7 +764,7 @@ void DaliChannel::koHandleLock(GroupObject &ko)
 
 void DaliChannel::koHandleColor(GroupObject &ko)
 {
-    logDebugP("Color absolute");
+    logDebugP("Color absolute [%s]", RGBW_BUILD_TAG);
     if (currentIsLocked)
     {
         logErrorP("is locked");
@@ -791,6 +826,12 @@ void DaliChannel::koHandleColor(GroupObject &ko)
             _onArcValue = onValue;
             _onArcAt = millis() + RgbwSettleMs;
             _onArcPending = true;
+            logDebugP("RGBW: final on value %i scheduled in %i ms", onValue, RgbwSettleMs);
+#ifdef RGBW_DIAG
+            _diagStart = millis();
+            _diagStep = 0;
+            _diagActive = true;
+#endif
             setDimmState(onValue, true, true);
             currentState = true;
         }

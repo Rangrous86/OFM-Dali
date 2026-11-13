@@ -63,6 +63,15 @@ class DaliModule : public OpenKNX::Module
 		uint8_t _currentIdentifyDevice = 0;
 #endif
 		bool _currentLockState = false;
+#ifdef RGBW_DIAG
+		// Frames seen on the DALI bus (incl. our own echo), filled on core 1, logged on core 0
+		struct DiagFrame { unsigned long ms; unsigned long data; uint8_t size; uint8_t flags; };
+		static constexpr uint8_t DiagRingSize = 64;
+		DiagFrame _diagRing[DiagRingSize];
+		volatile uint8_t _diagHead = 0;
+		volatile uint8_t _diagTail = 0;
+		void loopDiagFrames();
+#endif
 		int16_t getInfo(byte address, uint8_t command, uint8_t additional = 0);
 	
 		DaliAddressing _addressing{daliMaster};

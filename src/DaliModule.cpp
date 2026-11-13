@@ -115,7 +115,29 @@ void DaliModule::handleFunc(uint8_t setting)
 void DaliModule::setup1(bool conf) {
     pinMode(REG1_APP_PIN7, INPUT);
     daliMaster.init(REG1_APP_PIN6, REG1_APP_PIN7);
+#ifdef RGBW_DIAG
+    daliMaster.registerMonitor([this](Dali::Frame frame) {
+        uint8_t next = (_diagHead + 1) % DiagRingSize;
+        if (next == _diagTail)
+            return; // ring full: drop
+        _diagRing[_diagHead] = {millis(), frame.data, frame.size, frame.flags};
+        _diagHead = next;
+    });
+#endif
 }
+
+#ifdef RGBW_DIAG
+void DaliModule::loopDiagFrames()
+{
+    uint8_t n = 0;
+    while (_diagTail != _diagHead && n++ < 8)
+    {
+        const DiagFrame &f = _diagRing[_diagTail];
+        logDebugP("DALI %lu ms: 0x%lX (%u bit, flags 0x%02X)", f.ms, f.data, f.size, f.flags);
+        _diagTail = (_diagTail + 1) % DiagRingSize;
+    }
+}
+#endif
 
 #ifdef DALI_NO_TIMER
 bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
@@ -127,6 +149,9 @@ bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
 
 void DaliModule::loop(bool configured)
 {
+#ifdef RGBW_DIAG
+    loopDiagFrames();
+#endif
     OpenKNX::DateTime currentTime = openknx.time.getLocalTime();
     if (currentTime.minute != _lastTimeMinute)
     {

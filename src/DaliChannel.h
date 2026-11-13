@@ -8,6 +8,10 @@
 #include "DaliConstants.h"
 
 #define DimmInterval 200
+// Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
+// colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
+#define RGBW_DIAG
+#define RGBW_BUILD_TAG "diag1"
 // RGBW: pause (ms, counted from queueing the colour sequence) before the final on value of a colour switch-on
 #define RgbwSettleMs 1000
 #define DimmStatusInterval 500
@@ -122,6 +126,12 @@ class DaliChannel : public OpenKNX::Channel
 		uint8_t _onArcValue = 0;
 		unsigned long _onArcAt = 0;
 		void loopPendingOn();
+#ifdef RGBW_DIAG
+		unsigned long _diagStart = 0;
+		uint8_t _diagStep = 0;
+		bool _diagActive = false;
+		void loopDiag();
+#endif
 
 		//Turn-on with last value
 		uint8_t _lastDayValue = 100;
