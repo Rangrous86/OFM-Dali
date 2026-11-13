@@ -84,7 +84,7 @@ Nachher:
 
 | Stelle | Änderung |
 |--------|----------|
-| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(onValue)` → `sendColor()` → `sendArc(onValue)` erneut als **letztes** Kommando, dann `setDimmState(onValue,…)` und `currentState = true`. `onValue` (`_onDay`/`_onNight`/`_lastXValue`) ist bereits ein DALI-Wert, keine erneute Umrechnung. Reihenfolge aus dem Hardware-Test (DA4-M): bei Pegel 0 und bei Minimalpegel wird eine Farbe nicht übernommen, bei eingeschalteter Leuchte schon; ein `ACTIVATE` bricht ein laufendes Hochdimmen ab (Pegel bleibt bei ca. 20 % hängen), deshalb der Einschaltwert noch einmal am Ende. Nachteil: alte Farbe ca. 0,3–0,5 s sichtbar. `handleColorRGBW` sendet die Farbe nur direkt, wenn der Kanal schon an ist. Die anderen Farbtypen behalten das alte Verhalten. |
+| `koHandleColor` (nur RGBW) | Ist `currentState` false: `sendArc(onValue)` → `sendColor()`, dann wird `sendArc(onValue)` **verzögert** (`RgbwSettleMs` = 1000 ms, nicht blockierend über `loopPendingOn()` in `loop1()`) als letztes Kommando nachgeschoben; `setDimmState(onValue,…)` und `currentState = true` sofort. Jeder andere Befehl für den Kanal (`processInputKo` außer Farbe) und „alles 0“ verwirft den ausstehenden Wert, ein weiteres Farbtelegramm verlängert die Pause. `onValue` (`_onDay`/`_onNight`/`_lastXValue`) ist bereits ein DALI-Wert, keine erneute Umrechnung. Reihenfolge aus dem Hardware-Test (DA4-M): bei Pegel 0 und bei Minimalpegel wird eine Farbe nicht übernommen, bei eingeschalteter Leuchte schon; ein `ACTIVATE` bricht ein laufendes Hochdimmen ab (Pegel bleibt bei ca. 20 % hängen), deshalb der Einschaltwert noch einmal am Ende; sofort gesendet bricht er seinerseits das Überblenden der Farbe ab (alte Farbe bleibt), deshalb die Pause. Nachteil: alte Farbe ca. 0,3–0,5 s sichtbar. `handleColorRGBW` sendet die Farbe nur direkt, wenn der Kanal schon an ist. Die anderen Farbtypen behalten das alte Verhalten. |
 | `handleColorRGBW` | Telegramm wird zuerst in eine Kopie dekodiert. Sind danach R, G, B und W alle 0 (`RgbwHelper::isOff`), wird `sendArc(0)` gesendet, `setDimmState(0,…)` setzt *Schalten Status* = Aus und *Dimmen Status* = 0 %, `currentState = false`. Die Farbe 0/0/0/0 geht **nicht** an den Treiber, die gespeicherte Farbe bleibt erhalten. |
 | `koHandleDimmAbs` | `currentState = (arc > 0)` (außer Treppenhauslicht). Wirkt für alle Kanaltypen. |
 
@@ -196,7 +196,7 @@ namespace RgbwHelper
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..883be98 100644
+index dffeaaf..84a80f4 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -205,7 +205,39 @@ index dffeaaf..883be98 100644
  #include "OpenKNX.h"
  
  DaliChannel::DaliChannel(Dali::Master &_daliMaster) : daliMaster(_daliMaster) {}
-@@ -635,6 +636,9 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+@@ -109,6 +110,20 @@ void DaliChannel::loop1()
+     loopDimming();
+     loopError();
+     loopQueryLevel();
++    loopPendingOn();
++}
++
++// Sends the delayed final "on value" of an RGBW colour switch-on (see koHandleColor).
++// Any other command for this channel cancels it (processInputKo, handleColorRGBW).
++void DaliChannel::loopPendingOn()
++{
++    if (!_onArcPending)
++        return;
++    if ((long)(millis() - _onArcAt) < 0)
++        return;
++    _onArcPending = false;
++    logDebugP("RGBW: final on value %i", _onArcValue);
++    daliMaster.sendArc(_channelIndex, _onArcValue, _isGroup);
+ }
+ 
+ void DaliChannel::loopStaircase()
+@@ -303,6 +318,10 @@ void DaliChannel::processInputKo(GroupObject &ko)
+         //logDebugP("Got SHORT KO %i", chanIndex);
+     }
+ 
++    // Every command except a colour telegram replaces the delayed "on value" of an RGBW switch-on
++    if (chanIndex != DGW_Kocolor)
++        _onArcPending = false;
++
+     // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are read-only
+     // *_state KOs and are never received as input here.
+     switch (chanIndex)
+@@ -635,6 +654,9 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
      uint8_t arc = DaliHelper::percentToArc(value);
      daliMaster.sendArc(_channelIndex, arc, _isGroup);
      setDimmState(arc, true, true);
@@ -215,7 +247,7 @@ index dffeaaf..883be98 100644
  }
  
  void DaliChannel::koHandleLock(GroupObject &ko)
-@@ -738,11 +742,41 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -738,11 +760,44 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -243,12 +275,15 @@ index dffeaaf..883be98 100644
 +            // Hardware test (DA4-M): the driver only takes over a colour when it is already switched on
 +            // (arc level "normal"), not at level 0 and not at the minimum level. So:
 +            // 1. switch on with the on value, 2. send the colour (takes ~0.3-0.5 s on the bus),
-+            // 3. send the on value AGAIN as the last command: the colour change (ACTIVATE) aborts the level
-+            //    fade that started in step 1, so without this the channel stays at a partial level.
++            // 3. send the on value AGAIN, but DELAYED (loopPendingOn): the colour change (ACTIVATE) aborts the
++            //    level fade started in step 1, so without step 3 the channel stays at a partial level; sent
++            //    immediately, step 3 in turn aborts the colour fade (old colour stays). Hence the pause.
 +            // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
 +            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
 +            sendColor();
-+            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
++            _onArcValue = onValue;
++            _onArcAt = millis() + RgbwSettleMs;
++            _onArcPending = true;
 +            setDimmState(onValue, true, true);
 +            currentState = true;
 +        }
@@ -259,7 +294,7 @@ index dffeaaf..883be98 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +814,67 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +835,72 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -289,6 +324,7 @@ index dffeaaf..883be98 100644
 +        // The last colour stays stored in gateway and driver, so "Schalten = Ein" or the next
 +        // colour telegram brings the light back with that colour instead of staying dark.
 +        logDebugP("RGBW: all channels 0 -> switching off");
++        _onArcPending = false;
 +        daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
 +        setDimmState(0, true, true);
 +        currentState = false;
@@ -302,7 +338,11 @@ index dffeaaf..883be98 100644
 +    // and light up with the old colour. For a switched-off channel the colour is therefore sent in
 +    // koHandleColor() while the channel is switched on; here only for channels that are already on.
 +    if (currentState)
++    {
 +        sendColor();
++        if (_onArcPending)
++            _onArcAt = millis() + RgbwSettleMs; // another colour change is running: wait for it as well
++    }
 +    return true;
 +}
 +
@@ -327,7 +367,7 @@ index dffeaaf..883be98 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -872,6 +967,13 @@ void DaliChannel::sendColor()
+@@ -872,6 +993,13 @@ void DaliChannel::sendColor()
      // TODO only send every 100ms?
      uint8_t r, g, b;
      uint8_t colorType = _isGroup ? ParamDGWG_colorType : ParamDGW_colorType;
@@ -341,7 +381,7 @@ index dffeaaf..883be98 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1007,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1033,30 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -372,7 +412,7 @@ index dffeaaf..883be98 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -1002,6 +1128,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1154,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {
@@ -386,10 +426,19 @@ index dffeaaf..883be98 100644
              value |= currentColor[1] << 8;
              value |= currentColor[0] << 16;
 diff --git a/src/DaliChannel.h b/src/DaliChannel.h
-index 19b49c9..d5154f5 100644
+index 19b49c9..bd80ff4 100644
 --- a/src/DaliChannel.h
 +++ b/src/DaliChannel.h
-@@ -106,8 +106,8 @@ class DaliChannel : public OpenKNX::Channel
+@@ -8,6 +8,8 @@
+ #include "DaliConstants.h"
+ 
+ #define DimmInterval 200
++// RGBW: pause (ms, counted from queueing the colour sequence) before the final on value of a colour switch-on
++#define RgbwSettleMs 1000
+ #define DimmStatusInterval 500
+ 
+ class DaliChannel : public OpenKNX::Channel
+@@ -106,14 +108,21 @@ class DaliChannel : public OpenKNX::Channel
  		uint8_t currentStep = 0;
  		//Current lock state
  		bool currentIsLocked = false;
@@ -400,7 +449,20 @@ index 19b49c9..d5154f5 100644
  
  		//Querying current state
  		uint32_t _queryId = 0;
-@@ -131,6 +131,8 @@ class DaliChannel : public OpenKNX::Channel
+ 		uint16_t _queryInterval = 0;
+ 		unsigned long _lastValueQuery = 0;
+ 
++		//RGBW: final "on value" after a colour switch-on from off, sent delayed so that it does not abort the
++		//colour fade of the driver (see koHandleColor)
++		bool _onArcPending = false;
++		uint8_t _onArcValue = 0;
++		unsigned long _onArcAt = 0;
++		void loopPendingOn();
++
+ 		//Turn-on with last value
+ 		uint8_t _lastDayValue = 100;
+ 		uint8_t _lastNightValue = 10;
+@@ -131,6 +140,8 @@ class DaliChannel : public OpenKNX::Channel
  		void updateCurrentDimmValue();
  		void sendColor();
  		void sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b);
@@ -409,7 +471,7 @@ index 19b49c9..d5154f5 100644
  		void sendColorAsXY(uint8_t r, uint8_t g, uint8_t b);
  		void sendKoStateOnChange(uint16_t koNr, const KNXValue &value, const Dpt &type);
  		void setTemperature(uint16_t value);
-@@ -148,6 +150,7 @@ class DaliChannel : public OpenKNX::Channel
+@@ -148,6 +159,7 @@ class DaliChannel : public OpenKNX::Channel
  		void handleColorRGB(GroupObject &ko);
  		void handleColorTW(GroupObject &ko);
  		void handleColorXYY(GroupObject &ko);

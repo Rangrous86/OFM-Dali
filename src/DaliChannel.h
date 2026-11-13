@@ -8,6 +8,8 @@
 #include "DaliConstants.h"
 
 #define DimmInterval 200
+// RGBW: pause (ms, counted from queueing the colour sequence) before the final on value of a colour switch-on
+#define RgbwSettleMs 1000
 #define DimmStatusInterval 500
 
 class DaliChannel : public OpenKNX::Channel
@@ -113,6 +115,13 @@ class DaliChannel : public OpenKNX::Channel
 		uint32_t _queryId = 0;
 		uint16_t _queryInterval = 0;
 		unsigned long _lastValueQuery = 0;
+
+		//RGBW: final "on value" after a colour switch-on from off, sent delayed so that it does not abort the
+		//colour fade of the driver (see koHandleColor)
+		bool _onArcPending = false;
+		uint8_t _onArcValue = 0;
+		unsigned long _onArcAt = 0;
+		void loopPendingOn();
 
 		//Turn-on with last value
 		uint8_t _lastDayValue = 100;

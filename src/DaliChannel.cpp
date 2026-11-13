@@ -110,6 +110,20 @@ void DaliChannel::loop1()
     loopDimming();
     loopError();
     loopQueryLevel();
+    loopPendingOn();
+}
+
+// Sends the delayed final "on value" of an RGBW colour switch-on (see koHandleColor).
+// Any other command for this channel cancels it (processInputKo, handleColorRGBW).
+void DaliChannel::loopPendingOn()
+{
+    if (!_onArcPending)
+        return;
+    if ((long)(millis() - _onArcAt) < 0)
+        return;
+    _onArcPending = false;
+    logDebugP("RGBW: final on value %i", _onArcValue);
+    daliMaster.sendArc(_channelIndex, _onArcValue, _isGroup);
 }
 
 void DaliChannel::loopStaircase()
@@ -303,6 +317,10 @@ void DaliChannel::processInputKo(GroupObject &ko)
         chanIndex = (ko.asap() - DGW_KoOffset) % DGW_KoBlockSize;
         //logDebugP("Got SHORT KO %i", chanIndex);
     }
+
+    // Every command except a colour telegram replaces the delayed "on value" of an RGBW switch-on
+    if (chanIndex != DGW_Kocolor)
+        _onArcPending = false;
 
     // Case numbers not listed below (1, 4, 7, 10, 13, 16, 19) are read-only
     // *_state KOs and are never received as input here.
@@ -764,12 +782,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
             // Hardware test (DA4-M): the driver only takes over a colour when it is already switched on
             // (arc level "normal"), not at level 0 and not at the minimum level. So:
             // 1. switch on with the on value, 2. send the colour (takes ~0.3-0.5 s on the bus),
-            // 3. send the on value AGAIN as the last command: the colour change (ACTIVATE) aborts the level
-            //    fade that started in step 1, so without this the channel stays at a partial level.
+            // 3. send the on value AGAIN, but DELAYED (loopPendingOn): the colour change (ACTIVATE) aborts the
+            //    level fade started in step 1, so without step 3 the channel stays at a partial level; sent
+            //    immediately, step 3 in turn aborts the colour fade (old colour stays). Hence the pause.
             // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
             daliMaster.sendArc(_channelIndex, onValue, _isGroup);
             sendColor();
-            daliMaster.sendArc(_channelIndex, onValue, _isGroup);
+            _onArcValue = onValue;
+            _onArcAt = millis() + RgbwSettleMs;
+            _onArcPending = true;
             setDimmState(onValue, true, true);
             currentState = true;
         }
@@ -840,6 +861,7 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
         // The last colour stays stored in gateway and driver, so "Schalten = Ein" or the next
         // colour telegram brings the light back with that colour instead of staying dark.
         logDebugP("RGBW: all channels 0 -> switching off");
+        _onArcPending = false;
         daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
         setDimmState(0, true, true);
         currentState = false;
@@ -853,7 +875,11 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
     // and light up with the old colour. For a switched-off channel the colour is therefore sent in
     // koHandleColor() while the channel is switched on; here only for channels that are already on.
     if (currentState)
+    {
         sendColor();
+        if (_onArcPending)
+            _onArcAt = millis() + RgbwSettleMs; // another colour change is running: wait for it as well
+    }
     return true;
 }
 
