@@ -133,7 +133,7 @@ Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kei
 | 13 | Rot gesetzt, dann *Dimmen absolut* 25 % | Rot mit 25 % Helligkeit |
 | 14 | RGB/HSV/TW/xyY-Kanäle nachtesten | verhalten sich wie vorher |
 
-#### Teststand (14.11.2026, Firmware-Tag `v6` und `v7`, DA4-M im Modus RGBW)
+#### Teststand (14.11.2026, Firmware-Tag `v6`, `v7` und `v8`, DA4-M im Modus RGBW)
 
 Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirkungen mit den übrigen Objekten und Kanälen sind noch offen und werden in der nächsten Sitzung abgehakt (gegebenenfalls mit Anpassungen).
 
@@ -152,7 +152,7 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 
 **Bekanntes Verhalten (DA4-M):** Ändert sich die Farbe bei **ausgeschalteter** Lampe (Einschalten mit neuer Farbe), braucht der Treiber für den Farbwechsel ≈ 1,4 s (gemessen 1352/1394 ms, Lampe bleibt dabei dunkel); die Lampe erscheint dann direkt in der neuen Farbe. Bleibt die Farbe gleich (Einschalten mit gespeicherter Farbe), ist die Verzögerung nur ≈ 0,3 s. Im Test akzeptabel, vom Treiber vorgegeben.
 
-**Kosmetik:** Bei jedem *Dimmen absolut* auf eine brennende Lampe sendet das Gateway zusätzlich *Schalten Status* Ein, obwohl die Lampe schon an war. *(v8: bei RGBW-Kanälen wird der Schaltstatus nur noch bei Änderung gesendet, noch nicht auf Hardware getestet.)*
+**Kosmetik:** Bei jedem *Dimmen absolut* auf eine brennende Lampe sendet das Gateway zusätzlich *Schalten Status* Ein, obwohl die Lampe schon an war. *(v8: bei RGBW-Kanälen wird der Schaltstatus nur noch bei Änderung gesendet, auf Hardware bestätigt, siehe „v8 auf Hardware“.)*
 
 **Damit sind die Tests 1–12 mit v6 auf Hardware durch.** Test 13 (Rot, dann *Dimmen absolut* 25 %) ist durch die Dimm-Nachtests abgedeckt (getestet mit 50 %, 100 % und 10 %).
 
@@ -170,16 +170,25 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 - Beobachtung: Die Statusobjekte (*Dimmen Status*, *Schalten Status*) werden bei **jedem** relativen Schritt gesendet, obwohl „Dimmstatus Interval bei relativ“ auf *Deaktiviert (nur am Ende)* steht. Vermutlich kommt das von der Pegelabfrage `Got new actual level` während des Dimmens (Upstream, Mai 2026) und nicht vom Parameter; nicht geprüft. Die Schrittweite beträgt ≈ 9 Pegelstufen alle 200 ms (45 Stufen/s, DALI-Standard-Fade-Rate); in Prozent wirkt das im unteren Bereich der logarithmischen DALI-Kurve sehr langsam (von Pegel 1 bis 72 in ≈ 2 s, entspricht 0,7 %). Nicht verändert.
 
 - **Fund: *Dunkler* bis zum Minimum (14.11.2026, v7):** Die Lampe wurde sauber dunkler, ging am Minimum aber **nicht aus** und das Gateway sendete etwa fünfmal pro Sekunde *Dunkler* + *Aus* (Log: `Dimm Stop at: 0`, `Turn off device`, `RGBW: off (plain level off)`, `Got new actual level 0%-1`; auf dem Bus *Schalten Status* Aus im 200-ms-Takt, Telegrammflut), bis das Stopp-Telegramm kam. Erst dann ging die Lampe aus; danach meldete das Gateway fälschlich *Ein* (0,4 %), weil die Pegelabfrage den Dimmwert auf 1 zurückgeschrieben hatte. Ursache: die Dimmschleife (`loopDimming`) beendet das Dimmen am Minimum nicht, sondern wiederholt *Dunkler* und *Aus* bis zum Stopp (Struktur aus dem Upstream-Code, `git blame`; im Normalbetrieb endet sie mit dem Loslassen der Taste, bei anderen Farbtypen ist dasselbe Verhalten zu erwarten, nicht geprüft). Dass das *Dunkler* nach dem *Aus* den DA4-M anhält, ist eine Vermutung.
-- **v8 (Fix, noch nicht auf Hardware getestet):** Der Schritt, der das Minimum erreicht, sendet kein weiteres *Dunkler* mehr, schaltet aus, beendet das Dimmen, verwirft die noch laufende Pegelabfrage und setzt die Status auf *Aus*/0 %. *Dunkler* auf einer ausgeschalteten Lampe wird ignoriert. Nur RGBW-Kanäle.
+- **v8 (Fix, auf Hardware bestätigt, siehe unten):** Der Schritt, der das Minimum erreicht, sendet kein weiteres *Dunkler* mehr, schaltet aus, beendet das Dimmen, verwirft die noch laufende Pegelabfrage und setzt die Status auf *Aus*/0 %. *Dunkler* auf einer ausgeschalteten Lampe wird ignoriert. Nur RGBW-Kanäle.
 
-**Neustart-Hinweis:** Nach einem Neustart des Gateways kennt es weder die Farbe noch den Ein/Aus-Zustand der Lampe (siehe To-do „Treiberzustand beim Start“), während der Treiber weiterleuchtet. Ein Farbtelegramm läuft dann über den Einschaltweg (beobachtet am 14.11.2026 nach dem Flashen mit noch brennender blauer Lampe: kurzes Aufblitzen, Farbwechsel noch beim alten Pegel, danach der neue Pegel); ein erstes *Dimmen absolut*/Farbtelegramm synchronisiert das Gateway wieder.
+**v8 auf Hardware (14.11.2026, Gateway-Tag `v8`, Home Assistant `knx.send`/`light.turn_on`, ETS-Gruppenmonitor und serielles Log):**
+
+- *Test 1, Einschalten mit neuem Standardwert:* Rot-Weiß 20 % aus Aus: Pegel 254 als Standard „letzter Wert" nach dem Neustart, Lampe geht in der neuen Farbe an (Weiß wirkt bei 20 % sehr hell).
+- *Test 2, Schaltstatus nur bei Änderung:* *Dimmen absolut* auf eine brennende Lampe sendet kein zusätzliches *Schalten Status* Ein mehr (Lampe wird heller, nur *Dimmen Status*).
+- *Test 3, Dunkler bis zum Minimum:* sauber bis aus, keine Sprünge, keine Wiederholung von *Dunkler*/*Aus*, kein Busflug; Status *Aus*/0 %, das spätere Stopp-Telegramm ändert nichts. Damit ist der v7-Fund behoben.
+- *Test 4, Heller aus Aus:* Lampe geht mit `RECALL_MIN` in der gespeicherten Farbe (Rot-Weiß) an, wird gleichmäßig heller (Log `starting with min 1`, `Dimm Up Start 1/1`), kein `Send RGBW`; genau ein *Schalten Status* Ein. Das Stopp-Telegramm kam hier nach ≈ 5 s (Latenz des Testwerkzeugs) und nicht nach 2 s, deshalb stand die Lampe bei 21,6 % statt bei 0,7 %. Beobachtung: Das *Schalten Status* Ein kommt erst nach dem Stopp, nicht schon beim ersten Schritt.
+- *Test 5, Neustart bei brennender Lampe* (ausgelöst durch einen Teil-Download der Applikation; ein Neustart über ETS-Geräteinfo war bei diesem Gerät nicht möglich): Die Lampe blieb unverändert (kein Aufblitzen, kein Ausgehen). Das Gateway las den Pegel beim Start (`SetDimmState 28.5/208`) und sendete *Schalten Status* Ein und *Dimmen Status* 28,6 %; kein Farbtelegramm, kein Aus. `currentState` kommt damit aus dem Treiberlevel (der Blitz nach dem v7-Flash ist weg). Es wird nach dem Start keine *Farbe RGBW Status* gesendet, weil die Farbe unbekannt ist.
+- *Fund (Upstream-Pfad, nicht RGBW-spezifisch):* Nach dem Stopp eines relativen Dimmens meldet `updateCurrentDimmValue()` nur den **zuletzt abgefragten** Pegel. Test 4 endete mit Status 21,6 % (Pegel 198), der Treiber stand bei 28,6 % (Pegel 208, der Neustart hat es gezeigt), weil der letzte UP-Befehl nach der letzten Abfrage noch lief (≈ 9 Pegelstufen pro 200 ms). Vorschlag für die nächste Version: beim Stopp einmal `QUERY_ACTUAL_LEVEL` senden und den Status mit der Antwort aktualisieren.
+
+**Neustart-Hinweis:** Bis v7 kannte das Gateway nach einem Neustart weder die Farbe noch den Ein/Aus-Zustand der Lampe, während der Treiber weiterleuchtet. Ein Farbtelegramm lief dann über den Einschaltweg (beobachtet am 14.11.2026 nach dem Flashen mit noch brennender blauer Lampe: kurzes Aufblitzen, Farbwechsel noch beim alten Pegel, danach der neue Pegel). Seit v8 wird der Ein/Aus-Zustand aus dem gelesenen Pegel übernommen (Test 5); die **Farbe** bleibt unbekannt (siehe To-do „Treiberzustand beim Start“), und ein erstes *Dimmen absolut*/Farbtelegramm synchronisiert das Gateway wieder.
 
 **Noch offen – Wechselwirkung mit anderen Objekten/Kanälen:**
 
 | Bereich | Zu prüfen |
 |---------|-----------|
 | *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
-| *Dimmen relativ* (heller/dunkler) | größtenteils bestätigt (siehe oben); offen: direkt nach einem Farbtelegramm, *Dunkler* bis Minimum (ausschalten), nach Neustart |
+| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); offen: direkt nach einem Farbtelegramm |
 | Weißkanal in Mischungen | bestätigt: Rot + Weiß (v7), nur W (v6); offen: weitere Mischungen mit W bei brennender Lampe |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
 | HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
@@ -192,9 +201,11 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 
 **To-do / Wunschliste (nach den Tests, spätestens für die Endversion):**
 
-- **Treiberzustand beim Start vollständig übernehmen.** *(v8, ungetestet: der Ein/Aus-Merker `currentState` wird aus dem gelesenen Pegel gesetzt, bei Start, Gruppen- und Broadcast-Änderungen, nur RGBW. Offen bleibt die Farbe.)* Beim Init liest das Gateway den DALI-Pegel (`QUERY_ACTUAL_LEVEL`, `DaliModule::loopInitData` → `setGroupState` → `setDimmState`): Status-Objekte und „letzter Wert" folgen dem Treiber (14.11.2026 beobachtet: nach Neustart mit Leuchte Grün 100 % lautet der Einschaltwert 254). Es fehlt die **Farbe** (`currentColor` bleibt 0, DT8-Farbabfrage, soweit die DA4-M sie beantwortet) und der interne Ein/Aus-Merker `currentState` (bleibt *aus*, obwohl die Leuchte brennt; ein Farbtelegramm läuft dann als Einschaltvorgang). Das hilft auch nach Stromausfall des Gateways. Vorher klären, was die DA4-M bei Farbabfragen antwortet und wie die DALI-Warteschlange beim Start ausgelastet ist.
+- **Treiberzustand beim Start vollständig übernehmen.** *(v8: der Ein/Aus-Merker `currentState` wird aus dem gelesenen Pegel gesetzt, bei Start, Gruppen- und Broadcast-Änderungen, nur RGBW. Der Start ist auf Hardware bestätigt (Test 5), Gruppen und Broadcast sind noch ungetestet. Offen bleibt die Farbe.)* Beim Init liest das Gateway den DALI-Pegel (`QUERY_ACTUAL_LEVEL`, `DaliModule::loopInitData` → `setGroupState` → `setDimmState`): Status-Objekte und „letzter Wert" folgen dem Treiber (14.11.2026 beobachtet: nach Neustart mit Leuchte Grün 100 % lautet der Einschaltwert 254). Es fehlt die **Farbe** (`currentColor` bleibt 0, DT8-Farbabfrage, soweit die DA4-M sie beantwortet) und der interne Ein/Aus-Merker `currentState` (bleibt *aus*, obwohl die Leuchte brennt; ein Farbtelegramm läuft dann als Einschaltvorgang). Das hilft auch nach Stromausfall des Gateways. Vorher klären, was die DA4-M bei Farbabfragen antwortet und wie die DALI-Warteschlange beim Start ausgelastet ist.
 
-- **Kosmetisch: Standardwert „letzter Wert" nach Neustart.** *(v8, ungetestet: Startwerte jetzt 100 % und 10 % als Pegel umgerechnet.)* `_lastDayValue = 100` / `_lastNightValue = 10` (schon im Upstream) werden als DALI-Pegel gelesen und entsprechen nur ≈ 1,5 % bzw. ≈ 0,1 %. Betrifft das erste Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war und vorher nicht gedimmt wurde (ist der Treiber beim Start an, übernimmt das Gateway dessen Pegel). Die Startwerte sollten Prozentwerte sein (100 % = Pegel 254, 10 % = Pegel 170).
+- **Kosmetisch: Standardwert „letzter Wert" nach Neustart.** *(v8: Startwerte jetzt 100 % und 10 % als Pegel umgerechnet; der Standardwert 254 ist bestätigt (Test 1).)* `_lastDayValue = 100` / `_lastNightValue = 10` (schon im Upstream) werden als DALI-Pegel gelesen und entsprechen nur ≈ 1,5 % bzw. ≈ 0,1 %. Betrifft das erste Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war und vorher nicht gedimmt wurde (ist der Treiber beim Start an, übernimmt das Gateway dessen Pegel). Die Startwerte sollten Prozentwerte sein (100 % = Pegel 254, 10 % = Pegel 170).
+
+- **Status nach dem Stopp eines relativen Dimmens.** Beim Stopp einmal `QUERY_ACTUAL_LEVEL` senden und den Status mit der Antwort aktualisieren (Fund in „v8 auf Hardware“; Upstream-Pfad, gilt für alle Kanaltypen, in der nächsten Version für RGBW mitnehmen).
 
 **Vor einem Pull Request:** `RGBW_DIAG`-Diagnosecode entfernen oder deaktiviert lassen, offene Fragen an den Maintainer (Abschnitt 6 der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md)) klären; PR erst nach ausdrücklichem Go.
 
