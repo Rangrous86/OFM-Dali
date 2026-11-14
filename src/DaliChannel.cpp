@@ -486,7 +486,21 @@ void DaliChannel::loopDimming()
             }
             else if (_dimmDirection == DimmDirection::Down)
             {
-                if (currentDimmType == DimmType::Brigthness)
+                // RGBW (DA4-M): the DOWN that follows the OFF keeps the driver lit at its minimum (it only went out
+                // when the dimming ended), and the loop kept repeating "DOWN, OFF" every 200 ms until the stop
+                // telegram came: lamp at minimum, bus flooded with status telegrams. So the step that reaches the
+                // minimum sends no further DOWN, switches off and ends the dimming.
+                bool rgbwDown = isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness;
+                if (rgbwDown && *currentDimmValue == 0)
+                {
+                    // already off: nothing to dim down
+                    _dimmDirection = DimmDirection::None;
+                    _dimmLast = millis();
+                    return;
+                }
+                bool lastStep = rgbwDown && !isDimmOffLocked() && ((int)*currentDimmValue - 1 <= (int)_min || *currentDimmValue <= 1);
+
+                if (currentDimmType == DimmType::Brigthness && !lastStep)
                 {
                     queryActualLevel();
                     daliMaster.sendCommand(_channelIndex, Dali::Command::DOWN, _isGroup);
@@ -495,14 +509,24 @@ void DaliChannel::loopDimming()
                 *currentDimmValue = *currentDimmValue - 1;
                 if (*currentDimmValue <= _min || *currentDimmValue == 0) {
                     logDebugP("Dimm Stop at: %i", *currentDimmValue);
-                    updateCurrentDimmValue();
+                    if (!lastStep) // lastStep: the status follows below, as "off" (not as the minimum level, "on")
+                        updateCurrentDimmValue();
                     if (isDimmOffLocked()) {
                         logDebugP("Stop here because Dimm off is locked!");
                         _dimmDirection = DimmDirection::None;
                     } else {
                         logDebugP("Turn off device");
                         if (isRgbw())
+                        {
                             rgbwOff();
+                            if (rgbwDown)
+                            {
+                                _dimmDirection = DimmDirection::None;
+                                _queryId = 0; // an answer still on its way (level before the OFF) must not overwrite the status
+                                *currentDimmValue = 0;
+                                setDimmState(0, true, true); // status objects: off, 0 %
+                            }
+                        }
                         else
                             daliMaster.sendCommand(_channelIndex, Dali::Command::OFF, _isGroup);
                     }
@@ -1485,7 +1509,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
     // bool currentState = knx.getGroupObject(calcKoNumber(_isGroup ? DGWG_Koswitch_state : DGW_Koswitch_state)).value(DPT_Switch);
     // if (value == currentState)
     //     return;
-    knx.getGroupObject(calcKoNumber(_isGroup ? DGWG_Koswitch_state : DGW_Koswitch_state)).value(value, DPT_Switch);
+    GroupObject &stateKo = knx.getGroupObject(calcKoNumber(_isGroup ? DGWG_Koswitch_state : DGW_Koswitch_state));
+    if (isRgbw() && !_isStaircase)
+    {
+        // RGBW: send the switch status only when it changes (otherwise "on" went out with every absolute dimming
+        // command and "off" with every repeated off while dimming down)
+        if (stateKo.valueNoSendCompare(value, DPT_Switch))
+            stateKo.objectWritten();
+    }
+    else
+        stateKo.value(value, DPT_Switch);
 }
 
 void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCommand)
@@ -1594,13 +1627,24 @@ void DaliChannel::setDimmRef(uint8_t ref)
 void DaliChannel::setGroupState(uint16_t group, bool state)
 {
     if (group == AllGroups || _groups & 1 << group)
+    {
         setSwitchState(state, false);
+        // RGBW: the on/off flag follows what the driver reports / a group or broadcast command did
+        if (isRgbw() && !_isStaircase)
+            currentState = state;
+    }
 }
 
 void DaliChannel::setGroupState(uint16_t group, uint8_t value)
 {
     if (group == AllGroups || _groups & (1 << group))
+    {
         setDimmState(value, true, true);
+        // RGBW: also at start (level read from the driver): a lamp that is lit is "on" for us, otherwise a colour
+        // telegram would run as a switch-on and "brighter" would jump to the minimum
+        if (isRgbw() && !_isStaircase)
+            currentState = value > 0;
+    }
 }
 
 void DaliChannel::setMinArc(uint8_t min)

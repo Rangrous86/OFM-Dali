@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 // #define RGBW_DIAG
-#define RGBW_BUILD_TAG "v7"
+#define RGBW_BUILD_TAG "v8"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -184,8 +184,9 @@ class DaliChannel : public OpenKNX::Channel
 #endif
 
 		//Turn-on with last value
-		uint8_t _lastDayValue = 100;
-		uint8_t _lastNightValue = 10;
+		// DALI arc values (not percent): 100 % and 10 % until the first level is known
+		uint8_t _lastDayValue = DaliHelper::percentToArc((uint8_t)100);
+		uint8_t _lastNightValue = DaliHelper::percentToArc((uint8_t)10);
 
 		//Group membership
 		uint16_t _groups = 0;
