@@ -133,7 +133,7 @@ Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kei
 | 13 | Rot gesetzt, dann *Dimmen absolut* 25 % | Rot mit 25 % Helligkeit |
 | 14 | RGB/HSV/TW/xyY-Kanäle nachtesten | verhalten sich wie vorher |
 
-#### Teststand (14.11.2026, Firmware-Tag `v6`, DA4-M im Modus RGBW)
+#### Teststand (14.11.2026, Firmware-Tag `v6` und `v7`, DA4-M im Modus RGBW)
 
 Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirkungen mit den übrigen Objekten und Kanälen sind noch offen und werden in der nächsten Sitzung abgehakt (gegebenenfalls mit Anpassungen).
 
@@ -154,15 +154,30 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 
 **Kosmetik:** Bei jedem *Dimmen absolut* auf eine brennende Lampe sendet das Gateway zusätzlich *Schalten Status* Ein, obwohl die Lampe schon an war.
 
-**Damit sind die Tests 1–12 mit v6 auf Hardware durch.** Test 13 (Rot, dann *Dimmen absolut* 25 %) ist durch die Dimm-Nachtests abgedeckt.
+**Damit sind die Tests 1–12 mit v6 auf Hardware durch.** Test 13 (Rot, dann *Dimmen absolut* 25 %) ist durch die Dimm-Nachtests abgedeckt (getestet mit 50 %, 100 % und 10 %).
+
+**Farbe und Helligkeit zusammen auf einer brennenden Lampe (Home Assistant), Fund und Korrektur (v6 → v7):**
+
+- *Fund (v6):* Home Assistant sendet bei einer Leuchte mit Helligkeitsadresse zuerst die Farbe (*Farbe RGBW*) und ≈ 20 ms später die Helligkeit (*Dimmen absolut*). Auf einer **brennenden** Lampe ging der Dimmbefehl sofort auf den Bus und hat den noch laufenden Farbwechsel des DA4-M abgebrochen (eine Fade-Engine im Treiber, ein Pegelbefehl bricht den Farbfade ab). Ergebnis: falsche Farbe (Blau + Weiß statt Rot + Weiß; reines Weiß statt Blau), zweimal von zwei Versuchen. Ein einzelnes Farbtelegramm (nur ETS/knx.send ohne Helligkeit) war dagegen in Ordnung, ebenso das Paar beim Einschalten aus Aus.
+- *Korrektur (v7):* `koHandleDimmAbs` wartet bei einer brennenden RGBW-Lampe, deren Farbsequenz noch läuft (`colourFadeMayRun()`, seit dem letzten `sendColorAsRGBW` weniger als `rgbwOffWaitMs()` + 300 ms), mit dem Pegelbefehl bis `QUERY_STATUS` das Ende des Farbfades meldet (derselbe Mechanismus wie beim Einschalten mit Farbe). Log: `RGBW: level … after the colour fade`.
+- *Bestätigt (v7):* Rot-Weiß 20 % → Blau 50 % (HA: `rgbw_color [0,0,255,0]`, `brightness 128`): Weiß dimmt weg, geht über kurz Lila nach reinem Blau, dann 50 %; Blau 50 % → Rot-Weiß 50 % (`[255,0,0,255]`, `brightness 128`): Rot-Weiß ohne Blau-Rest, Pegel bleibt. Die Farbsequenz braucht ≈ 1,57 s, der Pegel folgt danach (Log: `colour fade over … 1569–1571 ms`, `final on value 229`).
+- *Nicht abgedeckt:* die Gegenrichtung (erst Helligkeit, dann Farbe, Reihenfolge anderer Visualisierungen) und relatives Dimmen unmittelbar nach einem Farbtelegramm.
+
+**Dimmen relativ (heller/dunkler):**
+
+- Auf brennender Lampe sauber, die Farbe bleibt unverändert, es wird keine Farbe neu gesendet (R1a dunkler mit v6, R1b heller mit v7). *Heller* hält am Anschlag selbst an (`Dimm Stop at max 254`), das spätere Stopp-Telegramm ändert dann nichts mehr.
+- *Heller* aus Aus (R2b, v7): das Gateway holt die Lampe mit `RECALL_MIN` auf den Minimalpegel (`starting with min 1`), die Lampe geht in der **gespeicherten Farbe** (Rot-Weiß) an und wird heller; das Stopp-Telegramm hält sie bei Pegel 72 an (0,7 %), der Pegel wandert danach nicht weiter.
+- Beobachtung: Die Statusobjekte (*Dimmen Status*, *Schalten Status*) werden bei **jedem** relativen Schritt gesendet, obwohl „Dimmstatus Interval bei relativ“ auf *Deaktiviert* steht (möglicherweise Ausgangsverhalten, nicht geprüft). Die Schrittweite beträgt ≈ 9 Pegelstufen alle 200 ms (45 Stufen/s, DALI-Standard-Fade-Rate); in Prozent wirkt das im unteren Bereich der logarithmischen DALI-Kurve sehr langsam (von Pegel 1 bis 72 in ≈ 2 s, entspricht 0,7 %). Nicht verändert.
+
+**Neustart-Hinweis:** Nach einem Neustart des Gateways kennt es weder die Farbe noch den Ein/Aus-Zustand der Lampe (siehe To-do „Treiberzustand beim Start“), während der Treiber weiterleuchtet. Ein Farbtelegramm läuft dann über den Einschaltweg (beobachtet am 14.11.2026 nach dem Flashen mit noch brennender blauer Lampe: kurzes Aufblitzen, Farbwechsel noch beim alten Pegel, danach der neue Pegel); ein erstes *Dimmen absolut*/Farbtelegramm synchronisiert das Gateway wieder.
 
 **Noch offen – Wechselwirkung mit anderen Objekten/Kanälen:**
 
 | Bereich | Zu prüfen |
 |---------|-----------|
 | *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
-| *Dimmen relativ* (heller/dunkler) | besonders von Aus (`RECALL_MIN`) bei gespeicherter Farbe, bekannte Lücke |
-| Weißkanal in Mischungen | z. B. RGB + W gleichzeitig, nur W ändern bei brennender Lampe |
+| *Dimmen relativ* (heller/dunkler) | größtenteils bestätigt (siehe oben); offen: direkt nach einem Farbtelegramm, *Dunkler* bis Minimum (ausschalten), nach Neustart |
+| Weißkanal in Mischungen | bestätigt: Rot + Weiß (v7), nur W (v6); offen: weitere Mischungen mit W bei brennender Lampe |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
 | HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
 | Szenen | KNX-Szene mit Farbe; im Treiber gespeicherte Szenen (Farbe gilt danach als unbekannt) |
