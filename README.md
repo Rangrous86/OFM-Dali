@@ -144,8 +144,16 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 - *Dimmen absolut* aus brennender Lampe (Test 13): 50 % und 10 % wirken, der DALI-Pegel stimmt (`getLvl`), Status-Objekte folgen.
 - Status-Rückmeldung *Farbe RGBW Status*, *Schalten Status*, *Dimmen Status*.
 - **Festgelegt:** Farbe = Mischung, Helligkeit = *Dimmen absolut*. Kleinere Beträge im RGBW-Telegramm dimmen eine brennende Lampe nicht (am DA4-M gemessen).
+- Gültigkeitsbits (Test 6–8, mit v6): nur W (30 %) und nur R (100 %) ändern bei brennender Lampe nur diesen Kanal, die Helligkeit bleibt; nur W auf 0 % lässt Blau stehen und schaltet nicht aus; Telegramm ohne gültigen Kanal wird ignoriert (`RGBW: no valid channel in telegram, ignored`), auch bei Nullwerten.
+- Test 9/10: alle vier Kanäle 0 % schaltet sauber aus; *Schalten* Ein bringt die zuletzt gesetzte Farbe mit dem letzten Dimmwert zurück (z. B. Magenta, 50 %).
+- Test 11: Farbtelegramm auf eine ausgeschaltete Lampe schaltet mit der **neuen** Farbe ein (Rot statt gespeichertem Magenta), ohne zweites Senden; ebenso nach alle-0 mit Grün (Test 12b).
+- Test 1: *Schalten* Ein/Aus und *Dimmen absolut* 50 %/100 % (ETS und Home Assistant).
 
-**Nach den Änderungen von v6 erneut prüfen (früher getestet):** Test 1, 6, 7, 8, 10, 12.
+**Bekanntes Verhalten (DA4-M):** Ändert sich die Farbe bei **ausgeschalteter** Lampe (Einschalten mit neuer Farbe), braucht der Treiber für den Farbwechsel ≈ 1,4 s (gemessen 1352/1394 ms, Lampe bleibt dabei dunkel); die Lampe erscheint dann direkt in der neuen Farbe. Bleibt die Farbe gleich (Einschalten mit gespeicherter Farbe), ist die Verzögerung nur ≈ 0,3 s. Im Test akzeptabel, vom Treiber vorgegeben.
+
+**Kosmetik:** Bei jedem *Dimmen absolut* auf eine brennende Lampe sendet das Gateway zusätzlich *Schalten Status* Ein, obwohl die Lampe schon an war.
+
+**Nach den Änderungen von v6 noch erneut prüfen:** Test 12 mit *Dimmen absolut* 0 % (nicht nur alle-0-Farbtelegramm), danach Farbtelegramm.
 
 **Noch offen – Wechselwirkung mit anderen Objekten/Kanälen:**
 
@@ -154,7 +162,6 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 | *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
 | *Dimmen relativ* (heller/dunkler) | besonders von Aus (`RECALL_MIN`) bei gespeicherter Farbe, bekannte Lücke |
 | Weißkanal in Mischungen | z. B. RGB + W gleichzeitig, nur W ändern bei brennender Lampe |
-| Gültigkeitsbits | Test 6–8 mit v6 wiederholen |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
 | HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
 | Szenen | KNX-Szene mit Farbe; im Treiber gespeicherte Szenen (Farbe gilt danach als unbekannt) |
