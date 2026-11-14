@@ -164,6 +164,10 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 | Regression | Test 14: RGB, HSV, TW, xyY wie vorher |
 | Home Assistant | `brightness_address` auf *Dimmen absolut*, reiner RGBW-Slider ohne Helligkeitsadresse (siehe README „Farbe = Mischung“) |
 
+**To-do / Wunschliste (nach den Tests, spätestens für die Endversion):**
+
+- **Treiberzustand beim Start abfragen.** Nach Neustart oder ETS-Download des Gateways kennt es weder Pegel noch Farbe und hält die Leuchte für *aus*, obwohl der Treiber sie weiter ansteuert (14.11.2026 beobachtet: Leuchte Grün 100 %, Gateway-Status *Aus*). Beim Start sollten Pegel (`QUERY_ACTUAL_LEVEL`) und, soweit der Treiber es kann, die Farbe (DT8-Farbabfrage) gelesen und in die Status-Objekte und `currentState`/`currentColor`/letzten Wert übernommen werden. Das hilft auch nach Stromausfall des Gateways. Vorher klären, was die DA4-M bei Farbabfragen antwortet und wie die DALI-Warteschlange beim Start ausgelastet ist.
+
 **Vor einem Pull Request:** `RGBW_DIAG`-Diagnosecode entfernen oder deaktiviert lassen, offene Fragen an den Maintainer (Abschnitt 6 der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md)) klären; PR erst nach ausdrücklichem Go.
 
 Rohdaten-Beispiele (Byte 0–5, z. B. für Home Assistant `knx.send` mit `payload: [0, 0, 0, 255, 0, 15]`): rein Weiß `00 00 00 FF 00 0F`, nur Weiß ändern (50 %) `00 00 00 80 00 01`, nur Rot ändern `FF 00 00 00 00 08`, alles aus `00 00 00 00 00 0F`.
