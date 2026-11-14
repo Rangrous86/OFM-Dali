@@ -1003,6 +1003,19 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
         }
         else if (_onArcPending)
             _onArcValue = arc; // a switch-on is running: just change its final level
+        else if (colourFadeMayRun())
+        {
+            // A colour change of this lit channel is still fading (Home Assistant sends colour and brightness
+            // 20 ms apart). A level command now would abort the colour fade (one fade engine in the driver): wait
+            // for its end, same mechanism as the final level of a colour switch-on (loopPendingOn / loopFadePoll).
+            logDebugP("RGBW: level %i after the colour fade", arc);
+            _onArcValue = arc;
+            _onArcAt = _colorSentAt + rgbwOffWaitMs() + 300;
+            _onArcPending = true;
+            _fadePolling = true;
+            _fadePollAt = millis();
+            _fadePollT0 = _colorSentAt;
+        }
         else
             daliMaster.sendArc(_channelIndex, arc, _isGroup);
     }
@@ -1411,6 +1424,13 @@ void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
 
     // 3. Apply both temporary values at once
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
+    _colorSentAt = millis() | 1; // never 0 (= none yet)
+}
+
+// A colour sequence was sent so recently that its fade can still be running in the driver
+bool DaliChannel::colourFadeMayRun()
+{
+    return _colorSentAt != 0 && (long)(millis() - _colorSentAt) < (long)(rgbwOffWaitMs() + 300);
 }
 
 void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
