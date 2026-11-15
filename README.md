@@ -164,7 +164,7 @@ Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kei
 | 13 | Rot gesetzt, dann *Dimmen absolut* 25 % | Rot mit 25 % Helligkeit |
 | 14 | RGB/HSV/TW/xyY-Kanäle nachtesten | verhalten sich wie vorher |
 
-#### Teststand (14./15.11.2026, Firmware-Tag `v6` bis `v11`, DA4-M im Modus RGBW)
+#### Teststand (14./15.11.2026, Firmware-Tag `v6` bis `v12`, DA4-M im Modus RGBW)
 
 Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirkungen mit den übrigen Objekten und Kanälen sind noch offen und werden in der nächsten Sitzung abgehakt (gegebenenfalls mit Anpassungen).
 
@@ -251,6 +251,22 @@ Rechenregel für die Auswertung: ein UP (alle 200 ms) hebt den Pegel um rund 9 S
 #### Farbverlauf Rot → Grün → Blau → Rot (v11, 15.11.2026)
 
 Home-Assistant-Script, 25 Farbtelegramme im Abstand von 0,5 s (je 4 s und 8 Schritte pro Übergang, lineare Mischung, Weiß 0, Pegel unverändert 40 %). Gruppenmonitor: je Telegramm auf 20/0/2 antwortet 20/0/3 mit demselben Wert nach etwa 100 ms. Seriallog: pro Telegramm `Got RGBW` / `Send RGBW`, keine Level-Befehle, keine Warnungen. Lampe: deutlich mehr als die sechs Eck- und Mischfarben, der Verlauf ist an den Stufen erkennbar, aber weich genug (der Treiber fadet jeden Schritt nach), Endzustand Rot bei 40 %. **Bestanden.**
+
+#### Slider-Modus „Aus dem RGBW-Wert“ (v12, 15.11.2026)
+
+Einzelkanal A0, ETS-Parameter *Helligkeit bei RGBW* = „Aus dem RGBW-Wert (größter Kanal = Helligkeit)“, ETS-Applikation 0.14, Fade-Zeit 1 s. Die Tests 2–5 senden direkt per KNX, die Tests B1–B3 über Home Assistant mit einer Leuchte **ohne** Helligkeitsadresse (nur Schalten, Farbe RGBW und die beiden Status-Adressen; HA rechnet die Helligkeit in den Farbwert ein).
+
+| Test | Telegramm (20/0/2 = Farbe RGBW) | Ergebnis |
+|---|---|---|
+| A2 | `FF 00 00 FF 00 0F` bei brennender Lampe (100 %) | Rot-Weiß, Helligkeit unverändert. Status 20/0/3 `FF 00 00 FF`. Log: `brightness from the colour value: 100 %, level 254`, Pegel nach dem Farbfade |
+| A3 | `05 00 00 05 00 0F` bei 100 % | Dimmt in ca. 1 s auf 2 %, Farbe bleibt Rot-Weiß. Treiber bekommt `254 0 0 254` (normierte Mischung), Pegel 110, `SetDimmState 2.0/110`. 20/0/5 `$05`, 20/0/3 `05 00 00 05` |
+| A4 | `00 00 00 00 00 0F` | Lampe aus (`RGBW: off (plain level off)`), 20/0/4 *Aus*, 20/0/5 0 %. **Kein** neues 20/0/3, die Farbe bleibt gespeichert |
+| A5 | `66 00 00 66 00 0F` aus dem Aus | Geht direkt mit 40 % an, kein Aufblitzen mit dem Tag-Wert. Log `switching on with 220`, `SetDimmState 39.5/220`. 20/0/4 *Ein*, 20/0/5 `$65`, 20/0/3 `66 00 00 66` |
+| B1 | HA `turn_on brightness_pct 80` bei 40 % | HA sendet `CC 00 00 CC 00 0F` an 20/0/2 und **nichts** an 20/0/1. Lampe heller, Farbe unverändert. Pegel 246, 20/0/5 `$CD` (80,4 %) |
+| B3 | HA `turn_off` | HA sendet *Aus* an 20/0/0. Lampe aus, 20/0/4 *Aus*, 20/0/5 0 %, kein 20/0/3 |
+| B2 | HA `turn_on brightness_pct 30` aus dem Aus | HA sendet nur `4C 00 00 4C 00 0F` (kein Schalt-Telegramm). Lampe fadet von 0 auf 30 %, kein Aufblitzen. Log `switching on with 210`, `SetDimmState 30.1/210`. 20/0/5 `$4D` |
+
+Der Farbfade (335 ms bis zum Ende laut `QUERY_STATUS`) endet jeweils vor dem Pegelbefehl. Die Helligkeit ist damit auch für Clients ohne Helligkeitsadresse (Home Assistant, einfache Visualisierungen) bedienbar. **Bestanden.** Die Pegel entsprechen der DALI-Kurve (2 % → 110, 30 % → 210, 40 % → 220, 80 % → 246).
 
 #### Reihenfolge von Helligkeit und Farbe auf einer brennenden Lampe (v9)
 
