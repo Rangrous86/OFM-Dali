@@ -187,7 +187,7 @@
               </Parameter>
               <Parameter Id="%AID%_P-%T%2%CC%131" Name="%C%scene" ParameterType="%AID%_PT-noyes" Text="Szenenobjekt" Value="0" />
               <Parameter Id="%AID%_P-%T%2%CC%132" Name="%C%rgbwBri" ParameterType="%AID%_PT-rgbwBri" Text="Helligkeit bei RGBW" Value="0">
-              <Memory CodeSegment="%AID%_RS-04-00000" Offset="22" BitOffset="0" />
+              <Memory CodeSegment="%AID%_RS-04-00000" Offset="7" BitOffset="5" />
               </Parameter>
             </Parameters>
             <ParameterRefs>
