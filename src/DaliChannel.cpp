@@ -539,7 +539,19 @@ void DaliChannel::loopDimming()
 {
     if (_dimmDirection != DimmDirection::None)
     {
-        if(millis() - _dimmLast > DimmInterval)
+        // RGBW: the driver has one fade engine, every UP/DOWN aborts a running colour fade (the lamp stays on a
+        // mixed colour while the status object reports the target colour). So no step is sent while the colour
+        // fade of this channel can still run or a switch-on sequence is not finished; the dimming simply
+        // starts (or goes on) after it. _dimmLast stays unchanged, the first step follows right after the wait.
+        bool rgbwWait = isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness
+                        && (colourFadeMayRun() || _onArcPending || _colorPending);
+        if (rgbwWait && !_dimmWaitLogged)
+        {
+            logDebugP("RGBW: dimming waits for the end of the colour fade");
+            _dimmWaitLogged = true;
+        }
+
+        if(!rgbwWait && millis() - _dimmLast > DimmInterval)
         {
             if (_dimmDirection == DimmDirection::Up)
             {
@@ -1047,6 +1059,7 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
 
     currentDimmValue = &currentStep;
     currentDimmType = DimmType::Brigthness;
+    _dimmWaitLogged = false;
     _dimmLastStatus = millis();
     _dimmDirection = ko.value(Dpt(3, 7, 0)) ? DimmDirection::Up : DimmDirection::Down;
     if (_dimmDirection == DimmDirection::Up)

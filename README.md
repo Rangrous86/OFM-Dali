@@ -133,7 +133,7 @@ Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kei
 | 13 | Rot gesetzt, dann *Dimmen absolut* 25 % | Rot mit 25 % Helligkeit |
 | 14 | RGB/HSV/TW/xyY-Kanäle nachtesten | verhalten sich wie vorher |
 
-#### Teststand (14./15.11.2026, Firmware-Tag `v6` bis `v10`, DA4-M im Modus RGBW)
+#### Teststand (14./15.11.2026, Firmware-Tag `v6` bis `v11`, DA4-M im Modus RGBW)
 
 Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirkungen mit den übrigen Objekten und Kanälen sind noch offen und werden in der nächsten Sitzung abgehakt (gegebenenfalls mit Anpassungen).
 
@@ -162,7 +162,7 @@ Der **RGBW-Kanal für sich** ist ausgiebig getestet und läuft. Die Wechselwirku
 - *Korrektur (v7):* `koHandleDimmAbs` wartet bei einer brennenden RGBW-Lampe, deren Farbsequenz noch läuft (`colourFadeMayRun()`, seit dem letzten `sendColorAsRGBW` weniger als `rgbwOffWaitMs()` + 300 ms), mit dem Pegelbefehl bis `QUERY_STATUS` das Ende des Farbfades meldet (derselbe Mechanismus wie beim Einschalten mit Farbe). Log: `RGBW: level … after the colour fade`.
 - *Bestätigt (v7):* Rot-Weiß 20 % → Blau 50 % (HA: `rgbw_color [0,0,255,0]`, `brightness 128`): Weiß dimmt weg, geht über kurz Lila nach reinem Blau, dann 50 %; Blau 50 % → Rot-Weiß 50 % (`[255,0,0,255]`, `brightness 128`): Rot-Weiß ohne Blau-Rest, Pegel bleibt. Die Farbsequenz braucht ≈ 1,57 s, der Pegel folgt danach (Log: `colour fade over … 1569–1571 ms`, `final on value 229`).
 - *Gegenrichtung (erst Helligkeit, dann Farbe):* gemessen mit v8, behoben in v9, siehe „Reihenfolge von Helligkeit und Farbe“ unten.
-- *Nicht abgedeckt:* relatives Dimmen unmittelbar nach einem Farbtelegramm.
+- *Relatives Dimmen unmittelbar nach einem Farbtelegramm:* mit v10 gemessen, Fehler, behoben in v11, siehe „Relatives Dimmen nach einem Farbtelegramm (v11)“ unten.
 
 **Dimmen relativ (heller/dunkler):**
 
@@ -198,6 +198,13 @@ Zu Test 3 (Einrichten der Ausgangslage über Home Assistant): `Got RGBW: 255 0 0
 
 Damit ist der Start eines RGBW-Kanals vollständig: Ein/Aus-Zustand und Helligkeit (v8) und jetzt auch die Farbe (v10) kommen vom Treiber. Offen bleiben das Verhalten der Report-Werte **während** eines laufenden Fades und ein Treiber, dem noch nie eine Farbe gesendet wurde.
 
+#### Relatives Dimmen nach einem Farbtelegramm (v11)
+
+- **Fund (v10, Hardware, 15.11.2026):** Lampe rot-weiß 20 %. Home-Assistant-Script: Farbe Blau (`00 00 FF 00 00 0F`), 100 ms später *Dimmen relativ* heller (`09`), nach 1 s Stopp (`00`). Die Lampe blieb auf einer Mischfarbe (helles Weiß) hängen, obwohl *Farbe RGBW Status* Blau meldete. Log: `Send RGBW: 0 0 254 0`, `Dimm Up Start 195/195`, Pegel 197, 202, 212, 221, nach dem Stopp 231 (53,3 %, Dimmstatus stimmt).
+- **Ursache:** Der Treiber hat eine Fade-Engine. Der erste UP direkt hinter dem ACTIVATE der Farbsequenz bricht den Farb-Fade nach wenigen Prozent ab; jeder weitere UP im 200-ms-Takt würde es wiederholen. Dasselbe passiert in der Gegenrichtung, wenn ein Farbtelegramm **während** eines laufenden Dimmens kommt.
+- **Korrektur (v11):** `loopDimming` sendet bei RGBW (nicht Treppenhaus, nur Helligkeit) keinen UP/DOWN, solange der Farb-Fade laufen kann (`colourFadeMayRun()`) oder ein Einschalten noch nicht abgeschlossen ist (`_onArcPending`, `_colorPending`). Das Dimmen beginnt bzw. geht danach weiter (Log `RGBW: dimming waits for the end of the colour fade`). Kommt der Stopp während der Pause, wird nichts gesendet; die Stopp-Abfrage liefert trotzdem den echten Pegel. Die Zeit bis zum Dimmstart beträgt etwa Fade-Zeit + 400 ms (ca. 1,7 s bei 1 s Fade).
+- **Hinweis für Anwender:** Es gibt kein KNX-Objekt, das Farbe und Helligkeit eines RGBW-Kanals in einem Telegramm überträgt (DPT 251.600 enthält keine Helligkeit). Wer Farbe und Dimmen unmittelbar nacheinander auslöst, sollte mit einer Anlaufzeit des Dimmens von rund 1,5 s rechnen.
+
 #### Reihenfolge von Helligkeit und Farbe auf einer brennenden Lampe (v9)
 
 **Ursache (Eigenschaft des Treibers, nicht des Gateways):** Das DA4-M hat nur **eine Fade-Engine**. Ein Pegelbefehl (*Dimmen absolut*) bricht einen laufenden Farbfade ab, und das `ACTIVATE` einer Farbsequenz bricht einen laufenden Pegelfade ab. Die Farbsequenz braucht rund 310 ms Buszeit, der Farbfade danach noch etwa 1,1 bis 1,6 s, der Pegelfade etwa 1 s.
@@ -230,7 +237,7 @@ Damit ist der Start eines RGBW-Kanals vollständig: Ein/Aus-Zustand und Helligke
 | Bereich | Zu prüfen |
 |---------|-----------|
 | *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
-| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); offen: direkt nach einem Farbtelegramm |
+| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); direkt nach einem Farbtelegramm: mit v10 Fehler, in v11 behoben (noch nicht getestet) |
 | Weißkanal in Mischungen | bestätigt: Rot + Weiß (v7), nur W (v6); offen: weitere Mischungen mit W bei brennender Lampe |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
 | HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |

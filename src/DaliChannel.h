@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 // #define RGBW_DIAG
-#define RGBW_BUILD_TAG "v10"
+#define RGBW_BUILD_TAG "v11"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -102,6 +102,7 @@ class DaliChannel : public OpenKNX::Channel
 		uint8_t *currentDimmValue;
 		DimmType currentDimmType;
 		uint8_t _dimmStatusInterval = 0;
+		bool _dimmWaitLogged = false; // RGBW: log "dimming waits for the colour fade" once per dimming
 		uint8_t _dimmReferenceAddress = NoDimmReference;
 		//Staircase light
 		unsigned long startTime = 0;
