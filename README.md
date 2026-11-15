@@ -31,6 +31,8 @@ Details zu allen Änderungen im Vergleich zum Ausgangscode: [`doc/RGBW-Gegenuebe
 
 In der ETS zeigt *„Wert schreiben“* dafür je Kanal ein Häkchen (= Gültigkeitsbit) und ein Prozentfeld.
 
+> **Wichtig bei Gruppen:** An einen **Gruppenkanal** sollte immer der **vollständige** RGBW-Wert gesendet werden (alle vier Kanäle gültig), nicht nur eine einzelne Farbe „dazu editiert“. Das Gateway behandelt ein Gruppentelegramm deshalb immer als komplette Farbe: Kanäle ohne Gültigkeitsbit werden **0**, sie behalten nicht den vorherigen Wert. Der Grund: Ein EVG kann in mehreren Gruppen liegen oder einzeln angesteuert worden sein, dann ist die in der Gruppe gespeicherte Farbe nicht mehr die tatsächliche Farbe aller Mitglieder, und ein „nur Blau ändern“ würde die Mitglieder mit unterschiedlichen Restfarben zurücklassen. Beispiel: Gruppe 1 und Gruppe 2 haben je vier EVGs, zwei davon liegen in beiden Gruppen. Rot an Gruppe 1 und Blau an Gruppe 2: mit vollständigen Werten (`FF 00 00 00` bzw. `00 00 FF 00`) ist das Ergebnis eindeutig, mit „nur Blau gültig“ hinge es davon ab, was die Gruppe zuletzt gespeichert hat. Bei **Einzelkanälen** darf weiter einzeln editiert werden (nicht gültige Kanäle behalten ihren Wert).
+
 ### DALI-Sequenz (je Farbänderung)
 
 1. `DTR0=R, DTR1=G, DTR2=B` → `SET TEMPORARY RGB DIMLEVEL` (DT8, Befehl 235)
