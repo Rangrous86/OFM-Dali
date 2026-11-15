@@ -204,6 +204,15 @@ Damit ist der Start eines RGBW-Kanals vollständig: Ein/Aus-Zustand und Helligke
 - **Ursache:** Der Treiber hat eine Fade-Engine. Der erste UP direkt hinter dem ACTIVATE der Farbsequenz bricht den Farb-Fade nach wenigen Prozent ab; jeder weitere UP im 200-ms-Takt würde es wiederholen. Dasselbe passiert in der Gegenrichtung, wenn ein Farbtelegramm **während** eines laufenden Dimmens kommt.
 - **Korrektur (v11):** `loopDimming` sendet bei RGBW (nicht Treppenhaus, nur Helligkeit) keinen UP/DOWN, solange der Farb-Fade laufen kann (`colourFadeMayRun()`) oder ein Einschalten noch nicht abgeschlossen ist (`_onArcPending`, `_colorPending`). Das Dimmen beginnt bzw. geht danach weiter (Log `RGBW: dimming waits for the end of the colour fade`). Kommt der Stopp während der Pause, wird nichts gesendet; die Stopp-Abfrage liefert trotzdem den echten Pegel. Die Zeit bis zum Dimmstart beträgt etwa Fade-Zeit + 400 ms (ca. 1,7 s bei 1 s Fade).
 - **Hinweis für Anwender:** Es gibt kein KNX-Objekt, das Farbe und Helligkeit eines RGBW-Kanals in einem Telegramm überträgt (DPT 251.600 enthält keine Helligkeit). Wer Farbe und Dimmen unmittelbar nacheinander auslöst, sollte mit einer Anlaufzeit des Dimmens von rund 1,5 s rechnen.
+- **Auf Hardware bestätigt (v11, 15.11.2026, Home-Assistant-Scripts mit `knx.send`, Start jeweils rot-weiß 20 %):**
+
+| Test | Ablauf | Ergebnis |
+|---|---|---|
+| 1 | Farbe Blau, +100 ms Dimmen heller, +1,1 s Stopp | Lampe reines Blau, 20 % unverändert. Log: `RGBW: dimming waits for the end of the colour fade`, kein UP auf dem Bus, nach dem Stopp `20%-195`. Mit v10 dasselbe Script: Mischfarbe (helles Weiß), 53 % |
+| 2 | Farbe Rot-Weiß, +100 ms Dimmen heller, +3,1 s Stopp | Farbe sauber, das Dimmen beginnt nach rund 1,8 s, sieben UPs à rund 9 Stufen (Status 24,7 → 31,8 → 40,8 → 51,8 → 66,3 → 84,7 %, 202 ms Abstand), Endwert 100 % (Maximum 254) |
+| 3 | Farbe Blau, +100 ms Dimmen heller, +2,5 s Stopp | Lampe sauber Blau, vier UPs, Stopp-Abfrage 231 = 195 + 4 × 9 (53,4 %) |
+
+Rechenregel für die Auswertung: ein UP (alle 200 ms) hebt den Pegel um rund 9 Stufen; die Abfrage 300 ms nach dem Stopp liefert den Wert inklusive des noch laufenden letzten UP. Der Dimmstart liegt rund 1,8 s nach dem Farbtelegramm (Fade-Zeit + Reserve + 300 ms).
 
 #### Reihenfolge von Helligkeit und Farbe auf einer brennenden Lampe (v9)
 
@@ -237,7 +246,7 @@ Damit ist der Start eines RGBW-Kanals vollständig: Ein/Aus-Zustand und Helligke
 | Bereich | Zu prüfen |
 |---------|-----------|
 | *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
-| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); direkt nach einem Farbtelegramm: mit v10 Fehler, in v11 behoben (noch nicht getestet) |
+| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); direkt nach einem Farbtelegramm: mit v10 Fehler, in v11 behoben und auf Hardware bestätigt (Gegenrichtung, Farbe während des Dimmens, noch offen) |
 | Weißkanal in Mischungen | bestätigt: Rot + Weiß (v7), nur W (v6); offen: weitere Mischungen mit W bei brennender Lampe |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
 | HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
