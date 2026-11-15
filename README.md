@@ -237,6 +237,10 @@ Nicht abgedeckt: Gruppen (ein Gruppenkanal kennt den Farb-Fade eines einzelnen M
 
 Rechenregel für die Auswertung: ein UP (alle 200 ms) hebt den Pegel um rund 9 Stufen; die Abfrage 300 ms nach dem Stopp liefert den Wert inklusive des noch laufenden letzten UP. Der Dimmstart liegt rund 1,8 s nach dem Farbtelegramm (Fade-Zeit + Reserve + 300 ms).
 
+#### Farbverlauf Rot → Grün → Blau → Rot (v11, 15.11.2026)
+
+Home-Assistant-Script, 25 Farbtelegramme im Abstand von 0,5 s (je 4 s und 8 Schritte pro Übergang, lineare Mischung, Weiß 0, Pegel unverändert 40 %). Gruppenmonitor: je Telegramm auf 20/0/2 antwortet 20/0/3 mit demselben Wert nach etwa 100 ms. Seriallog: pro Telegramm `Got RGBW` / `Send RGBW`, keine Level-Befehle, keine Warnungen. Lampe: deutlich mehr als die sechs Eck- und Mischfarben, der Verlauf ist an den Stufen erkennbar, aber weich genug (der Treiber fadet jeden Schritt nach), Endzustand Rot bei 40 %. **Bestanden.**
+
 #### Reihenfolge von Helligkeit und Farbe auf einer brennenden Lampe (v9)
 
 **Ursache (Eigenschaft des Treibers, nicht des Gateways):** Das DA4-M hat nur **eine Fade-Engine**. Ein Pegelbefehl (*Dimmen absolut*) bricht einen laufenden Farbfade ab, und das `ACTIVATE` einer Farbsequenz bricht einen laufenden Pegelfade ab. Die Farbsequenz braucht rund 310 ms Buszeit, der Farbfade danach noch etwa 1,1 bis 1,6 s, der Pegelfade etwa 1 s.
