@@ -128,6 +128,12 @@
                   <Enumeration Text="X/Y Koordinaten" Value="0" Id="%ENID%" op:headerName="xy" />
                 </TypeRestriction>
               </ParameterType>
+              <ParameterType Id="%AID%_PT-rgbwBri" Name="rgbwBri" op:headerExport="define">
+                <TypeRestriction Base="Value" SizeInBit="1">
+                  <Enumeration Text="Über Objekt &quot;Dimmen absolut&quot; (Farbe = nur Mischung)" Value="0" Id="%ENID%" op:headerName="object" />
+                  <Enumeration Text="Aus dem RGBW-Wert (größter Kanal = Helligkeit)" Value="1" Id="%ENID%" op:headerName="colour" />
+                </TypeRestriction>
+              </ParameterType>
               <ParameterType Id="%AID%_PT-fadeTimes" Name="fadeTimes">
                 <TypeRestriction Base="Value" SizeInBit="4">
                   <Enumeration Text="Keine" Value="0" Id="%ENID%" />

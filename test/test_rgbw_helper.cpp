@@ -1,3 +1,4 @@
+#include <stdlib.h>
 // Host test for src/RgbwHelper.h (no Arduino/KNX needed):
 //   g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/test_rgbw
 #include <cstdio>
@@ -82,6 +83,48 @@ int main()
       CHECK(!RgbwHelper::colourFromDriver(rep, c)); }
     { const uint8_t rep[4] = {0, 0, 254, 255}; uint8_t c[4];
       CHECK(!RgbwHelper::colourFromDriver(rep, c)); } // one MASK is enough to reject
+
+    // slider mode: brightness = largest channel, colour = ratio
+    { const uint8_t c[4] = {128, 0, 0, 128}; CHECK(RgbwHelper::maxChannel(c) == 128); }
+    { const uint8_t c[4] = {0, 0, 0, 0};     CHECK(RgbwHelper::maxChannel(c) == 0); }
+    { const uint8_t c[4] = {5, 0, 0, 5}; uint8_t m[4];
+      RgbwHelper::normalise(c, m);
+      CHECK(m[0] == 255 && m[1] == 0 && m[2] == 0 && m[3] == 255); }
+    { const uint8_t c[4] = {241, 0, 13, 241}; uint8_t m[4];
+      RgbwHelper::normalise(c, m);
+      CHECK(m[0] == 255 && m[1] == 0 && m[2] == 14 && m[3] == 255); }
+    { const uint8_t c[4] = {0, 0, 0, 0}; uint8_t m[4] = {9, 9, 9, 9};
+      RgbwHelper::normalise(c, m);
+      CHECK(RgbwHelper::isOff(m)); }
+    { const uint8_t m[4] = {255, 0, 0, 255}; uint8_t c[4];
+      RgbwHelper::scale(m, 128, c);
+      CHECK(c[0] == 128 && c[1] == 0 && c[2] == 0 && c[3] == 128);
+      RgbwHelper::scale(m, 255, c);
+      CHECK(c[0] == 255 && c[3] == 255);
+      RgbwHelper::scale(m, 5, c);
+      CHECK(c[0] == 5 && c[3] == 5); }
+    { const uint8_t m[4] = {255, 102, 0, 51}; uint8_t c[4];
+      RgbwHelper::scale(m, 5, c);
+      CHECK(c[0] == 5 && c[1] == 2 && c[2] == 0 && c[3] == 1); }
+    // round trip colour -> mix -> same amplitude gives the colour back (within 1)
+    for (int a = 1; a < 256; a++)
+    {
+        const uint8_t c[4] = {(uint8_t)a, (uint8_t)(a / 3), 0, (uint8_t)(a / 2)};
+        uint8_t m[4], b[4];
+        RgbwHelper::normalise(c, m);
+        RgbwHelper::scale(m, RgbwHelper::maxChannel(c), b);
+        for (int i = 0; i < 4; i++)
+            CHECK(abs((int)b[i] - (int)c[i]) <= 1);
+        CHECK(RgbwHelper::maxChannel(m) == 255);
+    }
+    CHECK(RgbwHelper::amplitudeFromPercent(0) == 0);
+    CHECK(RgbwHelper::amplitudeFromPercent(100) == 255);
+    CHECK(RgbwHelper::amplitudeFromPercent(50) == 128);
+    CHECK(RgbwHelper::amplitudeFromPercent(0.1f) == 0 || RgbwHelper::amplitudeFromPercent(0.1f) == 1);
+    CHECK(RgbwHelper::percentFromAmplitude(255) > 99.99f && RgbwHelper::percentFromAmplitude(255) < 100.01f);
+    CHECK(RgbwHelper::percentFromAmplitude(0) == 0.0f);
+    for (int a = 0; a < 256; a++)
+        CHECK(RgbwHelper::amplitudeFromPercent(RgbwHelper::percentFromAmplitude(a)) == a);
 
     printf(failures ? "%d FAILED\n" : "all tests ok\n", failures);
     return failures ? 1 : 0;

@@ -97,4 +97,52 @@ namespace RgbwHelper
             color[i] = fromDaliLevel(report[i]);
         return true;
     }
+
+    /*
+     * Helligkeit aus dem RGBW-Wert ("Slider"-Modus): Der größte Kanal ist die Helligkeit (255 = 100 %), das Verhältnis
+     * der Kanäle zueinander ist die Farbmischung. Der DA4-M wertet die Amplitude der Farbwerte nicht aus (er
+     * normiert), die Helligkeit muss deshalb als eigener Pegel gesendet werden.
+     */
+    inline uint8_t maxChannel(const uint8_t *color)
+    {
+        uint8_t m = color[0];
+        for (uint8_t i = 1; i < 4; i++)
+            if (color[i] > m)
+                m = color[i];
+        return m;
+    }
+
+    /*
+     * Farbmischung: color so skaliert, dass der größte Kanal 255 ist (alle 0 bleibt 0).
+     */
+    inline void normalise(const uint8_t *color, uint8_t *mix)
+    {
+        const uint8_t m = maxChannel(color);
+        for (uint8_t i = 0; i < 4; i++)
+            mix[i] = m == 0 ? 0 : (uint8_t)(((uint16_t)color[i] * 255 + m / 2) / m);
+    }
+
+    /*
+     * Gegenrichtung: Farbmischung (größter Kanal 255) auf die Amplitude amp (= größter Kanal) skalieren.
+     */
+    inline void scale(const uint8_t *mix, uint8_t amp, uint8_t *color)
+    {
+        for (uint8_t i = 0; i < 4; i++)
+            color[i] = (uint8_t)(((uint16_t)mix[i] * amp + 127) / 255);
+    }
+
+    // Amplitude (0..255) <-> Helligkeit in Prozent (0..100, linear)
+    inline float percentFromAmplitude(uint8_t amp)
+    {
+        return amp * 100.0f / 255.0f;
+    }
+
+    inline uint8_t amplitudeFromPercent(float percent)
+    {
+        if (percent <= 0.0f)
+            return 0;
+        if (percent >= 100.0f)
+            return 255;
+        return (uint8_t)(percent * 2.55f + 0.5f);
+    }
 }

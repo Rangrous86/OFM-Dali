@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 // #define RGBW_DIAG
-#define RGBW_BUILD_TAG "v11"
+#define RGBW_BUILD_TAG "v12"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -161,6 +161,17 @@ class DaliChannel : public OpenKNX::Channel
 		// channel closely (e.g. Home Assistant: colour, then brightness 20 ms later) waits for the end of the fade.
 		unsigned long _colorSentAt = 0;
 		bool colourFadeMayRun();
+
+		// RGBW brightness from the colour value ("slider" mode, parameter rgbwBri): the largest channel of the RGBW
+		// value is the brightness (255 = 100 %), the ratio of the channels is the colour mix. The driver ignores
+		// the amplitude of colour values (it normalises), so the level is sent as an own level command and the
+		// colour as normalised mix (_mix, largest channel 255). The colour status shows mix x level.
+		uint8_t _mix[4] = {0, 0, 0, 0};
+		uint8_t _lastLevelArc = 0; // last level reported through setDimmState (DALI arc value)
+		bool rgbwSliderMode();
+		uint8_t rgbwArcFromColour();
+		void rgbwSetLevel(uint8_t arc);
+		void rgbwSliderStatus(uint8_t arc);
 
 		// Counterpart of the above: the ACTIVATE of a colour sequence aborts a level fade that is still running
 		// (one fade engine). A level command that was sent shortly before a colour telegram of a lit channel

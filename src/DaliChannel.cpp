@@ -421,6 +421,12 @@ void DaliChannel::loopColourQuery()
         {
             memcpy(currentColor, color, sizeof(currentColor));
             logInfoP("RGBW: colour of the driver %i %i %i %i", color[0], color[1], color[2], color[3]);
+            if (rgbwSliderMode())
+            {
+                // the driver reports the mix, the brightness is its level
+                RgbwHelper::normalise(currentColor, _mix);
+                rgbwSliderStatus(_lastLevelArc);
+            }
             sendRgbwState();
         }
         else
@@ -1106,46 +1112,77 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
     logDebugP("Dimming absolute to %i%%", value);
     uint8_t arc = DaliHelper::percentToArc(value);
     if (isRgbw() && !_isStaircase)
-    {
-        if (arc == 0)
-            rgbwOff();
-        else if (!currentState)
-            rgbwOn(arc);
-        else if (_colorPending)
-        {
-            // level first, colour follows: apply the new level after the colour fade
-            _onArcValue = arc;
-            _onArcAt = _colorAt + rgbwOffWaitMs();
-            _onArcPending = true;
-        }
-        else if (_onArcPending)
-            _onArcValue = arc; // a switch-on is running: just change its final level
-        else if (colourFadeMayRun())
-        {
-            // A colour change of this lit channel is still fading (Home Assistant sends colour and brightness
-            // 20 ms apart). A level command now would abort the colour fade (one fade engine in the driver): wait
-            // for its end, same mechanism as the final level of a colour switch-on (loopPendingOn / loopFadePoll).
-            logDebugP("RGBW: level %i after the colour fade", arc);
-            _onArcValue = arc;
-            _onArcAt = _colorSentAt + rgbwOffWaitMs() + 300;
-            _onArcPending = true;
-            _fadePolling = true;
-            _fadePollAt = millis();
-            _fadePollT0 = _colorSentAt;
-        }
-        else
-        {
-            daliMaster.sendArc(_channelIndex, arc, _isGroup);
-            _levelSentAt = millis() | 1; // never 0 (= none yet)
-            _levelTarget = arc;
-        }
-    }
+        rgbwSetLevel(arc);
     else
         daliMaster.sendArc(_channelIndex, arc, _isGroup);
     setDimmState(arc, true, true);
     // keep the on/off flag in sync, otherwise e.g. a colour telegram after "dimm to 0" is ignored
     if (!_isStaircase)
         currentState = arc > 0;
+}
+
+// RGBW: bring the channel to a DALI arc value (absolute dimming, or the level that belongs to a colour value in
+// slider mode) without aborting a colour fade of the driver that may still be running.
+void DaliChannel::rgbwSetLevel(uint8_t arc)
+{
+    if (arc == 0)
+        rgbwOff();
+    else if (!currentState)
+        rgbwOn(arc);
+    else if (_colorPending)
+    {
+        // level first, colour follows: apply the new level after the colour fade
+        _onArcValue = arc;
+        _onArcAt = _colorAt + rgbwOffWaitMs();
+        _onArcPending = true;
+    }
+    else if (_onArcPending)
+        _onArcValue = arc; // a switch-on is running: just change its final level
+    else if (colourFadeMayRun())
+    {
+        // A colour change of this lit channel is still fading (Home Assistant sends colour and brightness
+        // 20 ms apart). A level command now would abort the colour fade (one fade engine in the driver): wait
+        // for its end, same mechanism as the final level of a colour switch-on (loopPendingOn / loopFadePoll).
+        logDebugP("RGBW: level %i after the colour fade", arc);
+        _onArcValue = arc;
+        _onArcAt = _colorSentAt + rgbwOffWaitMs() + 300;
+        _onArcPending = true;
+        _fadePolling = true;
+        _fadePollAt = millis();
+        _fadePollT0 = _colorSentAt;
+    }
+    else
+    {
+        daliMaster.sendArc(_channelIndex, arc, _isGroup);
+        _levelSentAt = millis() | 1; // never 0 (= none yet)
+        _levelTarget = arc;
+    }
+}
+
+bool DaliChannel::rgbwSliderMode()
+{
+    return isRgbw() && !_isStaircase && (_isGroup ? ParamDGWG_rgbwBri : ParamDGW_rgbwBri) == PT_rgbwBri_colour;
+}
+
+// DALI arc value that belongs to the amplitude (largest channel) of the stored colour
+uint8_t DaliChannel::rgbwArcFromColour()
+{
+    return DaliHelper::percentToArc(RgbwHelper::percentFromAmplitude(RgbwHelper::maxChannel(currentColor)));
+}
+
+// Slider mode: the level changed (absolute / relative dimming, switch on, query of the driver). The colour status
+// follows as mix x level, so that a client that reads the brightness from the colour value sees it.
+void DaliChannel::rgbwSliderStatus(uint8_t arc)
+{
+    if (arc == 0 || !rgbwSliderMode() || RgbwHelper::isOff(_mix) || RgbwHelper::isOff(currentColor))
+        return;
+    if (rgbwArcFromColour() == arc)
+        return; // the colour value already stands for this level (e.g. it just came in)
+    uint8_t amp = RgbwHelper::amplitudeFromPercent(DaliHelper::arcToPercentFloat(arc));
+    if (amp == 0)
+        amp = 1;
+    RgbwHelper::scale(_mix, amp, currentColor);
+    sendRgbwState();
 }
 
 void DaliChannel::koHandleLock(GroupObject &ko)
@@ -1268,6 +1305,8 @@ void DaliChannel::koHandleColor(GroupObject &ko)
             uint8_t onValue = isNight ? _onNight : _onDay;
             if (onValue == 0)
                 onValue = isNight ? _lastNightValue : _lastDayValue;
+            if (rgbwSliderMode())
+                onValue = rgbwArcFromColour(); // the brightness is in the colour value
             logDebugP("RGBW: switching on with %i", onValue);
             // _onDay/_onNight/_lastXValue are DALI arc values already (no percent conversion).
             rgbwOn(onValue);
@@ -1348,6 +1387,9 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
     }
 
     memcpy(currentColor, newColor, sizeof(currentColor));
+    const bool slider = rgbwSliderMode();
+    if (slider)
+        RgbwHelper::normalise(currentColor, _mix);
     sendRgbwState();
 
     // Some drivers (seen with a DA4-M) ignore a colour change while the channel is off (arc level 0)
@@ -1355,14 +1397,32 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
     // koHandleColor() while the channel is switched on; here only for channels that are already on.
     if (currentState)
     {
+        // Slider mode: the largest channel is the brightness, the driver gets it as an own level command
+        const uint8_t sliderArc = slider ? rgbwArcFromColour() : 0;
         if (_colorPending)
         {
             // level first, colour follows: loopRgbwSeq sends the newest colour at its time
+            if (slider)
+            {
+                rgbwSetLevel(sliderArc);
+                setDimmState(sliderArc, true, true);
+            }
         }
         else
         {
             sendColor();
-            if (_onArcPending)
+            if (slider)
+            {
+                if (_onArcPending)
+                {
+                    _onArcAt = millis() + rgbwOffWaitMs(); // another colour change is running: wait for it as well
+                    _fadePolling = false;
+                }
+                logDebugP("RGBW: brightness from the colour value: %i %%, level %i", (int)(RgbwHelper::percentFromAmplitude(RgbwHelper::maxChannel(currentColor)) + 0.5f), sliderArc);
+                rgbwSetLevel(sliderArc);
+                setDimmState(sliderArc, true, true);
+            }
+            else if (_onArcPending)
             {
                 _onArcAt = millis() + rgbwOffWaitMs(); // another colour change is running: wait for it as well
                 _fadePolling = false;                  // fixed time again, a poll answer could be about the old colour
@@ -1499,7 +1559,10 @@ void DaliChannel::sendColor()
     if (colorType == PT_colorType_RGBW)
     {
         // RGBW is always transmitted as RGB level + white level, "colorSpace" does not apply
-        sendColorAsRGBW(currentColor[0], currentColor[1], currentColor[2], currentColor[3]);
+        if (rgbwSliderMode() && !RgbwHelper::isOff(_mix))
+            sendColorAsRGBW(_mix[0], _mix[1], _mix[2], _mix[3]); // mix only, the brightness goes as level
+        else
+            sendColorAsRGBW(currentColor[0], currentColor[1], currentColor[2], currentColor[3]);
         return;
     }
 
@@ -1653,6 +1716,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
         setSwitchState(value > 0, false);
         currentStep = value;
     }
+
+    _lastLevelArc = value;
+    rgbwSliderStatus(value);
 
     float perc = DaliHelper::arcToPercentFloat(value);
 

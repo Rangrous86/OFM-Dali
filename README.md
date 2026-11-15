@@ -39,7 +39,27 @@ In der ETS zeigt *„Wert schreiben“* dafür je Kanal ein Häkchen (= Gültigk
 
 Der Wert 255 wird – wie schon bei RGB – auf 254 begrenzt, weil 255 bei DALI „MASK“ (nicht ändern) bedeutet. Die Helligkeit läuft weiterhin über die normalen Objekte *Schalten* und *Dimmen*.
 
-**Farbe = Mischung, Helligkeit = Dimmwert.** Wie bei DALI-DT8 üblich legt das RGBW-Objekt nur das Mischungsverhältnis der Kanäle fest, die Gesamthelligkeit kommt ausschließlich vom DALI-Pegel (*Dimmen absolut*). Ein Farbtelegramm mit kleineren Beträgen (z. B. 50 % statt 100 % Rot) dimmt eine eingeschaltete Leuchte deshalb nicht (am DA4-M gemessen). Visualisierungen, die RGBW-Werte „helligkeitsskaliert“ senden, brauchen daher zusätzlich eine Adresse für die Helligkeit (z. B. `brightness_address` in Home Assistant) auf *Dimmen absolut*.
+**Zwei Arten, die Helligkeit zu steuern** (ETS-Parameter *Helligkeit bei RGBW* im Abschnitt *Farbe*, siehe unten): Standard ist *Über Objekt „Dimmen absolut“*, also *Farbe = Mischung, Helligkeit = Dimmwert*. Wie bei DALI-DT8 üblich legt das RGBW-Objekt dann nur das Mischungsverhältnis der Kanäle fest, die Gesamthelligkeit kommt ausschließlich vom DALI-Pegel (*Dimmen absolut*). Ein Farbtelegramm mit kleineren Beträgen (z. B. 50 % statt 100 % Rot) dimmt eine eingeschaltete Leuchte dann nicht (am DA4-M gemessen). Visualisierungen, die RGBW-Werte „helligkeitsskaliert“ senden, brauchen in diesem Modus zusätzlich eine Adresse für die Helligkeit (z. B. `brightness_address` in Home Assistant) auf *Dimmen absolut*. Alternativ gibt es den Modus *Aus dem RGBW-Wert*.
+
+### Helligkeit aus dem RGBW-Wert („Slider-Modus“, v12)
+
+Für Clients mit nur einem Objekt (z. B. ein Home-Assistant-KNX-Licht ohne `brightness_address`, dessen Helligkeitsregler den RGBW-Wert skaliert) gibt es den ETS-Parameter **Helligkeit bei RGBW** (Einzelkanal und Gruppe, nur sichtbar bei *Farbe ansteuern per = RGBW*):
+
+| Einstellung | Verhalten |
+|-------------|-----------|
+| **Über Objekt „Dimmen absolut“** (Standard) | wie bisher: Farbe = nur Mischung, Helligkeit nur über *Dimmen absolut* / *Schalten* / *Dimmen relativ* |
+| **Aus dem RGBW-Wert (größter Kanal = Helligkeit)** | Der größte der vier Kanäle ist die Helligkeit (255 = 100 %), das Verhältnis der Kanäle ist die Farbmischung. |
+
+Im Slider-Modus gilt:
+
+- **Farbtelegramm** `R G B W`: Helligkeit = größter Kanal ÷ 255 (linear in Prozent, dann wie *Dimmen absolut* auf die DALI-Kurve umgerechnet). Der Treiber bekommt die auf 255 normierte Mischung (er wertet die Amplitude ohnehin nicht aus) und die Helligkeit als eigenen Pegelbefehl, in der bekannten Reihenfolge ohne den laufenden Farb-Fade abzubrechen. Beispiel: `80 00 00 80` = Rot-Weiß mit etwa 50 %.
+- **Aus → Farbtelegramm:** schaltet mit dem Pegel aus dem RGBW-Wert ein (nicht mit dem Einschaltwert Tag/Nacht).
+- **alle Kanäle 0:** aus (wie bisher).
+- **Status Farbe (RGBW)** zeigt Mischung × aktueller Pegel. Ändert sich der Pegel über *Dimmen absolut*, *Schalten* oder *Dimmen relativ*, folgt der Farbstatus (ein Client, der die Helligkeit aus dem Farbwert liest, sieht die richtige Helligkeit). Ein eben empfangener Farbwert wird unverändert zurückgemeldet.
+- *Dimmen absolut* / *Schalten* / *Dimmen relativ* funktionieren weiter und stellen den Pegel direkt. Beide Wege gleichzeitig zu benutzen ist möglich, aber nicht nötig: ein Client mit Helligkeitsadresse sendet seine Farbe mit 100 % und regelt die Helligkeit separat, der Modus *Über Objekt* ist dafür der passende.
+- Die Szenen im Treiber, HCL und die anderen Farbtypen sind nicht betroffen.
+
+**Hardware-Befund, der dazu geführt hat (A1, v11):** Telegramm `80 00 00 80 00 0F` an eine brennende Lampe: Lampe unverändert (40 %), Status 20/0/3 meldet `80 00 00 80`, Home Assistant zeigt 50 %. Der DA4-M normiert die Farbe, die Amplitude geht verloren.
 
 ### Ein-/Ausschaltverhalten
 
@@ -64,7 +84,7 @@ Hinweis zum Ausgangscode: Bei den anderen Farbtypen (HSV, RGB, TW, xyY) aktualis
 - **Getrennte Objekte** (Rot/Grün/Blau/Weiß einzeln, 8 Bit) gibt es bei RGBW *nicht* – nur das kombinierte 6-Byte-Objekt. Das kann später nachgerüstet werden.
 - **HCL** (Human Centric Lighting) wirkt bei RGBW wie bisher nur auf die Helligkeit.
 - Manche Treiber erwarten für Weiß statt `SET TEMPORARY WAF DIMLEVEL` den Befehl `SET TEMPORARY RGBWAF CONTROL`/`RGBWAF DIMLEVEL` (237) bzw. ein anderes Kanal-Mapping. Beim DA4-M (Modus RGBW) wird das Weiß über Befehl 236 angesteuert; andere Treiber sind nicht geprüft.
-- **ETS-Applikation:** Der Parameter *colorType* wurde von 2 auf 3 Bit verbreitert und deshalb an eine freie Stelle im Parameterspeicher verschoben (Einzelkanal: Byte 21, Bit 5–7; Gruppe: Byte 17, Bit 2–4). Die Applikation ist dadurch **nicht** in-place zu Geräten mit der alten Version updatebar (`ReplacesVersions` enthält die neue Version nicht): Gerät neu anlegen bzw. neu parametrieren.
+- **ETS-Applikation:** (v12: neuer Parameter *Helligkeit bei RGBW*, Einzelkanal Byte 22 Bit 0, Gruppe Byte 17 Bit 5; der Parameterblock des Einzelkanals wird dadurch um 1 Byte größer, die ETS-Applikation muss neu importiert und das Gerät neu programmiert werden.) Der Parameter *colorType* wurde von 2 auf 3 Bit verbreitert und deshalb an eine freie Stelle im Parameterspeicher verschoben (Einzelkanal: Byte 21, Bit 5–7; Gruppe: Byte 17, Bit 2–4). Die Applikation ist dadurch **nicht** in-place zu Geräten mit der alten Version updatebar (`ReplacesVersions` enthält die neue Version nicht): Gerät neu anlegen bzw. neu parametrieren.
 
 ## Testanleitung
 
