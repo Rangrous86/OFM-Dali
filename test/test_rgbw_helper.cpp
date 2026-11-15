@@ -64,6 +64,24 @@ int main()
     CHECK(RgbwHelper::daliLevel(255) == 254);
     CHECK(RgbwHelper::daliLevel(254) == 254);
     CHECK(RgbwHelper::daliLevel(0) == 0);
+    CHECK(RgbwHelper::fromDaliLevel(254) == 255);
+    CHECK(RgbwHelper::fromDaliLevel(128) == 128);
+    CHECK(RgbwHelper::fromDaliLevel(0) == 0);
+
+    // colour from the driver report values (R, G, B, W; 255 = MASK = unknown)
+    { const uint8_t rep[4] = {0, 0, 254, 0}; uint8_t c[4] = {9, 9, 9, 9};
+      CHECK(RgbwHelper::colourFromDriver(rep, c));
+      CHECK(c[0] == 0 && c[1] == 0 && c[2] == 255 && c[3] == 0); }
+    { const uint8_t rep[4] = {254, 0, 0, 254}; uint8_t c[4];
+      CHECK(RgbwHelper::colourFromDriver(rep, c));
+      CHECK(c[0] == 255 && c[1] == 0 && c[2] == 0 && c[3] == 255); }
+    { const uint8_t rep[4] = {0, 0, 0, 0}; uint8_t c[4] = {7, 7, 7, 7};
+      CHECK(!RgbwHelper::colourFromDriver(rep, c));
+      CHECK(c[0] == 7 && c[3] == 7); }                // unchanged
+    { const uint8_t rep[4] = {255, 255, 255, 255}; uint8_t c[4] = {7, 7, 7, 7};
+      CHECK(!RgbwHelper::colourFromDriver(rep, c)); }
+    { const uint8_t rep[4] = {0, 0, 254, 255}; uint8_t c[4];
+      CHECK(!RgbwHelper::colourFromDriver(rep, c)); } // one MASK is enough to reject
 
     printf(failures ? "%d FAILED\n" : "all tests ok\n", failures);
     return failures ? 1 : 0;

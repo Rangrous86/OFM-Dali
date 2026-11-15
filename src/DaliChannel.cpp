@@ -113,6 +113,7 @@ void DaliChannel::loop1()
     loopPendingOn();
     loopRgbwSeq();
     loopFadeQuery();
+    loopColourQuery();
     loopStopQuery();
 #ifdef RGBW_DIAG
     loopDiag();
@@ -379,6 +380,66 @@ void DaliChannel::loopFadeQuery()
     uint32_t fade = fadeTimes[raw >> 4];
     _fadeMs = fade > 65000 ? 65000 : fade; // member is 16 bit
     logInfoP("RGBW: fade time x=%i = %i ms (raw 0x%02X)", raw >> 4, _fadeMs, raw);
+}
+
+// Reads the colour of the driver once after the start (RGBW channels, not groups): QUERY_COLOUR_VALUE with the
+// report selectors 233-236 = R, G, B, W (verified on a DA4-M, also with the lamp off). The colour is taken over only
+// if the driver reports a usable colour and no colour telegram arrived in the meantime; otherwise it stays unknown.
+void DaliChannel::loopColourQuery()
+{
+    static const uint8_t selectors[4] = {233, 234, 235, 236};
+
+    if (_colQueryDone)
+        return;
+    if (!isRgbw() || _isGroup)
+    {
+        _colQueryDone = true;
+        return;
+    }
+    if (!_fadeQueried || _fadeQueryId != 0)
+        return; // after the fade time query, the DALI queue is busy enough at start
+
+    if (_colQueryId == 0)
+    {
+        if (_colQueryStep < 4)
+        {
+            daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, selectors[_colQueryStep]);
+            _colQueryId = daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::QUERY_COLOUR_VALUE, false, true);
+            if (_colQueryId == 0)
+            {
+                logDebugP("RGBW: colour query could not be sent, colour stays unknown");
+                _colQueryDone = true;
+            }
+            return;
+        }
+
+        _colQueryDone = true;
+        uint8_t color[4];
+        if (!RgbwHelper::isOff(currentColor))
+            logDebugP("RGBW: colour telegram came first, colour of the driver not taken over");
+        else if (RgbwHelper::colourFromDriver(_colQueryReport, color))
+        {
+            memcpy(currentColor, color, sizeof(currentColor));
+            logInfoP("RGBW: colour of the driver %i %i %i %i", color[0], color[1], color[2], color[3]);
+            sendRgbwState();
+        }
+        else
+            logDebugP("RGBW: driver reports no usable colour (%i %i %i %i), colour stays unknown", _colQueryReport[0], _colQueryReport[1], _colQueryReport[2], _colQueryReport[3]);
+        return;
+    }
+
+    Dali::Response response = daliMaster.getResponse(_colQueryId);
+    if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
+        return;
+    _colQueryId = 0;
+    if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
+        (response.frame.flags & DALI_FRAME_ERROR))
+    {
+        logDebugP("RGBW: colour query got no answer, colour stays unknown");
+        _colQueryDone = true;
+        return;
+    }
+    _colQueryReport[_colQueryStep++] = response.frame.data & 0xFF;
 }
 
 // Sends the delayed final "on value" of an RGBW colour switch-on (see rgbwOn).

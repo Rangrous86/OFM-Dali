@@ -379,7 +379,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("stepUp", "stepUp xyy => send x times StepUp to evg y");
     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
-    openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W and X/Y/Tc");
+    openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W report (233-236), actual (9-12), temporary (201-204)");
     openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
     openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
     openknx.console.printHelpLine("blackoff", "blackoff 0|1 => RGBW: 1 = fade colour to 0/0/0/0 before level off (default 0)");
@@ -593,7 +593,7 @@ void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
         logIndentUp();
         logErrorP("getCol yy [sel]");
         logErrorP("yy  = Address of device (only short address)");
-        logErrorP("sel = DTR0 selector 0-255 for QUERY_COLOUR_VALUE (default: 64-67 = R,G,B,W and 0,1,2 = X,Y,Tc)");
+        logErrorP("sel = DTR0 selector 0-255 for QUERY_COLOUR_VALUE (default: 233-236 report, 9-12 actual, 201-204 temporary; each R,G,B,W)");
         logIndentDown();
         return;
     }
@@ -610,7 +610,7 @@ void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
     int16_t status = getInfo(addr, Dali::ExtendedCommandDT8::QUERY_COLOUR_STATUS);
     logInfoP("EVG %i colour type features %i (0x%02X), colour status %i (0x%02X)  [-1 = no answer]", addr, features, features & 0xFF, status, status & 0xFF);
 
-    static const uint8_t defaults[] = {64, 65, 66, 67, 0, 1, 2};
+    static const uint8_t defaults[] = {233, 234, 235, 236, 9, 10, 11, 12, 201, 202, 203, 204};
     const uint8_t count = sel >= 0 ? 1 : sizeof(defaults) / sizeof(defaults[0]);
     for (uint8_t i = 0; i < count; i++)
     {

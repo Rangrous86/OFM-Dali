@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 // #define RGBW_DIAG
-#define RGBW_BUILD_TAG "v9"
+#define RGBW_BUILD_TAG "v10"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -173,6 +173,15 @@ class DaliChannel : public OpenKNX::Channel
 		// in the driver when the stop arrives, so the level queried during dimming is one step behind).
 		unsigned long _stopQueryAt = 0;
 		void loopStopQuery();
+
+		// Colour of the driver at start: the DA4-M answers QUERY_COLOUR_VALUE with the report selectors 233-236
+		// (R, G, B, W) with the colour it shows (also at level 0). Read once after the fade time query and taken
+		// over if no colour telegram came in the meantime (see loopColourQuery).
+		bool _colQueryDone = false;
+		uint8_t _colQueryStep = 0;
+		uint32_t _colQueryId = 0;
+		uint8_t _colQueryReport[4] = {255, 255, 255, 255};
+		void loopColourQuery();
 
 		// Driver colour is known to be black: we sent R=G=B=W=0 last and nothing changed it since
 		bool _driverBlack = false;

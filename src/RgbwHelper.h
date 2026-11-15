@@ -71,4 +71,30 @@ namespace RgbwHelper
     {
         return value == 255 ? 254 : value;
     }
+
+    /*
+     * Gegenrichtung zu daliLevel(): DALI-Pegel (254 = Maximum) -> KNX-Wert (255 = 100 %).
+     */
+    inline uint8_t fromDaliLevel(uint8_t level)
+    {
+        return level == 254 ? 255 : level;
+    }
+
+    /*
+     * Farbe aus den vier Report-Werten (R, G, B, W) des Treibers (QUERY_COLOUR_VALUE, Selektor 233-236).
+     * Nutzbar nur, wenn kein Wert 255 (MASK = unbekannt) ist und mindestens ein Kanal leuchtet: ein Treiber,
+     * der nur Nullen meldet, hat (noch) keine Farbe, und eine Farbe aus lauter Nullen wäre "aus".
+     * Gibt true zurück und schreibt color[0..3], wenn die Farbe übernommen werden kann.
+     */
+    inline bool colourFromDriver(const uint8_t *report, uint8_t *color)
+    {
+        for (uint8_t i = 0; i < 4; i++)
+            if (report[i] == 255)
+                return false;
+        if (report[0] == 0 && report[1] == 0 && report[2] == 0 && report[3] == 0)
+            return false;
+        for (uint8_t i = 0; i < 4; i++)
+            color[i] = fromDaliLevel(report[i]);
+        return true;
+    }
 }
