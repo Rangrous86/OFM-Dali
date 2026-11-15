@@ -211,6 +211,9 @@ Damit ist der Start eines RGBW-Kanals vollständig: Ein/Aus-Zustand und Helligke
 | 1 | Farbe Blau, +100 ms Dimmen heller, +1,1 s Stopp | Lampe reines Blau, 20 % unverändert. Log: `RGBW: dimming waits for the end of the colour fade`, kein UP auf dem Bus, nach dem Stopp `20%-195`. Mit v10 dasselbe Script: Mischfarbe (helles Weiß), 53 % |
 | 2 | Farbe Rot-Weiß, +100 ms Dimmen heller, +3,1 s Stopp | Farbe sauber, das Dimmen beginnt nach rund 1,8 s, sieben UPs à rund 9 Stufen (Status 24,7 → 31,8 → 40,8 → 51,8 → 66,3 → 84,7 %, 202 ms Abstand), Endwert 100 % (Maximum 254) |
 | 3 | Farbe Blau, +100 ms Dimmen heller, +2,5 s Stopp | Lampe sauber Blau, vier UPs, Stopp-Abfrage 231 = 195 + 4 × 9 (53,4 %) |
+| 4 | Gegenrichtung, Start Blau 53 % (Pegel 231): *Dimmen dunkler*, +500 ms Farbe Rot-Weiß, +2,6 s Stopp | Drei DOWNs vor dem Farbtelegramm (231 → 223 → 214 → 204), dann `RGBW: dimming waits for the end of the colour fade`, nach rund 1,8 s noch zwei DOWNs (196, 186), Stopp-Abfrage 186 = 231 − 5 × 9 (15,6 %). Lampe sauber Rot-Weiß ohne Mischfarbe, kein UP/DOWN während des Farb-Fades. Der beim Farbtelegramm gerade laufende DOWN wird vollständig ausgeführt (die Farbsequenz braucht ≈ 300 ms Bus-Zeit bis zum ACTIVATE) |
+
+Nicht abgedeckt: Gruppen (ein Gruppenkanal kennt den Farb-Fade eines einzelnen Mitglieds nicht, ein UP/DOWN auf die Gruppenadresse kann ihn abbrechen) und Broadcast, siehe „Noch offen“.
 
 Rechenregel für die Auswertung: ein UP (alle 200 ms) hebt den Pegel um rund 9 Stufen; die Abfrage 300 ms nach dem Stopp liefert den Wert inklusive des noch laufenden letzten UP. Der Dimmstart liegt rund 1,8 s nach dem Farbtelegramm (Fade-Zeit + Reserve + 300 ms).
 
@@ -246,7 +249,7 @@ Rechenregel für die Auswertung: ein UP (alle 200 ms) hebt den Pegel um rund 9 S
 | Bereich | Zu prüfen |
 |---------|-----------|
 | *Dimmen absolut* aus Aus | schaltet mit der gespeicherten Farbe ein (nicht Schwarz/Weiß) |
-| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); direkt nach einem Farbtelegramm: mit v10 Fehler, in v11 behoben und auf Hardware bestätigt (Gegenrichtung, Farbe während des Dimmens, noch offen) |
+| *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); direkt nach einem Farbtelegramm: mit v10 Fehler, in v11 behoben und auf Hardware bestätigt (auch die Gegenrichtung: Farbe während des Dimmens) |
 | Weißkanal in Mischungen | bestätigt: Rot + Weiß (v7), nur W (v6); offen: weitere Mischungen mit W bei brennender Lampe |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
 | HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
