@@ -113,6 +113,7 @@ void DaliChannel::loop1()
     loopPendingOn();
     loopRgbwSeq();
     loopFadeQuery();
+    loopStopQuery();
 #ifdef RGBW_DIAG
     loopDiag();
 #endif
@@ -429,6 +430,22 @@ void DaliChannel::loopFadePoll()
     _fadePollId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_STATUS, false, true);
     if (_fadePollId == 0)
         _fadePolling = false;
+}
+
+// One level query a short time after the stop of a relative dimming, so that the status objects show the level
+// the driver really reached (not the one before the last UP/DOWN step).
+void DaliChannel::loopStopQuery()
+{
+    if (_stopQueryAt == 0 || (long)(millis() - _stopQueryAt) < 0)
+        return;
+    if (_queryId != 0)
+        return; // an answer is still on its way, ask afterwards
+    _stopQueryAt = 0;
+    // dimming started again, or the channel is off for us (a late answer must not switch the status on again)
+    if (_dimmDirection != DimmDirection::None || !currentState)
+        return;
+    logDebugP("Query actual level after the dimming stop");
+    queryActualLevel();
 }
 
 void DaliChannel::loopPendingOn()
@@ -962,6 +979,8 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
         _dimmDirection = DimmDirection::None;
         _dimmLast = 0;
         updateCurrentDimmValue();
+        // the last UP/DOWN is still running in the driver: ask for the final level shortly after
+        _stopQueryAt = (millis() + 300) | 1; // never 0 (= none)
         return;
     }
 
@@ -1041,7 +1060,11 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
             _fadePollT0 = _colorSentAt;
         }
         else
+        {
             daliMaster.sendArc(_channelIndex, arc, _isGroup);
+            _levelSentAt = millis() | 1; // never 0 (= none yet)
+            _levelTarget = arc;
+        }
     }
     else
         daliMaster.sendArc(_channelIndex, arc, _isGroup);
@@ -1270,6 +1293,20 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
                 _onArcAt = millis() + rgbwOffWaitMs(); // another colour change is running: wait for it as well
                 _fadePolling = false;                  // fixed time again, a poll answer could be about the old colour
             }
+            else if (levelFadeMayRun())
+            {
+                // A level command was sent just before this colour (opposite order of Home Assistant). The ACTIVATE
+                // of the colour sequence aborts its fade, so the level would stay somewhere in between (measured:
+                // 60 % requested from 20 %, 28 % reached). Send the target level again after the colour fade.
+                logDebugP("RGBW: level %i again after the colour fade (the colour change aborts the level fade)", _levelTarget);
+                _onArcValue = _levelTarget;
+                _onArcAt = _colorSentAt + rgbwOffWaitMs() + 300;
+                _onArcPending = true;
+                _fadePolling = true;
+                _fadePollAt = millis();
+                _fadePollT0 = _colorSentAt;
+                _levelSentAt = 0;
+            }
         }
     }
     return true;
@@ -1449,6 +1486,12 @@ void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
     // 3. Apply both temporary values at once
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
     _colorSentAt = millis() | 1; // never 0 (= none yet)
+}
+
+// A level command was sent so recently that its fade can still be running in the driver
+bool DaliChannel::levelFadeMayRun()
+{
+    return _levelSentAt != 0 && (long)(millis() - _levelSentAt) < (long)(_fadeMs + 300);
 }
 
 // A colour sequence was sent so recently that its fade can still be running in the driver

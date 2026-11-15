@@ -11,7 +11,7 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 // #define RGBW_DIAG
-#define RGBW_BUILD_TAG "v8"
+#define RGBW_BUILD_TAG "v9"
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -160,6 +160,19 @@ class DaliChannel : public OpenKNX::Channel
 		// channel closely (e.g. Home Assistant: colour, then brightness 20 ms later) waits for the end of the fade.
 		unsigned long _colorSentAt = 0;
 		bool colourFadeMayRun();
+
+		// Counterpart of the above: the ACTIVATE of a colour sequence aborts a level fade that is still running
+		// (one fade engine). A level command that was sent shortly before a colour telegram of a lit channel
+		// (colour 20 ms after the level, the opposite order of Home Assistant) is therefore sent again after the
+		// colour fade. Time and target (DALI arc value) of the last level command of this channel (0 = none yet).
+		unsigned long _levelSentAt = 0;
+		uint8_t _levelTarget = 0;
+		bool levelFadeMayRun();
+
+		// After the stop of a relative dimming the real level is queried once (the last UP/DOWN is still running
+		// in the driver when the stop arrives, so the level queried during dimming is one step behind).
+		unsigned long _stopQueryAt = 0;
+		void loopStopQuery();
 
 		// Driver colour is known to be black: we sent R=G=B=W=0 last and nothing changed it since
 		bool _driverBlack = false;

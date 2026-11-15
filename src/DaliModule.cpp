@@ -1,4 +1,5 @@
 #include "DaliModule.h"
+#include <cctype>
 #include "OpenKNX/DateTime.h"
 
 #ifdef ARDUINO_ARCH_ESP32
@@ -378,6 +379,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("stepUp", "stepUp xyy => send x times StepUp to evg y");
     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
+    openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W and X/Y/Tc");
     openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
     openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
     openknx.console.printHelpLine("blackoff", "blackoff 0|1 => RGBW: 1 = fade colour to 0/0/0/0 before level off (default 0)");
@@ -497,6 +499,12 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
         return true;
     }
 
+    if (command == "getCol")
+    {
+        cmdHandleGetCol(hasArg, arg);
+        return true;
+    }
+
     return false;
 }
 
@@ -560,6 +568,60 @@ void DaliModule::cmdHandleGetLvl(bool hasArg, std::string arg)
         logErrorP("EVG %i antwortet nicht", addr);
     else
         logErrorP("Fehler beim Auslesen %i", resp);
+}
+
+// Diagnosis for the colour of a DT8 driver (RGBW restore at start): asks QUERY_COLOUR_TYPE_FEATURES,
+// QUERY_COLOUR_STATUS and QUERY_COLOUR_VALUE (DTR0 = selector) and logs the raw answers. Changes nothing.
+// QUERY_COLOUR_VALUE answers the high byte, the low byte is in DTR0 afterwards (DTR1 is logged as well).
+void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
+{
+    bool ok = hasArg && arg.length() >= 2 && std::isdigit((unsigned char)arg[0]) && std::isdigit((unsigned char)arg[1]);
+    int sel = -1;
+    if (ok && arg.length() > 2)
+    {
+        ok = arg.length() >= 4 && arg.length() <= 6 && arg[2] == ' ' && arg.find_first_not_of("0123456789", 3) == std::string::npos;
+        if (ok)
+            sel = std::stoi(arg.substr(3));
+        if (ok && sel > 255)
+            ok = false;
+    }
+    else if (ok && arg.length() != 2)
+        ok = false;
+    if (!ok)
+    {
+        logErrorP("Argument is invalid!");
+        logIndentUp();
+        logErrorP("getCol yy [sel]");
+        logErrorP("yy  = Address of device (only short address)");
+        logErrorP("sel = DTR0 selector 0-255 for QUERY_COLOUR_VALUE (default: 64-67 = R,G,B,W and 0,1,2 = X,Y,Tc)");
+        logIndentDown();
+        return;
+    }
+    uint8_t addr = std::stoi(arg.substr(0, 2));
+    if (addr > 63)
+    {
+        logErrorP("Short Address is invalid!");
+        return;
+    }
+
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::ENABLE_DT, 0x08);
+    int16_t features = getInfo(addr, Dali::ExtendedCommandDT8::QUERY_COLOUR_TYPE_FEATURES);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::ENABLE_DT, 0x08);
+    int16_t status = getInfo(addr, Dali::ExtendedCommandDT8::QUERY_COLOUR_STATUS);
+    logInfoP("EVG %i colour type features %i (0x%02X), colour status %i (0x%02X)  [-1 = no answer]", addr, features, features & 0xFF, status, status & 0xFF);
+
+    static const uint8_t defaults[] = {64, 65, 66, 67, 0, 1, 2};
+    const uint8_t count = sel >= 0 ? 1 : sizeof(defaults) / sizeof(defaults[0]);
+    for (uint8_t i = 0; i < count; i++)
+    {
+        uint8_t s = sel >= 0 ? (uint8_t)sel : defaults[i];
+        daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, s);
+        daliMaster.sendSpecialCommand(Dali::SpecialCommand::ENABLE_DT, 0x08);
+        int16_t high = getInfo(addr, Dali::ExtendedCommandDT8::QUERY_COLOUR_VALUE);
+        int16_t dtr0 = getInfo(addr, Dali::Command::QUERY_DTR);
+        int16_t dtr1 = getInfo(addr, Dali::Command::QUERY_DTR1);
+        logInfoP("EVG %i colour value sel %i: answer %i (0x%02X), DTR0 %i, DTR1 %i  [-1 = no answer]", addr, s, high, high & 0xFF, dtr0, dtr1);
+    }
 }
 
 void DaliModule::cmdHandleScan(bool hasArg, std::string arg)
