@@ -126,6 +126,11 @@ int main()
     for (int a = 0; a < 256; a++)
         CHECK(RgbwHelper::amplitudeFromPercent(RgbwHelper::percentFromAmplitude(a)) == a);
 
+    // group: decode on an all-0 base gives a complete colour, channels that are not valid stay 0
+    { uint8_t d[6] = {99, 99, 200, 99, 0, 0x02}; uint8_t c[4] = {0, 0, 0, 0};
+      CHECK(RgbwHelper::decode(d, c) == 0x02);
+      CHECK(c[0] == 0 && c[1] == 0 && c[2] == 200 && c[3] == 0); }
+
     printf(failures ? "%d FAILED\n" : "all tests ok\n", failures);
     return failures ? 1 : 0;
 }

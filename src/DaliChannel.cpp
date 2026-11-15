@@ -382,20 +382,23 @@ void DaliChannel::loopFadeQuery()
     logInfoP("RGBW: fade time x=%i = %i ms (raw 0x%02X)", raw >> 4, _fadeMs, raw);
 }
 
-// Reads the colour of the driver once after the start (RGBW channels, not groups): QUERY_COLOUR_VALUE with the
-// report selectors 233-236 = R, G, B, W (verified on a DA4-M, also with the lamp off). The colour is taken over only
+// Reads the colour of the driver once after the start (RGBW channels): QUERY_COLOUR_VALUE with the report
+// selectors 233-236 = R, G, B, W (verified on a DA4-M, also with the lamp off). The colour is taken over only
 // if the driver reports a usable colour and no colour telegram arrived in the meantime; otherwise it stays unknown.
+// A group asks one device only, its dimm reference address (same as level and fade time); without a reference
+// address the colour of the group stays unknown until the first colour telegram.
 void DaliChannel::loopColourQuery()
 {
     static const uint8_t selectors[4] = {233, 234, 235, 236};
 
     if (_colQueryDone)
         return;
-    if (!isRgbw() || _isGroup)
+    if (!isRgbw() || (_isGroup && _dimmReferenceAddress == NoDimmReference))
     {
         _colQueryDone = true;
         return;
     }
+    const uint8_t queryAddress = _isGroup ? _dimmReferenceAddress : _channelIndex;
     if (!_fadeQueried || _fadeQueryId != 0)
         return; // after the fade time query, the DALI queue is busy enough at start
 
@@ -404,7 +407,7 @@ void DaliChannel::loopColourQuery()
         if (_colQueryStep < 4)
         {
             daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, selectors[_colQueryStep]);
-            _colQueryId = daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::QUERY_COLOUR_VALUE, false, true);
+            _colQueryId = daliMaster.sendExtendedCommand(queryAddress, 0x08, Dali::ExtendedCommandDT8::QUERY_COLOUR_VALUE, false, true);
             if (_colQueryId == 0)
             {
                 logDebugP("RGBW: colour query could not be sent, colour stays unknown");
@@ -1363,8 +1366,13 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
         return false;
     }
 
-    // Decode into a copy first: all channels 0 means "off" and must not overwrite the stored colour
-    uint8_t newColor[4] = {currentColor[0], currentColor[1], currentColor[2], currentColor[3]};
+    // Decode into a copy first: all channels 0 means "off" and must not overwrite the stored colour.
+    // A single channel keeps the channels that are not marked valid (the colour of the driver is known). A group
+    // always takes a complete colour: its members can also belong to other groups or be changed on their own, so
+    // the colour stored in the group is not reliable. The channels that are not marked valid are 0 there.
+    uint8_t newColor[4] = {0, 0, 0, 0};
+    if (!_isGroup)
+        memcpy(newColor, currentColor, sizeof(newColor));
     const uint8_t valid = RgbwHelper::decode(ko.valueRef(), newColor);
     if (valid == 0)
     {
@@ -1372,7 +1380,7 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
         return false;
     }
 
-    logDebugP("Got RGBW: %i %i %i %i (valid %X)", newColor[0], newColor[1], newColor[2], newColor[3], valid);
+    logDebugP("Got RGBW: %i %i %i %i (valid %X)%s", newColor[0], newColor[1], newColor[2], newColor[3], valid, _isGroup && valid != 0x0F ? " group: channels that are not valid are 0" : "");
 
     if (RgbwHelper::isOff(newColor))
     {

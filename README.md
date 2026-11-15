@@ -61,6 +61,13 @@ Im Slider-Modus gilt:
 
 **Hardware-Befund, der dazu geführt hat (A1, v11):** Telegramm `80 00 00 80 00 0F` an eine brennende Lampe: Lampe unverändert (40 %), Status 20/0/3 meldet `80 00 00 80`, Home Assistant zeigt 50 %. Der DA4-M normiert die Farbe, die Amplitude geht verloren.
 
+### Gruppen (v12)
+
+- **Farbe beim Start:** Wie ein Einzelkanal liest auch ein RGBW-Gruppenkanal beim Start die Farbe aus dem Treiber (QUERY_COLOUR_VALUE, Selektoren 233–236), aber nur von **einem** EVG: dem Dimm-Referenz-EVG der Gruppe (dasselbe wie für Pegel und Fade-Zeit). Alle Mitglieder abzufragen würde 4 Abfragen je EVG kosten, und bei abweichenden Mitgliedern gäbe es keinen eindeutigen Wert. Ohne Referenz-EVG bleibt die Gruppenfarbe bis zum ersten Farbtelegramm unbekannt. Weicht ein Mitglied ab (z. B. einzeln verstellt), zeigt der Gruppenstatus die Farbe des Referenz-EVGs.
+- **Immer die komplette Farbe:** Ein EVG kann in mehreren Gruppen liegen oder einzeln verstellt werden, die in der Gruppe gespeicherte Farbe ist deshalb nicht verlässlich. Ein Farbtelegramm an eine Gruppe wird darum immer als vollständige Farbe gesendet: Kanäle, die im Telegramm nicht als gültig markiert sind, gelten als **0** (beim Einzelkanal behalten sie dagegen ihren Wert). Beispiel: Rot an, dann Telegramm „nur Blau gültig“ → Blau, Rot wird 0. Ein Telegramm, dessen gültige Kanäle alle 0 sind, schaltet die Gruppe aus. Der Treiber bekommt weiterhin immer alle vier Kanäle (R, G, B, W) in einer Sequenz.
+- Der Pegel ist unkritisch: ein Ziel-Pegel (z. B. 50 %) ist für jedes Mitglied gleich, egal von wo aus es startet, nur die Fade-Dauer unterscheidet sich.
+- **Nicht abgedeckt (bekannte Lücke, nicht auf Hardware getestet):** Die Gruppe weiß nichts vom laufenden Farb-Fade ihrer Mitglieder, wenn dasselbe EVG über eine andere Gruppe oder einzeln angesteuert wird.
+
 ### Ein-/Ausschaltverhalten
 
 | Ereignis | Verhalten bei RGBW-Kanälen |
