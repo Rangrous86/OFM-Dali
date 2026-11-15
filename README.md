@@ -268,6 +268,21 @@ Einzelkanal A0, ETS-Parameter *Helligkeit bei RGBW* = „Aus dem RGBW-Wert (grö
 
 Der Farbfade (335 ms bis zum Ende laut `QUERY_STATUS`) endet jeweils vor dem Pegelbefehl. Die Helligkeit ist damit auch für Clients ohne Helligkeitsadresse (Home Assistant, einfache Visualisierungen) bedienbar. **Bestanden.** Die Pegel entsprechen der DALI-Kurve (2 % → 110, 30 % → 210, 40 % → 220, 80 % → 246).
 
+#### HCL mit RGBW (v12, 15.11.2026)
+
+Aufbau: Einzelkanal A0 (RGBW, Slider-Modus), HCL-Kurve 1 „Test“ mit Typ *Sonnen Auf-/Untergang*, nur *Helligkeit* aktiv (Min 20 %, Max 100 %), **Farbtemperatur nicht aktiv**, KO *HCL Kurve* 20/0/7 verknüpft. Die Kurve braucht eine gültige Uhrzeit (KO 4 *Uhrzeit/Datum*, DPT 19.001, hier GA 0/0/4) und den Standort. Ohne Uhrzeit meldet das Log `Ungueltige Sonnenstandsdaten`. Mit Uhrzeit läuft die Kurve einmal pro Minute: `HCL<1>: Aktuelle Zeit …`, `Nach Sonnenuntergang 2700 K (16:41)`, `StandardChannel_A<1>: Bri curve 0 | state … | isAlsoOn 0`. Nach Sonnenuntergang und vor Sonnenaufgang gilt der Min-Wert (20 %).
+
+| Test | Aktion | Ergebnis |
+|---|---|---|
+| H1 | *Schalten Aus* auf 20/0/0 (Lampe rot-weiß 100 %, Modus Auto) | Lampe aus, kein Aufblitzen. Log `Turning off`, `RGBW: off (plain level off)`, `SetDimmState 0.0/0`. 20/0/4 *Aus*, 20/0/5 0 %. Keine Zeile `HCL Mode: Auto`: das Log erscheint nur bei einem Wechsel, der Kanal war schon im Modus Auto |
+| H2 | *Schalten Ein* auf 20/0/0 | Lampe geht rot-weiß mit **20 %** an. Log `Turning on HCL`, `Send RGBW: 254 0 0 254`, `colour first, level 195 when the colour fade is over`, `SetDimmState 20.0/195`, `colour fade over (status 0x00), 336 ms`, `final on value 195`. 20/0/4 *Ein*, 20/0/5 `$33` (20,0 %), **20/0/3 `33 00 00 33`** (Farbstatus folgt der HCL-Helligkeit). Bestanden |
+| H3 | Farbtelegramm `00 7F 00 00 00 0F` auf 20/0/2 bei brennender Lampe | Lampe grün, 50 %, ohne Aufblitzen. Log `Color absolute [v12]`, `Send RGBW: 0 254 0 0`, `brightness from the colour value: 50 %, level 228`, `SetDimmState 49.2/228`, **`HCL Mode: Manu`**. 20/0/3 `00 7F 00 00`, 20/0/5 `$7D` (49,0 %), identisch in Home Assistant (`brightness 125`) und in der Antwort auf einen GroupValueRead von 20/0/5. In der nächsten Minute: `Ignored because mode is manu`. Bestanden |
+
+**Bekannte Lücken (für v13):**
+
+- Eine HCL-**Farbtemperatur** auf einem RGBW-Kanal ist nicht sicher: `setTemperature` sendet den DT8-Befehl `SET_TEMP_COLOUR_TEMPERATURE` und schreibt einen DPT-7-Wert in das 6-Byte-Objekt *Farbe Status*. Bei RGBW soll die Farbtemperatur übersprungen werden, in der ETS bleibt „Farbtemperatur aktivieren“ bis dahin ausgeschaltet.
+- Die HCL-Helligkeit **auf einer brennenden Lampe** (`setBrightness`, nur mit *HCL anwenden* = „Auch wenn eingeschaltet ist“) läuft nicht über `rgbwSetLevel`/`setDimmState`. *Farbe Status* und der letzte Pegel werden dort nicht nachgezogen. Beim Einschalten (H2) ist das nicht der Fall.
+
 #### Reihenfolge von Helligkeit und Farbe auf einer brennenden Lampe (v9)
 
 **Ursache (Eigenschaft des Treibers, nicht des Gateways):** Das DA4-M hat nur **eine Fade-Engine**. Ein Pegelbefehl (*Dimmen absolut*) bricht einen laufenden Farbfade ab, und das `ACTIVATE` einer Farbsequenz bricht einen laufenden Pegelfade ab. Die Farbsequenz braucht rund 310 ms Buszeit, der Farbfade danach noch etwa 1,1 bis 1,6 s, der Pegelfade etwa 1 s.
@@ -303,7 +318,7 @@ Der Farbfade (335 ms bis zum Ende laut `QUERY_STATUS`) endet jeweils vor dem Peg
 | *Dimmen relativ* (heller/dunkler) | bestätigt (siehe oben, auch *Dunkler* bis Minimum und *Heller* aus Aus mit v8); direkt nach einem Farbtelegramm: mit v10 Fehler, in v11 behoben und auf Hardware bestätigt (auch die Gegenrichtung: Farbe während des Dimmens) |
 | Weißkanal in Mischungen | bestätigt: Rot + Weiß (v7), nur W (v6); offen: weitere Mischungen mit W bei brennender Lampe |
 | Sperre, Tag/Nacht-Einschaltwerte | Verhalten bei gesperrtem Kanal; Einschaltwert statt 254 |
-| HCL | wirkt bei RGBW nur auf die Helligkeit; Zusammenspiel mit Farbe prüfen |
+| HCL | Helligkeit beim Einschalten und Wechsel Auto/Manu bestätigt (siehe „HCL mit RGBW“); offen: HCL-Farbtemperatur bei RGBW überspringen, HCL-Helligkeit auf brennender Lampe (v13), Kurve „Zeittabelle“ |
 | Szenen | KNX-Szene mit Farbe; im Treiber gespeicherte Szenen (Farbe gilt danach als unbekannt) |
 | Gruppen und Broadcast | Gruppenadresse mit RGBW-Kanälen, Broadcast Ein/Aus, verzögertes Broadcast-Aus |
 | Mehrere RGBW-Kanäle gleichzeitig | Auslastung der DALI-Warteschlange (Farbsequenz ≈ 300 ms pro Kanal), Reihenfolge |
