@@ -181,7 +181,8 @@ void DaliChannel::diagStart()
 
 uint16_t DaliChannel::rgbwSettleMs = RgbwSettleMs;
 uint16_t DaliChannel::rgbwMarginMs = RgbwMarginMs;
-uint8_t DaliChannel::rgbwOnMode = 1;
+uint8_t DaliChannel::rgbwOnMode = 2; // v13aa: automatic activation (console "onmode 1" = v12 behaviour)
+uint16_t DaliChannel::rgbwAaWindowMs = RgbwAaWindowMs;
 bool DaliChannel::rgbwBlackOff = false;
 uint16_t DaliChannel::rgbwOnDelayMs = 0; // 0 = automatic: wait until the driver reports that the colour fade is over
 
@@ -219,6 +220,7 @@ void DaliChannel::rgbwOff()
     bool wasOn = currentState;
     currentState = false;
     _onArcPending = false;
+    _aaPending = false;
     _colorPending = false;
     if (_offPending)
         return; // already on its way (e.g. repeated off commands while dimming down)
@@ -263,6 +265,25 @@ void DaliChannel::rgbwOn(uint8_t onValue)
     {
         // no colour ever received: nothing to restore, plain switch on
         daliMaster.sendArc(_channelIndex, onValue, _isGroup);
+        return;
+    }
+
+    if (rgbwOnMode == 2)
+    {
+        // Automatic activation: the colour is only set temporarily (SET TEMPORARY RGB/WAF, no ACTIVATE) and the
+        // level command activates it, so colour and level fade together in one fade. No query, no wait for a fade.
+        // The only wait is the short collection window: a second telegram of the same command (brightness after
+        // colour or colour after brightness, also from Home Assistant) is merged into this one switch-on.
+        if (rgbwAaWindowMs == 0)
+        {
+            rgbwAutoActivate(onValue);
+            return;
+        }
+        logDebugP("RGBW: on (automatic activation), colour + level %i together in %i ms", onValue, rgbwAaWindowMs);
+        _onArcValue = onValue;
+        _onArcAt = millis() + rgbwAaWindowMs;
+        _onArcPending = true;
+        _aaPending = true;
         return;
     }
 
@@ -315,6 +336,23 @@ void DaliChannel::rgbwOn(uint8_t onValue)
     _onArcValue = onValue;
     _onArcAt = millis() + rgbwSettleMs;
     _onArcPending = true;
+#ifdef RGBW_DIAG
+    diagStart();
+#endif
+}
+
+// Mode 2 (automatic activation): temporary colour without ACTIVATE, then the level command that activates it.
+// Both go out back to back; the driver fades colour and level in one fade.
+void DaliChannel::rgbwAutoActivate(uint8_t arc)
+{
+    logDebugP("RGBW: automatic activation: temporary colour, level %i (no ACTIVATE, no query)", arc);
+    sendColor(false);
+    daliMaster.sendArc(_channelIndex, arc, _isGroup);
+    // the single fade of the driver runs now: the guards of relative dimming and of later colour/level telegrams
+    // (colourFadeMayRun, levelFadeMayRun) use these times
+    _colorSentAt = millis() | 1; // never 0 (= none yet)
+    _levelSentAt = millis() | 1;
+    _levelTarget = arc;
 #ifdef RGBW_DIAG
     diagStart();
 #endif
@@ -526,6 +564,13 @@ void DaliChannel::loopPendingOn()
     if ((long)(millis() - _onArcAt) < 0)
         return;
     _onArcPending = false;
+    if (_aaPending)
+    {
+        // end of the collection window (mode 2): temporary colour and the newest level go out together
+        _aaPending = false;
+        rgbwAutoActivate(_onArcValue);
+        return;
+    }
     logDebugP("RGBW: final on value %i", _onArcValue);
     daliMaster.sendArc(_channelIndex, _onArcValue, _isGroup);
 }
@@ -847,6 +892,7 @@ void DaliChannel::koHandleScene(GroupObject &ko)
     // the driver executes the scene on its own: the colour it stores afterwards is not known to us
     _driverBlack = false;
     _onArcPending = false;
+    _aaPending = false;
     _colorPending = false;
     daliMaster.sendCommand(_channelIndex, Dali::Command::GO_TO_SCENE | number, _isGroup);
 }
@@ -1253,6 +1299,7 @@ void DaliChannel::koHandleLock(GroupObject &ko)
     }
     logDebugP("%i - %i", behavevalue, DaliHelper::percentToArc(behavevalue));
     _onArcPending = false;
+    _aaPending = false;
     _colorPending = false;
     daliMaster.sendArc(_channelIndex, behavevalue, _isGroup);
     setDimmState(DaliHelper::percentToArc(behavevalue));
@@ -1416,6 +1463,17 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
                 setDimmState(sliderArc, true, true);
             }
         }
+        else if (_aaPending)
+        {
+            // mode 2: a switch-on is waiting in its collection window. Nothing goes to the driver now, the newest
+            // colour (already in currentColor/_mix) and the newest level are sent together when the window ends.
+            if (slider)
+            {
+                logDebugP("RGBW: brightness from the colour value: %i %%, level %i (merged into the switch-on)", (int)(RgbwHelper::percentFromAmplitude(RgbwHelper::maxChannel(currentColor)) + 0.5f), sliderArc);
+                rgbwSetLevel(sliderArc); // _onArcPending: only changes the final level
+                setDimmState(sliderArc, true, true);
+            }
+        }
         else
         {
             sendColor();
@@ -1559,7 +1617,7 @@ void DaliChannel::queryActualLevel()
     _queryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_ACTUAL_LEVEL, false, true);
 }
 
-void DaliChannel::sendColor()
+void DaliChannel::sendColor(bool activate)
 {
     // TODO only send every 100ms?
     uint8_t r, g, b;
@@ -1568,9 +1626,9 @@ void DaliChannel::sendColor()
     {
         // RGBW is always transmitted as RGB level + white level, "colorSpace" does not apply
         if (rgbwSliderMode() && !RgbwHelper::isOff(_mix))
-            sendColorAsRGBW(_mix[0], _mix[1], _mix[2], _mix[3]); // mix only, the brightness goes as level
+            sendColorAsRGBW(_mix[0], _mix[1], _mix[2], _mix[3], activate); // mix only, the brightness goes as level
         else
-            sendColorAsRGBW(currentColor[0], currentColor[1], currentColor[2], currentColor[3]);
+            sendColorAsRGBW(currentColor[0], currentColor[1], currentColor[2], currentColor[3], activate);
         return;
     }
 
@@ -1607,7 +1665,7 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
 }
 
-void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
+void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool activate)
 {
     r = RgbwHelper::daliLevel(r);
     g = RgbwHelper::daliLevel(g);
@@ -1628,9 +1686,12 @@ void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w)
     daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR2, 255);
     daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_WAF_LEVEL, _isGroup);
 
-    // 3. Apply both temporary values at once
-    daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
-    _colorSentAt = millis() | 1; // never 0 (= none yet)
+    // 3. Apply both temporary values at once. Without ACTIVATE (mode 2) the following level command activates them.
+    if (activate)
+    {
+        daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
+        _colorSentAt = millis() | 1; // never 0 (= none yet)
+    }
 }
 
 // A level command was sent so recently that its fade can still be running in the driver

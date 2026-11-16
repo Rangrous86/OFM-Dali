@@ -383,7 +383,8 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
     openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
     openknx.console.printHelpLine("blackoff", "blackoff 0|1 => RGBW: 1 = fade colour to 0/0/0/0 before level off (default 0)");
-    openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on: 0 = level first, 1 = colour first; nnnn = fixed ms before the level (0 = automatic)");
+    openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on: 0 = level first, 1 = colour first (v12), 2 = automatic activation (v13aa, default); nnnn = fixed ms before the level (mode 1, 0 = automatic)");
+    openknx.console.printHelpLine("aawin", "aawin nnn => RGBW mode 2: collection window in ms before colour + level are sent together (default 80, 0 = at once)");
 }
 
 bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
@@ -461,6 +462,20 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
         logInfoP("RGBW margin = %i ms", v);
         return true;
     }
+    if (command == "aawin")
+    {
+        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
+        {
+            logErrorP("aawin nnn (ms, 0-1000, 0 = send at once), now %i", DaliChannel::rgbwAaWindowMs);
+            return true;
+        }
+        int v = std::stoi(arg);
+        if (v > 1000)
+            v = 1000;
+        DaliChannel::rgbwAaWindowMs = v;
+        logInfoP("RGBW automatic activation window = %i ms", v);
+        return true;
+    }
     if (command == "blackoff")
     {
         if (!hasArg || (arg != "0" && arg != "1"))
@@ -475,12 +490,12 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
     if (command == "onmode")
     {
         // onmode m [nnnn]
-        bool ok = hasArg && arg.length() >= 1 && (arg[0] == '0' || arg[0] == '1');
+        bool ok = hasArg && arg.length() >= 1 && (arg[0] == '0' || arg[0] == '1' || arg[0] == '2');
         if (ok && arg.length() > 1)
             ok = arg[1] == ' ' && arg.length() <= 6 && arg.find_first_not_of("0123456789", 2) == std::string::npos && arg.length() > 2;
         if (!ok)
         {
-            logErrorP("onmode m [nnnn] (m = 0 level first, 1 colour first, nnnn = ms before the level), now %i %i", DaliChannel::rgbwOnMode, DaliChannel::rgbwOnDelayMs);
+            logErrorP("onmode m [nnnn] (m = 0 level first, 1 colour first = v12, 2 automatic activation = v13aa, nnnn = ms before the level, mode 1 only), now %i %i", DaliChannel::rgbwOnMode, DaliChannel::rgbwOnDelayMs);
             return true;
         }
         DaliChannel::rgbwOnMode = arg[0] - '0';

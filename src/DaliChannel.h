@@ -11,7 +11,13 @@
 // Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
 // colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
 // #define RGBW_DIAG
-#define RGBW_BUILD_TAG "v12"
+#define RGBW_BUILD_TAG "v13aa"
+// RGBW automatic activation (onmode 2, default in this test version): the colour is only set temporarily
+// (no ACTIVATE) and the level command that follows activates it, so colour and level fade together in ONE fade.
+// Collection window (ms): a switch-on waits this long for a second telegram of the same command (Home Assistant:
+// colour, then brightness 20 ms later, or the other way round) and sends colour + level once. 0 = send at once.
+// Changeable at runtime: console command "aawin".
+#define RgbwAaWindowMs 80
 // RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
 // switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
 #define RgbwSettleMs 1500
@@ -27,7 +33,8 @@ class DaliChannel : public OpenKNX::Channel
 		// RGBW timing, changeable at runtime through the console (settle / margin / onmode)
 		static uint16_t rgbwSettleMs;   // fallback pause when the stored driver colour is unknown
 		static uint16_t rgbwMarginMs;   // reserve on top of the fade time
-		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level (default)
+		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level (v12 behaviour); 2 = automatic activation (default in v13aa)
+		static uint16_t rgbwAaWindowMs; // mode 2: collection window before colour + level are sent
 		static bool rgbwBlackOff;       // true: fade the colour to all 0 before the level off (the DA4-M shows white for all 0, so default false)
 		static uint16_t rgbwOnDelayMs;  // mode 1: pause before the level
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
@@ -42,6 +49,7 @@ class DaliChannel : public OpenKNX::Channel
 		bool isRgbw();
 		void rgbwOff();
 		void rgbwOn(uint8_t onValue);
+		void rgbwAutoActivate(uint8_t arc);
 		uint16_t rgbwOffWaitMs();
 		void markColourUnknown();
 		void rgbwBroadcastOn();
@@ -144,6 +152,8 @@ class DaliChannel : public OpenKNX::Channel
 		//RGBW: final "on value" after a colour switch-on from off, sent delayed so that it does not abort the
 		//colour fade of the driver (see koHandleColor)
 		bool _onArcPending = false;
+		// mode 2: the switch-on waits in its collection window (_onArcAt); colour and level go out together at the end
+		bool _aaPending = false;
 		uint8_t _onArcValue = 0;
 		unsigned long _onArcAt = 0;
 		void loopPendingOn();
@@ -233,9 +243,9 @@ class DaliChannel : public OpenKNX::Channel
 		void setSwitchState(bool value, bool isSwitchCommand = true);
 		void setDimmState(uint8_t value, bool isDimmCommand = true, bool isLastCommand = false);
 		void updateCurrentDimmValue();
-		void sendColor();
+		void sendColor(bool activate = true); // activate = false: RGBW only, temporary colour without ACTIVATE (mode 2)
 		void sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b);
-		void sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w);
+		void sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool activate = true);
 		void sendRgbwState();
 		void sendColorAsXY(uint8_t r, uint8_t g, uint8_t b);
 		void sendKoStateOnChange(uint16_t koNr, const KNXValue &value, const Dpt &type);
