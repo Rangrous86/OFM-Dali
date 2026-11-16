@@ -107,7 +107,7 @@ Nachher:
 - Bei HSV/RGB/TW/xyY meldet ein Farbtelegramm an einen ausgeschalteten Kanal weiterhin nur „Ein“ in den Statusobjekten, ohne DALI-Einschaltbefehl (Ausgangscode, `TODO get real`). Nur für RGBW korrigiert.
 - Die ETS-Applikation ist nicht in-place zu Geräten der Vorgängerversion updatebar (verschobener Parameter, `ReplacesVersions`).
 
-## 6. Fragen an den Maintainer (thewhobox)
+## 6. Fragen an den Maintainer
 
 1. Ist die Verschiebung von `colorType` im Parameterspeicher (Einzel: Byte 21, Gruppe: Byte 17) in Ordnung, oder soll das Layout anders erweitert werden?
 2. Soll das Weiß über `SET TEMPORARY WAF DIMLEVEL` (236) laufen, oder bevorzugst du `RGBWAF` (237)/einen anderen Weg?
