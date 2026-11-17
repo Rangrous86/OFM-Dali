@@ -33,6 +33,13 @@
 #define RgbwTxMs 310
 // RGBW: reserve (ms) on top of the fade time when deciding whether an own fade can still run
 #define RgbwFadeReserveMs 100
+// RGBW point 3 (colour alone / level alone on a lit channel), console "p3mode":
+// C = like RGB, A = driver targets (GO TO LAST ACTIVE LEVEL / COPY REPORT TO TEMPORARY, DALI-2),
+// B = own target with time check (any DT8 driver), auto = A for DALI-2 drivers, otherwise B
+#define RgbwP3LikeRgb 0
+#define RgbwP3DriverTargets 1
+#define RgbwP3OwnTarget 2
+#define RgbwP3Auto 255
 #define DimmStatusInterval 500
 
 class DaliChannel : public OpenKNX::Channel
@@ -43,6 +50,11 @@ class DaliChannel : public OpenKNX::Channel
 		static uint16_t rgbwWindowMs;
 		static uint16_t rgbwFadeMs;
 		static bool rgbwFadeQueryStarted;
+		// RGBW point 3 mode (console "p3mode") and the DALI version of the drivers, read ONCE at start
+		static uint8_t rgbwP3Mode;
+		static bool rgbwDali2;
+		static bool rgbwVersionQueryStarted;
+		static uint8_t rgbwEffectiveP3Mode();
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 
         DaliChannel(Dali::Master &master);
@@ -165,6 +177,8 @@ class DaliChannel : public OpenKNX::Channel
 		void loopRgbwWindow();
 		void loopFadeQuery();
 		uint32_t _fadeQueryId = 0;
+		void loopVersionQuery();
+		uint32_t _versionQueryId = 0;
 
 		// Time (0 = none) and target (DALI arc value) of the last own DAPC with a fixed target, and time of the last
 		// own colour (ACTIVATE or temporary colour with DAPC). Kept in RAM, checked against the fade time only

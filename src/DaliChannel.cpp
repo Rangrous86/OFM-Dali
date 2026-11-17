@@ -112,6 +112,7 @@ void DaliChannel::loop1()
     loopQueryLevel();
     loopRgbwWindow();
     loopFadeQuery();
+    loopVersionQuery();
     loopStopQuery();
 #ifdef RGBW_DIAG
     loopDiag();
@@ -180,6 +181,9 @@ void DaliChannel::diagStart()
 uint16_t DaliChannel::rgbwWindowMs = RgbwWindowMs;
 uint16_t DaliChannel::rgbwFadeMs = 1000;
 bool DaliChannel::rgbwFadeQueryStarted = false;
+uint8_t DaliChannel::rgbwP3Mode = RgbwP3Auto;
+bool DaliChannel::rgbwDali2 = false;
+bool DaliChannel::rgbwVersionQueryStarted = false;
 
 // ---------------------------------------------------------------------------------------------------------
 // RGBW control (v13, see README sections 1.5 and 5.1):
@@ -192,10 +196,16 @@ bool DaliChannel::rgbwFadeQueryStarted = false;
 //    colour ("automatic activation"), colour and level fade together in one fade.
 // 2. Switch-on (Schalten Ein, Dimmen absolut > 0) always sends the stored colour as temporary value with the DAPC.
 //    Without a known colour only the DAPC goes out (like RGB).
-// 3. Single channels only: a colour without level while the own level fade can still run goes out as temporary
-//    colour + DAPC with the level target the gateway sent itself (time check in RAM, no bus query). The reverse
-//    (a level while the own colour fade can still run) takes the temporary colour along as well.
-// 4. Groups: a colour without level goes out with ACTIVATE (members may be on different levels).
+// 3. A colour alone or a level alone on a lit channel also carries the other target, so a running fade of the
+//    driver is never left half way. Selected with rgbwP3Mode (console "p3mode"):
+//    A (DALI-2, default when the driver reports DALI-2): colour alone = temporary colour + GO TO LAST ACTIVE LEVEL
+//      (the driver takes its own level target), level alone = COPY REPORT TO TEMPORARY + DAPC (the driver takes its
+//      own colour). No time check, single channels and groups.
+//    B (any DT8 driver, default for DALI-1): single channels only, time check in RAM: a colour alone while the own
+//      level fade can still run = temporary colour + DAPC with the level target the gateway sent itself; a level
+//      alone while the own colour fade can still run = temporary colour (gateway colour) + DAPC.
+//    C (like RGB): colour alone = ACTIVATE, level alone = DAPC; an aborted fade is accepted.
+// 4. Groups in mode B: a colour without level goes out with ACTIVATE (members may be on different levels).
 // 5. A colour for a switched-off channel goes out with ACTIVATE like RGB, the lamp stays off and the status stays
 //    "off". Exception: brightness from the RGBW value (slider mode), there a colour > 0 switches on.
 // Every command that carries both targets makes an aborted fade harmless: the driver fades from where it is.
@@ -203,6 +213,14 @@ bool DaliChannel::rgbwFadeQueryStarted = false;
 bool DaliChannel::isRgbw()
 {
     return (_isGroup ? ParamDGWG_colorType : ParamDGW_colorType) == PT_colorType_RGBW;
+}
+
+// Effective mode for point 3: A, B or C (auto = A for DALI-2 drivers, otherwise B)
+uint8_t DaliChannel::rgbwEffectiveP3Mode()
+{
+    if (rgbwP3Mode == RgbwP3Auto)
+        return rgbwDali2 ? RgbwP3DriverTargets : RgbwP3OwnTarget;
+    return rgbwP3Mode;
 }
 
 // Time (ms, counted from queueing) in which a fade started by this gateway can still run in the driver:
@@ -277,24 +295,54 @@ void DaliChannel::rgbwFlush()
     _winPending = false;
     const bool colourKnown = !RgbwHelper::isOff(currentColor);
 
+    const uint8_t mode = rgbwEffectiveP3Mode();
+
     if (_winLevel > 0)
     {
-        // Level (with colour): from off always with the colour, otherwise if the colour changed in the window or the
-        // own colour fade can still run (the DAPC would abort it).
-        const bool withColour = colourKnown && (_winFromOff || _winColour || colourFadeMayRun());
-        if (withColour)
+        if (colourKnown && (_winFromOff || _winColour))
+        {
+            // switch-on or colour + level in the window: both targets from the gateway, one fade
             sendColor(false); // temporary colour, activated by the DAPC
-        daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
+            daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
+            logDebugP("RGBW: level %i with temporary colour (one fade)", _winLevel);
+        }
+        else if (!_winFromOff && mode == RgbwP3DriverTargets)
+        {
+            // A: level alone on a lit channel, the driver copies its own colour (report) into the temporary colour,
+            // the DAPC activates it: a running colour fade goes on to its target instead of stopping half way
+            daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::COPY_REPORT_TO_TEMP, _isGroup);
+            daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
+            logDebugP("RGBW: level %i with the driver's own colour (copy report to temporary)", _winLevel);
+        }
+        else if (colourKnown && mode == RgbwP3OwnTarget && colourFadeMayRun())
+        {
+            // B: the own colour fade can still run, the DAPC would abort it: take the gateway colour along
+            sendColor(false);
+            daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
+            logDebugP("RGBW: level %i with temporary colour (own colour fade may still run)", _winLevel);
+        }
+        else
+        {
+            daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
+            logDebugP("RGBW: level %i", _winLevel);
+        }
         _levelSentAt = millis() | 1; // never 0 (= none)
         _levelTarget = _winLevel;
-        logDebugP("RGBW: level %i%s", _winLevel, withColour ? " with temporary colour (one fade)" : "");
     }
     else if (_winColour && colourKnown)
     {
-        if (!_isGroup && levelFadeMayRun())
+        if (mode == RgbwP3DriverTargets)
         {
-            // point 3: the own level fade can still run, ACTIVATE would abort it. Send the colour with the level
-            // target the gateway sent itself, the driver fades from where it is to both targets.
+            // A: colour alone on a lit channel or group, the driver goes to its own level target (GO TO LAST ACTIVE
+            // LEVEL, DALI-2) and activates the temporary colour with it: one fade, a running level fade is not lost
+            sendColor(false);
+            daliMaster.sendCommand(_channelIndex, Dali::Command::GO_TO_LAST, _isGroup);
+            logDebugP("RGBW: colour with the driver's own level (go to last active level)");
+        }
+        else if (mode == RgbwP3OwnTarget && !_isGroup && levelFadeMayRun())
+        {
+            // B: the own level fade can still run, ACTIVATE would abort it. Send the colour with the level target
+            // the gateway sent itself, the driver fades from where it is to both targets.
             sendColor(false);
             daliMaster.sendArc(_channelIndex, _levelTarget, _isGroup);
             _levelSentAt = millis() | 1;
@@ -388,6 +436,40 @@ void DaliChannel::loopFadeQuery()
     uint32_t fade = fadeTimes[raw >> 4];
     rgbwFadeMs = fade > 65000 ? 65000 : fade; // 16 bit
     logInfoP("RGBW: fade time x=%i = %i ms (raw 0x%02X), used for all RGBW channels", raw >> 4, rgbwFadeMs, raw);
+}
+
+// Reads the DALI version ONCE (QUERY VERSION NUMBER at the first RGBW channel or group with a reference address).
+// DALI-2 answers 0x08 or higher (version 2.0 = 8). Decides the automatic mode of point 3 (A for DALI-2, otherwise B)
+// for all RGBW channels. Without an answer the driver counts as DALI-1.
+void DaliChannel::loopVersionQuery()
+{
+    if (_versionQueryId == 0)
+    {
+        if (rgbwVersionQueryStarted || !isRgbw())
+            return;
+        if (_isGroup && _dimmReferenceAddress == NoDimmReference)
+            return;
+        rgbwVersionQueryStarted = true;
+        _versionQueryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_VERSION, false, true);
+        if (_versionQueryId == 0)
+            logDebugP("RGBW: version query could not be sent, treated as DALI-1");
+        return;
+    }
+
+    Dali::Response response = daliMaster.getResponse(_versionQueryId);
+    if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
+        return;
+    _versionQueryId = 0;
+    if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
+        (response.frame.flags & DALI_FRAME_ERROR))
+    {
+        logInfoP("RGBW: version query failed, treated as DALI-1 (point 3 mode B)");
+        return;
+    }
+    uint8_t raw = response.frame.data & 0xFF;
+    rgbwDali2 = raw >= 0x08;
+    logInfoP("RGBW: DALI version 0x%02X = %s, point 3 mode %s", raw, rgbwDali2 ? "DALI-2" : "DALI-1",
+             rgbwEffectiveP3Mode() == RgbwP3DriverTargets ? "A (driver targets)" : (rgbwEffectiveP3Mode() == RgbwP3OwnTarget ? "B (own target)" : "C (like RGB)"));
 }
 
 // One level query a short time after the stop of a relative dimming, so that the status objects show the level

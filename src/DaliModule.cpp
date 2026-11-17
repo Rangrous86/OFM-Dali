@@ -375,6 +375,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
     openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W report (233-236), actual (9-12), temporary (201-204)");
+    openknx.console.printHelpLine("p3mode", "p3mode auto|0|1|2 => RGBW colour/level alone on a lit lamp: auto (A for DALI-2, else B), 1 = A driver targets, 2 = B own target, 0 = like RGB");
     openknx.console.printHelpLine("aawin", "aawin nnn => RGBW collection window in ms, telegrams within it go out as one command (default 80, 0 = at once)");
 }
 
@@ -421,6 +422,31 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
     if (command == "stepDown")
     {
         cmdHandleStepDown(hasArg, arg);
+        return true;
+    }
+
+    if (command == "p3mode")
+    {
+        if (!hasArg || arg.empty())
+        {
+            logErrorP("p3mode auto|0|1|2 (auto = A for DALI-2 drivers, otherwise B; 0 = C like RGB; 1 = A driver targets; 2 = B own target), now %s",
+                      DaliChannel::rgbwP3Mode == RgbwP3Auto ? "auto" : (DaliChannel::rgbwP3Mode == RgbwP3DriverTargets ? "1" : (DaliChannel::rgbwP3Mode == RgbwP3OwnTarget ? "2" : "0")));
+            return true;
+        }
+        if (arg == "auto")
+            DaliChannel::rgbwP3Mode = RgbwP3Auto;
+        else if (arg == "0")
+            DaliChannel::rgbwP3Mode = RgbwP3LikeRgb;
+        else if (arg == "1")
+            DaliChannel::rgbwP3Mode = RgbwP3DriverTargets;
+        else if (arg == "2")
+            DaliChannel::rgbwP3Mode = RgbwP3OwnTarget;
+        else
+        {
+            logErrorP("p3mode auto|0|1|2");
+            return true;
+        }
+        logInfoP("RGBW point 3 mode = %s (DALI-2 detected: %s)", arg.c_str(), DaliChannel::rgbwDali2 ? "yes" : "no");
         return true;
     }
 
