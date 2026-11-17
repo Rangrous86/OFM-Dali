@@ -906,9 +906,11 @@ void DaliModule::broadcastOn()
             groups[i].rgbwBroadcastOn();
 }
 
-// Broadcast off. Without RGBW channels this is the single broadcast frame as before. Otherwise the RGBW
-// channels first fade their colour to black (then switch their level off themselves), all other configured
-// channels are switched off at once, and devices unknown to the gateway get a broadcast off afterwards.
+// Broadcast off. Without RGBW channels this is the single broadcast frame as before. Otherwise every configured
+// channel and group is switched off on its own (RGBW through rgbwOff(): plain DAPC 0 by default, with
+// "blackoff 1" the colour fades to black first) and devices unknown to the gateway get a broadcast off after the
+// longest RGBW wait time. Note: that wait is only needed for "blackoff 1", by default it just delays the
+// broadcast off (open point, see README).
 void DaliModule::broadcastOff()
 {
     bool anyRgbw = false;

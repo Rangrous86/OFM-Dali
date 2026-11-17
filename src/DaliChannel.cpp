@@ -187,14 +187,21 @@ bool DaliChannel::rgbwBlackOff = false;
 uint16_t DaliChannel::rgbwOnDelayMs = 0; // 0 = automatic: wait until the driver reports that the colour fade is over
 
 // ---------------------------------------------------------------------------------------------------------
-// RGBW switch on/off (DA4-M findings, all from hardware tests):
+// RGBW switch on/off (DA4-M findings, all from hardware tests, see README section 2):
 // - The driver fades level AND colour changes (fade time, ~1 s) and has ONE fade at a time: every new fade
-//   command (DAPC, ACTIVATE) aborts the running one and the driver stays where it is.
-// - A colour is only stored/shown correctly when it is sent while the lamp is on.
-// So "off" is done in two steps: the colour fades to black (stored colour = black), then the level goes to 0.
-// The next switch-on starts with a black colour: level first (dark), when its fade is over the colour fades
-// in. If the stored colour is not known to be black (first use, scenes, other DALI masters) the old sequence
-// "level, colour, pause, level" is used (rgbwSettleMs).
+//   command (DAPC, ACTIVATE) aborts the running one and the driver stays where it is (B1).
+// - A colour sent at level 0 is taken over by the driver (B2) and fades unseen; the driver keeps it stored (B5).
+// - The DA4-M shows white for the colour 0/0/0/0 (B3).
+// Off: plain DAPC 0, the stored colour stays (fading to black first only with the console command "blackoff 1").
+// On from off (onmode 2, default since v13aa, "automatic activation"): the colour is only set temporarily (no
+// ACTIVATE) and the level command that follows activates it, colour and level fade together in one fade. A short
+// collection window (aawin) merges a colour and a brightness telegram that arrive close together (rgbwAutoActivate).
+// Colour changes of a lit channel still use ACTIVATE, and a level that follows waits for the end of the colour
+// fade (QUERY_STATUS, loopFadePoll), because of the single fade engine.
+// onmode 1 (console, v12 behaviour): colour first while the lamp is still dark, the level follows as soon as
+// QUERY_STATUS reports the end of the colour fade, with a fixed fallback time if the driver does not answer.
+// onmode 0 (console only): level first if the stored colour is known to be black, otherwise the old sequence
+// "level, colour, pause, level" (rgbwSettleMs).
 // ---------------------------------------------------------------------------------------------------------
 bool DaliChannel::isRgbw()
 {
@@ -215,8 +222,8 @@ void DaliChannel::markColourUnknown()
 
 void DaliChannel::rgbwOff()
 {
-    // A channel that is off for us gets the plain level off: a colour sent at level 0 may not be taken over
-    // by the driver, so "stored colour is black" could not be guaranteed.
+    // Default (blackoff 0): plain level off. With blackoff 1 the colour fades to black first, but only for a lit
+    // channel: a channel that is already off for us gets the plain level off as well.
     bool wasOn = currentState;
     currentState = false;
     _onArcPending = false;
@@ -489,8 +496,6 @@ void DaliChannel::loopColourQuery()
     _colQueryReport[_colQueryStep++] = response.frame.data & 0xFF;
 }
 
-// Sends the delayed final "on value" of an RGBW colour switch-on (see rgbwOn).
-
 // Asks the driver (QUERY_STATUS, bit 4 = fade running) whether the colour fade of an RGBW switch-on is over.
 // The answer was verified to cover colour fades at level 0.
 void DaliChannel::loopFadePoll()
@@ -556,6 +561,8 @@ void DaliChannel::loopStopQuery()
     queryActualLevel();
 }
 
+// Sends the delayed final "on value" of an RGBW colour switch-on or of a level that waits for a colour fade
+// (see rgbwOn, rgbwSetLevel, handleColorRGBW).
 void DaliChannel::loopPendingOn()
 {
     loopFadePoll();
@@ -1447,9 +1454,9 @@ bool DaliChannel::handleColorRGBW(GroupObject &ko)
         RgbwHelper::normalise(currentColor, _mix);
     sendRgbwState();
 
-    // Some drivers (seen with a DA4-M) ignore a colour change while the channel is off (arc level 0)
-    // and light up with the old colour. For a switched-off channel the colour is therefore sent in
-    // koHandleColor() while the channel is switched on; here only for channels that are already on.
+    // Only channels that are already on get the colour here. A switched-off channel is switched on in
+    // koHandleColor() through rgbwOn() (onmode 2: temporary colour + level in one fade; onmode 1: colour first,
+    // level after the colour fade).
     if (currentState)
     {
         // Slider mode: the largest channel is the brightness, the driver gets it as an own level command
