@@ -24,7 +24,7 @@
 class DaliChannel : public OpenKNX::Channel
 {
 	public:
-		// RGBW timing, changeable at runtime through the console (settle / margin / onmode)
+		// RGBW timing, changeable at runtime through the console (settle / margin / onmode / blackoff)
 		static uint16_t rgbwSettleMs;   // fallback pause when the stored driver colour is unknown
 		static uint16_t rgbwMarginMs;   // reserve on top of the fade time
 		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level (default)
