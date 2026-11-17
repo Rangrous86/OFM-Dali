@@ -348,7 +348,7 @@ Zeigen 2.2–2.4 die alte Farbe, trägt `v13` am DA4-M nicht: Rückfall `v1dev-v
 
 **Mögliche Code-Änderungen nach der ersten Runde** (bewusst noch nicht umgesetzt):
 - **C1:** Eine Farbe an einen ausgeschalteten Kanal läuft nicht über das Sammelfenster, deshalb gehen bei Home Assistant aus „aus“ zwei Farbsequenzen raus (Phase 4.2). Möglich: die Farbe auch dann ins Fenster legen und `ACTIVATE` nur senden, wenn keine Helligkeit folgt.
-- **C2:** Das Einschalten schickt immer die Farbe des Gateways mit. Das ist meist überflüssig (der Treiber hat sie schon), kostet ≈ 310 ms Buszeit pro Kanal und überschreibt Szenen- und Gruppenfarben (Abschnitt 4). Hält der Treiber die Farbe (Phase 3.9), kann das Einschalten wie bei RGB nur den `DAPC` senden.
+- **C2:** Das Einschalten schickt immer die Farbe des Gateways mit. Abwägung: Es **hilft**, wenn der Treiber eine andere Farbe hat als zuletzt gesendet, z. B. nach einem Stromausfall nur des Treibers (er startet dann mit seinen Einschaltwerten) oder falls er eine bei ausgeschalteter Lampe gesetzte Farbe nicht länger hält (B5b, Phase 3.9). Es **schadet**, weil es Szenen- und Gruppenfarben und Farben eines anderen DALI-Masters überschreibt (Abschnitt 4), und es kostet ≈ 310 ms Buszeit pro Kanal; im Normalfall hat der Treiber die Farbe schon. Alternative: Das Einschalten sendet wie bei RGB nur den `DAPC`. Entscheidung nach den Tests.
 - **C3:** `rgbwCancel` setzt den Zeitpunkt der letzten Farbe nicht zurück. In Modus B kann eine Helligkeit, die innerhalb von ≈ 1,4 s nach Farbe und Szene kommt, die Szenenfarbe überschreiben.
 
 ### 5.2 Schalter „Farbtelegramm bei ausgeschaltetem Kanal“
