@@ -1,8 +1,14 @@
-# OFM-Dali – RGBW-Erweiterung (Branch `v1dev` dieses Forks)
+# OFM-Dali – RGBW-Erweiterung (Branch `v1dev-v12` dieses Forks, archiviert)
+
+> **Archivstand v12 (gesichert am 17.11.2026).** Dieser Branch enthält den auf Hardware getesteten Stand `v12` (Commit `aa9a1eb`) plus eine reine Kommentarkorrektur (keine Verhaltensänderung). Er wird **nicht weiterentwickelt**: Die Arbeit geht im Branch `v1dev` mit `v13aa` (automatische Aktivierung beim Einschalten) weiter. Das v12-Einschaltverfahren ist dort weiterhin über die Konsole (`onmode 1`) verfügbar.
+>
+> **Upstream-Fix fehlt:** Der Upstream-Fix #7 von OpenKNX (`eed5a33`, „export group settings“, korrigiert vier vertauschte HCL-Parameternamen im Gruppen-Template) ist in diesem Branch **nicht** enthalten, nur in `v1dev`.
+>
+> Wo die README unten von „Branch `v1dev`“ und `v1dev-autoact` spricht, beschreibt sie den Stand vom 16.11.2026.
 
 Dieser Fork ergänzt das OpenKNX-DALI-Gateway um **RGBW (4. Kanal „Weiß“)** über **ein 6-Byte-Objekt nach KNX DPT 251.600** (`DPT_Colour_RGBW`) – so wie es z. B. das MDT DALI-Control-Gateway anbietet. Angesteuert werden DALI-DT8-Treiber mit **einer** Kurzadresse pro Leuchte (RGBW-Modus). Das DT6-Prinzip „vier Adressen für vier Kanäle“ wird nicht unterstützt.
 
-Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (abgezweigt bei Commit `6e7aca5`; am 17.11.2026 der Upstream-Stand `a120578` mit Fix #7 `eed5a33` „export group settings“ hereingemergt, er korrigiert vier vertauschte HCL-Parameternamen im Gruppen-Template, Logik und Speicherlayout unverändert). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
+Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (Commit `6e7aca5`, ohne den späteren Upstream-Fix #7, siehe Hinweis oben). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
 
 > **Stand (aufgeräumt am 16.11.2026):** Firmware-Stand `v12` (Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation **0.14**, erprobt mit einem echten Treiber (DA4-M, 4-Kanal-Konstantspannungs-Dimmer im Modus RGBW) am `GW-REG1-Dali`. Der RGBW-Kanal für sich ist ausgiebig getestet und läuft. **Es gibt zwei Testversionen:** `v12` (Branch `v1dev`, Verfahren A: Farbe, auf das Ende des Farb-Fades warten, dann Pegel) und `v13aa` (Branch `v1dev-autoact`, Verfahren B: automatische Aktivierung beim Einschalten, siehe [5.1](#51-einschalten-mit-farbe-abfrage-oder-automatische-aktivierung)). Besteht `v13aa` die Tests und funktioniert besser, wechseln wir darauf und testen mit ihr weiter; sonst bleibt `v12`. Offen sind die Wechselwirkungen mit Gruppen, Broadcast, Szenen, Sperre, mehreren Kanälen und den anderen Farbtypen (siehe [Abschnitt 5](#5-offene-punkte-und-entscheidungen)).
 
