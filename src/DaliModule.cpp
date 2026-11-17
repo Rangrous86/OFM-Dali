@@ -375,6 +375,8 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
     openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W report (233-236), actual (9-12), temporary (201-204)");
+    openknx.console.printHelpLine("aastat", "aastat => RGBW: read the DT8 automatic activation (gear features/status) of all configured RGBW channels");
+    openknx.console.printHelpLine("aaon", "aaon [yy] => RGBW: switch DT8 automatic activation on permanently (stored in the driver); without yy all configured RGBW channels");
     openknx.console.printHelpLine("p3mode", "p3mode auto|0|1|2 => RGBW colour/level alone on a lit lamp: auto (A for DALI-2, else B), 1 = A driver targets, 2 = B own target, 0 = like RGB");
     openknx.console.printHelpLine("aawin", "aawin nnn => RGBW collection window in ms, telegrams within it go out as one command (default 80, 0 = at once)");
 }
@@ -474,6 +476,18 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
     if (command == "getCol")
     {
         cmdHandleGetCol(hasArg, arg);
+        return true;
+    }
+
+    if (command == "aastat")
+    {
+        cmdHandleAaStat();
+        return true;
+    }
+
+    if (command == "aaon")
+    {
+        cmdHandleAaOn(hasArg, arg);
         return true;
     }
 
@@ -593,6 +607,83 @@ void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
         int16_t dtr0 = getInfo(addr, Dali::Command::QUERY_DTR);
         int16_t dtr1 = getInfo(addr, Dali::Command::QUERY_DTR1);
         logInfoP("EVG %i colour value sel %i: answer %i (0x%02X), DTR0 %i, DTR1 %i  [-1 = no answer]", addr, s, high, high & 0xFF, dtr0, dtr1);
+    }
+}
+
+// DT8 "automatic activation" (gear features/status bit 0): a temporary colour is taken over by the next arc power
+// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW v13 depends on it. Console only, never at start:
+// "aastat" reads it from all configured RGBW channels, "aaon [yy]" switches it on permanently (stored in the driver).
+int16_t DaliModule::rgbwQueryGearFeatures(uint8_t addr)
+{
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::ENABLE_DT, 0x08);
+    return getInfo(addr, Dali::ExtendedCommandDT8::QUERY_GEAR_FEATURES);
+}
+
+void DaliModule::cmdHandleAaStat()
+{
+    uint8_t count = 0;
+    for (int i = 0; i < ChannelCount; i++)
+    {
+        if (!channels[i].isConfigured() || !channels[i].isRgbw())
+            continue;
+        count++;
+        int16_t f = rgbwQueryGearFeatures(i);
+        if (f < 0)
+            logErrorP("EVG %i: gear features/status no answer", i);
+        else
+            logInfoP("EVG %i: gear features/status 0x%02X, automatic activation %s", i, f & 0xFF, (f & 0x01) ? "ON" : "OFF");
+    }
+    if (count == 0)
+        logInfoP("no configured RGBW channel");
+}
+
+void DaliModule::cmdHandleAaOn(bool hasArg, std::string arg)
+{
+    int target = -1; // -1 = all configured RGBW channels
+    if (hasArg && !arg.empty())
+    {
+        if (arg.length() > 2 || arg.find_first_not_of("0123456789") != std::string::npos || std::stoi(arg) > 63)
+        {
+            logErrorP("aaon [yy]  (yy = short address 0-63, without = all configured RGBW channels)");
+            return;
+        }
+        target = std::stoi(arg);
+    }
+
+    for (int i = 0; i < ChannelCount; i++)
+    {
+        if (target >= 0 ? i != target : (!channels[i].isConfigured() || !channels[i].isRgbw()))
+            continue;
+
+        int16_t before = rgbwQueryGearFeatures(i);
+        if (before < 0)
+        {
+            logErrorP("EVG %i: no answer, skipped", i);
+            continue;
+        }
+        if (before & 0x01)
+        {
+            logInfoP("EVG %i: automatic activation already ON (0x%02X)", i, before & 0xFF);
+            continue;
+        }
+
+        // STORE GEAR FEATURES/STATUS is a configuration command: it has to be received twice within 100 ms.
+        // Form 1: DTR0, ENABLE DT 8, command, command. Form 2 (if form 1 did not stick): ENABLE DT 8 before each.
+        bool on = false;
+        for (uint8_t form = 1; form <= 2 && !on; form++)
+        {
+            daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, 0x01); // bit 0 = automatic activation
+            daliMaster.sendSpecialCommand(Dali::SpecialCommand::ENABLE_DT, 0x08);
+            daliMaster.sendCommand(i, Dali::ExtendedCommandDT8::STORE_GEAR_FEATURES);
+            if (form == 2)
+                daliMaster.sendSpecialCommand(Dali::SpecialCommand::ENABLE_DT, 0x08);
+            daliMaster.sendCommand(i, Dali::ExtendedCommandDT8::STORE_GEAR_FEATURES);
+            int16_t after = rgbwQueryGearFeatures(i);
+            on = after >= 0 && (after & 0x01);
+            logInfoP("EVG %i: store form %i, gear features/status now 0x%02X, automatic activation %s", i, form, after & 0xFF, on ? "ON" : "OFF");
+        }
+        if (!on)
+            logErrorP("EVG %i: automatic activation could not be switched on (driver may not support it)", i);
     }
 }
 

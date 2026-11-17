@@ -134,6 +134,9 @@ class DaliModule : public OpenKNX::Module
 		void cmdHandleStepDown(bool hasArg, std::string arg);
 		void cmdHandleGetLvl(bool hasArg, std::string arg);
 		void cmdHandleGetCol(bool hasArg, std::string arg);
+		void cmdHandleAaStat();
+		void cmdHandleAaOn(bool hasArg, std::string arg);
+		int16_t rgbwQueryGearFeatures(uint8_t addr);
 
 		void stateHandleAssign(uint8_t *data, uint8_t *resultData, uint8_t &resultLength);
 		void stateHandleScanAndAddress(uint8_t *data, uint8_t *resultData, uint8_t &resultLength);
