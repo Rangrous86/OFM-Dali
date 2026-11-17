@@ -9,47 +9,40 @@
 
 #define DimmInterval 200
 // ---------------------------------------------------------------------------------------------------------
-// TEMPORARY DIAGNOSIS - ENABLED FOR THE v13aa TEST (T1/T2), MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
+// TEMPORARY DIAGNOSIS - ENABLED FOR THE v14 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
 // Purpose: check the automatic activation mechanism on the bus. The log shows every DALI frame (incl. our own
 // echo, DaliModule::loopDiagFrames), so it can be seen objectively that the temporary colour goes out WITHOUT
 // ACTIVATE and the DAPC follows right behind it. If T1 fails, this separates a sequence error of the gateway
 // from a driver that does not take over the temporary colour. In addition, QUERY_STATUS / QUERY_ACTUAL_LEVEL
-// probes at fixed times after every RGBW switch-on (and the "blackoff 1" switch-off, DaliChannel::loopDiag).
+// probes at fixed times after every RGBW command from the collection window (DaliChannel::loopDiag).
 // Side effects (test only): extra frames on the bus; the level probes update the "Dimmen Status" object, the
 // RGBW status (slider mode) and the "last value" with intermediate levels of the running fade. For tests of
 // status objects, "switch on with last value" or bus load, comment the define out again.
 // ---------------------------------------------------------------------------------------------------------
 #define RGBW_DIAG
 #ifdef RGBW_DIAG
-#define RGBW_BUILD_TAG "v13aa-diag"
+#define RGBW_BUILD_TAG "v14-diag"
 #else
-#define RGBW_BUILD_TAG "v13aa"
+#define RGBW_BUILD_TAG "v14"
 #endif
-// RGBW automatic activation (onmode 2, default in this test version): the colour is only set temporarily
-// (no ACTIVATE) and the level command that follows activates it, so colour and level fade together in ONE fade.
-// Collection window (ms): a switch-on waits this long for a second telegram of the same command (Home Assistant:
-// colour, then brightness 20 ms later, or the other way round) and sends colour + level once. 0 = send at once.
+// RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
+// apart, in any order) are merged into one DALI command (temporary colour + DAPC = one fade). 0 = send at once.
 // Changeable at runtime: console command "aawin".
-#define RgbwAaWindowMs 80
-// RGBW: default pause (ms, counted from queueing the colour sequence) before the final on value of a colour
-// switch-on. The colour sequence itself needs ~300 ms on the bus. Changeable at runtime: console command "settle".
-#define RgbwSettleMs 1500
-// RGBW: time the colour sequence (12 DALI frames) needs on the bus before its ACTIVATE is sent
+#define RgbwWindowMs 80
+// RGBW: bus time of a colour sequence in front of a DAPC (10-12 DALI frames)
 #define RgbwTxMs 310
-// RGBW: default reserve (ms) on top of the driver's fade time
-#define RgbwMarginMs 100
+// RGBW: reserve (ms) on top of the fade time when deciding whether an own fade can still run
+#define RgbwFadeReserveMs 100
 #define DimmStatusInterval 500
 
 class DaliChannel : public OpenKNX::Channel
 {
 	public:
-		// RGBW timing, changeable at runtime through the console (settle / margin / onmode / aawin / blackoff)
-		static uint16_t rgbwSettleMs;   // fallback pause when the stored driver colour is unknown
-		static uint16_t rgbwMarginMs;   // reserve on top of the fade time
-		static uint8_t rgbwOnMode;      // 0 = level first, then colour; 1 = colour first, then level (v12 behaviour); 2 = automatic activation (default in v13aa)
-		static uint16_t rgbwAaWindowMs; // mode 2: collection window before colour + level are sent
-		static bool rgbwBlackOff;       // true: fade the colour to all 0 before the level off (the DA4-M shows white for all 0, so default false)
-		static uint16_t rgbwOnDelayMs;  // mode 1: pause before the level
+		// RGBW: collection window (console "aawin") and the fade time of the drivers, read ONCE at start from the
+		// first RGBW channel and used for all of them
+		static uint16_t rgbwWindowMs;
+		static uint16_t rgbwFadeMs;
+		static bool rgbwFadeQueryStarted;
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 
         DaliChannel(Dali::Master &master);
@@ -58,14 +51,12 @@ class DaliChannel : public OpenKNX::Channel
 		void loop() override;
 		void loop1();
 
-		// RGBW (DPT 251.600) switch on/off sequences, see DaliChannel.cpp
+		// RGBW (DPT 251.600), see the concept comment in DaliChannel.cpp
 		bool isRgbw();
 		void rgbwOff();
-		void rgbwOn(uint8_t onValue);
-		void rgbwAutoActivate(uint8_t arc);
-		uint16_t rgbwOffWaitMs();
-		void markColourUnknown();
+		void rgbwCancel();
 		void rgbwBroadcastOn();
+		void rgbwBroadcastOff();
 
 		void setup() override;
 		void processInputKo(GroupObject &ko) override;
@@ -123,7 +114,6 @@ class DaliChannel : public OpenKNX::Channel
 		uint8_t *currentDimmValue;
 		DimmType currentDimmType;
 		uint8_t _dimmStatusInterval = 0;
-		bool _dimmWaitLogged = false; // RGBW: log "dimming waits for the colour fade" once per dimming
 		uint8_t _dimmReferenceAddress = NoDimmReference;
 		//Staircase light
 		unsigned long startTime = 0;
@@ -162,27 +152,28 @@ class DaliChannel : public OpenKNX::Channel
 		uint16_t _queryInterval = 0;
 		unsigned long _lastValueQuery = 0;
 
-		//RGBW: final "on value" after a colour switch-on from off, sent delayed so that it does not abort the
-		//colour fade of the driver (see koHandleColor)
-		bool _onArcPending = false;
-		// mode 2: the switch-on waits in its collection window (_onArcAt); colour and level go out together at the end
-		bool _aaPending = false;
-		uint8_t _onArcValue = 0;
-		unsigned long _onArcAt = 0;
-		void loopPendingOn();
-		void loopRgbwSeq();
+		// RGBW collection window: newest requested level (0 = none), colour changed, request came while off
+		bool _winPending = false;
+		unsigned long _winAt = 0;
+		uint8_t _winLevel = 0;
+		bool _winColour = false;
+		bool _winFromOff = false;
+		void rgbwRequestLevel(uint8_t arc);
+		void rgbwRequestColour();
+		void rgbwStartWindow();
+		void rgbwFlush();
+		void loopRgbwWindow();
 		void loopFadeQuery();
-		void loopFadePoll();
-		// switch-on with colour first: wait for the end of the colour fade (QUERY_STATUS) before the level
-		bool _fadePolling = false;
-		unsigned long _fadePollAt = 0;
-		uint32_t _fadePollId = 0;
-		unsigned long _fadePollT0 = 0;
+		uint32_t _fadeQueryId = 0;
 
-		// Time of the last colour sequence sent to the driver (0 = none yet). The driver has one fade engine:
-		// a level command during the colour fade aborts it, so a level that follows a colour telegram of a lit
-		// channel closely (e.g. Home Assistant: colour, then brightness 20 ms later) waits for the end of the fade.
-		unsigned long _colorSentAt = 0;
+		// Time (0 = none) and target (DALI arc value) of the last own DAPC with a fixed target, and time of the last
+		// own colour (ACTIVATE or temporary colour with DAPC). Kept in RAM, checked against the fade time only
+		// (no bus query), cleared when expired.
+		unsigned long _levelSentAt = 0;
+		uint8_t _levelTarget = 0;
+		unsigned long _colourSentAt = 0;
+		uint16_t rgbwFadeWindowMs();
+		bool levelFadeMayRun();
 		bool colourFadeMayRun();
 
 		// RGBW brightness from the colour value ("slider" mode, parameter rgbwBri): the largest channel of the RGBW
@@ -193,43 +184,13 @@ class DaliChannel : public OpenKNX::Channel
 		uint8_t _lastLevelArc = 0; // last level reported through setDimmState (DALI arc value)
 		bool rgbwSliderMode();
 		uint8_t rgbwArcFromColour();
-		void rgbwSetLevel(uint8_t arc);
 		void rgbwSliderStatus(uint8_t arc);
-
-		// Counterpart of the above: the ACTIVATE of a colour sequence aborts a level fade that is still running
-		// (one fade engine). A level command that was sent shortly before a colour telegram of a lit channel
-		// (colour 20 ms after the level, the opposite order of Home Assistant) is therefore sent again after the
-		// colour fade. Time and target (DALI arc value) of the last level command of this channel (0 = none yet).
-		unsigned long _levelSentAt = 0;
-		uint8_t _levelTarget = 0;
-		bool levelFadeMayRun();
 
 		// After the stop of a relative dimming the real level is queried once (the last UP/DOWN is still running
 		// in the driver when the stop arrives, so the level queried during dimming is one step behind).
 		unsigned long _stopQueryAt = 0;
 		void loopStopQuery();
 
-		// Colour of the driver at start: the DA4-M answers QUERY_COLOUR_VALUE with the report selectors 233-236
-		// (R, G, B, W) with the colour it shows (also at level 0). Read once after the fade time query and taken
-		// over if no colour telegram came in the meantime (see loopColourQuery).
-		bool _colQueryDone = false;
-		uint8_t _colQueryStep = 0;
-		uint32_t _colQueryId = 0;
-		uint8_t _colQueryReport[4] = {255, 255, 255, 255};
-		void loopColourQuery();
-
-		// Driver colour is known to be black: we sent R=G=B=W=0 last and nothing changed it since
-		bool _driverBlack = false;
-		// off sequence: colour fades to black, then the level is switched off (_offAt)
-		bool _offPending = false;
-		unsigned long _offAt = 0;
-		// on sequence from level 0: level first, the colour follows when the level fade is over (_colorAt)
-		bool _colorPending = false;
-		unsigned long _colorAt = 0;
-		// fade time of the driver (QUERY_FADE_SPEEDS), default 1 s
-		uint16_t _fadeMs = 1000;
-		bool _fadeQueried = false;
-		uint32_t _fadeQueryId = 0;
 #ifdef RGBW_DIAG
 		unsigned long _diagStart = 0;
 		uint8_t _diagStep = 0;
@@ -256,7 +217,7 @@ class DaliChannel : public OpenKNX::Channel
 		void setSwitchState(bool value, bool isSwitchCommand = true);
 		void setDimmState(uint8_t value, bool isDimmCommand = true, bool isLastCommand = false);
 		void updateCurrentDimmValue();
-		void sendColor(bool activate = true); // activate = false: RGBW only, temporary colour without ACTIVATE (mode 2)
+		void sendColor(bool activate = true); // activate = false: RGBW only, temporary colour without ACTIVATE
 		void sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b);
 		void sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w, bool activate = true);
 		void sendRgbwState();
@@ -277,7 +238,7 @@ class DaliChannel : public OpenKNX::Channel
 		void handleColorRGB(GroupObject &ko);
 		void handleColorTW(GroupObject &ko);
 		void handleColorXYY(GroupObject &ko);
-		bool handleColorRGBW(GroupObject &ko);
+		void handleColorRGBW(GroupObject &ko);
 		void koHandleColorRel(GroupObject &ko, ColorChannel channel);
 		void koHandleColorAbs(GroupObject &ko, ColorChannel channel);
 		void koHandleHclCurve(GroupObject &ko);

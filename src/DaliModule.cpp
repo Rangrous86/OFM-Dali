@@ -153,11 +153,6 @@ void DaliModule::loop(bool configured)
 #ifdef RGBW_DIAG
     loopDiagFrames();
 #endif
-    if (_broadcastOffPending && (long)(millis() - _broadcastOffAt) >= 0)
-    {
-        _broadcastOffPending = false;
-        daliMaster.sendArc(BroadcastAddress, 0x00, true);
-    }
     OpenKNX::DateTime currentTime = openknx.time.getLocalTime();
     if (currentTime.minute != _lastTimeMinute)
     {
@@ -380,11 +375,7 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("stepDown", "stepDown xyy => send x times StepDown to evg y");
     openknx.console.printHelpLine("getLvl", "getLvl yy => get level of evg y");
     openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W report (233-236), actual (9-12), temporary (201-204)");
-    openknx.console.printHelpLine("settle", "settle nnnn => RGBW fallback pause in ms (colour of the driver unknown), 0-5000");
-    openknx.console.printHelpLine("margin", "margin nnn => RGBW reserve in ms on top of the fade time, 0-2000");
-    openknx.console.printHelpLine("blackoff", "blackoff 0|1 => RGBW: 1 = fade colour to 0/0/0/0 before level off (default 0)");
-    openknx.console.printHelpLine("onmode", "onmode m [nnnn] => RGBW on: 0 = level first, 1 = colour first (v12), 2 = automatic activation (v13aa, default); nnnn = fixed ms before the level (mode 1, 0 = automatic)");
-    openknx.console.printHelpLine("aawin", "aawin nnn => RGBW mode 2: collection window in ms before colour + level are sent together (default 80, 0 = at once)");
+    openknx.console.printHelpLine("aawin", "aawin nnn => RGBW collection window in ms, telegrams within it go out as one command (default 80, 0 = at once)");
 }
 
 bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
@@ -433,78 +424,18 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
         return true;
     }
 
-    if (command == "settle")
-    {
-        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
-        {
-            logErrorP("settle nnnn (ms, 0-5000), now %i", DaliChannel::rgbwSettleMs);
-            return true;
-        }
-        int v = std::stoi(arg);
-        if (v > 5000)
-            v = 5000;
-        DaliChannel::rgbwSettleMs = v;
-        logInfoP("RGBW settle time = %i ms", v);
-        return true;
-    }
-
-    if (command == "margin")
-    {
-        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
-        {
-            logErrorP("margin nnn (ms, 0-2000), now %i", DaliChannel::rgbwMarginMs);
-            return true;
-        }
-        int v = std::stoi(arg);
-        if (v > 2000)
-            v = 2000;
-        DaliChannel::rgbwMarginMs = v;
-        logInfoP("RGBW margin = %i ms", v);
-        return true;
-    }
     if (command == "aawin")
     {
         if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
         {
-            logErrorP("aawin nnn (ms, 0-1000, 0 = send at once), now %i", DaliChannel::rgbwAaWindowMs);
+            logErrorP("aawin nnn (ms, 0-1000, 0 = send at once), now %i", DaliChannel::rgbwWindowMs);
             return true;
         }
         int v = std::stoi(arg);
         if (v > 1000)
             v = 1000;
-        DaliChannel::rgbwAaWindowMs = v;
-        logInfoP("RGBW automatic activation window = %i ms", v);
-        return true;
-    }
-    if (command == "blackoff")
-    {
-        if (!hasArg || (arg != "0" && arg != "1"))
-        {
-            logErrorP("blackoff 0|1 (1 = fade colour to 0/0/0/0 before the level off), now %i", DaliChannel::rgbwBlackOff);
-            return true;
-        }
-        DaliChannel::rgbwBlackOff = arg == "1";
-        logInfoP("RGBW black before off = %i", DaliChannel::rgbwBlackOff);
-        return true;
-    }
-    if (command == "onmode")
-    {
-        // onmode m [nnnn]
-        bool ok = hasArg && arg.length() >= 1 && (arg[0] == '0' || arg[0] == '1' || arg[0] == '2');
-        if (ok && arg.length() > 1)
-            ok = arg[1] == ' ' && arg.length() <= 6 && arg.find_first_not_of("0123456789", 2) == std::string::npos && arg.length() > 2;
-        if (!ok)
-        {
-            logErrorP("onmode m [nnnn] (m = 0 level first, 1 colour first = v12, 2 automatic activation = v13aa, nnnn = ms before the level, mode 1 only), now %i %i", DaliChannel::rgbwOnMode, DaliChannel::rgbwOnDelayMs);
-            return true;
-        }
-        DaliChannel::rgbwOnMode = arg[0] - '0';
-        if (arg.length() > 2)
-        {
-            int v = std::stoi(arg.substr(2));
-            DaliChannel::rgbwOnDelayMs = v > 5000 ? 5000 : v;
-        }
-        logInfoP("RGBW on mode = %i, level delay = %i ms", DaliChannel::rgbwOnMode, DaliChannel::rgbwOnDelayMs);
+        DaliChannel::rgbwWindowMs = v;
+        logInfoP("RGBW collection window = %i ms", v);
         return true;
     }
 
@@ -893,10 +824,10 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
     logDebugP("Broadcast Switch set");
 }
 
-// Broadcast on: the level goes to everybody; RGBW channels additionally restore their colour (see DaliChannel::rgbwOn)
+// Broadcast on: DAPC 254 to everybody (as before); a switched-off RGBW channel or group additionally gets its colour
+// together with the same level (temporary colour + DAPC, see DaliChannel::rgbwBroadcastOn)
 void DaliModule::broadcastOn()
 {
-    _broadcastOffPending = false;
     daliMaster.sendArc(BroadcastAddress, 0xFE, true);
     for (int i = 0; i < ChannelCount; i++)
         if (channels[i].isConfigured() && channels[i].isRgbw())
@@ -906,65 +837,29 @@ void DaliModule::broadcastOn()
             groups[i].rgbwBroadcastOn();
 }
 
-// Broadcast off. Without RGBW channels this is the single broadcast frame as before. Otherwise every configured
-// channel and group is switched off on its own (RGBW through rgbwOff(): plain DAPC 0 by default, with
-// "blackoff 1" the colour fades to black first) and devices unknown to the gateway get a broadcast off after the
-// longest RGBW wait time. Note: that wait is only needed for "blackoff 1", by default it just delays the
-// broadcast off (open point, see README).
+// Broadcast off: one DAPC 0 to everybody (as before). RGBW channels and groups only drop a pending collection window
+// and their level target.
 void DaliModule::broadcastOff()
 {
-    bool anyRgbw = false;
+    daliMaster.sendArc(BroadcastAddress, 0x00, true);
     for (int i = 0; i < ChannelCount; i++)
         if (channels[i].isConfigured() && channels[i].isRgbw())
-            anyRgbw = true;
+            channels[i].rgbwBroadcastOff();
     for (int i = 0; i < GroupCount; i++)
         if (groups[i].isConfigured() && groups[i].isRgbw())
-            anyRgbw = true;
-
-    if (!anyRgbw)
-    {
-        daliMaster.sendArc(BroadcastAddress, 0x00, true);
-        return;
-    }
-
-    uint16_t wait = 0;
-    for (int i = 0; i < ChannelCount; i++)
-    {
-        if (!channels[i].isConfigured())
-            continue;
-        if (channels[i].isRgbw())
-        {
-            channels[i].rgbwOff();
-            if (channels[i].rgbwOffWaitMs() > wait)
-                wait = channels[i].rgbwOffWaitMs();
-        }
-        else
-            daliMaster.sendArc(i, 0x00, false);
-    }
-    for (int i = 0; i < GroupCount; i++)
-    {
-        if (!groups[i].isConfigured())
-            continue;
-        if (groups[i].isRgbw())
-        {
-            groups[i].rgbwOff();
-            if (groups[i].rgbwOffWaitMs() > wait)
-                wait = groups[i].rgbwOffWaitMs();
-        }
-        else
-            daliMaster.sendArc(i, 0x00, true);
-    }
-    logDebugP("Broadcast off with RGBW channels: broadcast level off in %i ms", wait + 50);
-    _broadcastOffAt = millis() + wait + 50;
-    _broadcastOffPending = true;
+            groups[i].rgbwBroadcastOff();
 }
 
-void DaliModule::markAllColoursUnknown()
+// A DALI scene changes levels (and colours) in the drivers: RGBW channels and groups drop a pending collection window
+// and their level target
+void DaliModule::rgbwCancelAll()
 {
     for (int i = 0; i < ChannelCount; i++)
-        channels[i].markColourUnknown();
+        if (channels[i].isConfigured() && channels[i].isRgbw())
+            channels[i].rgbwCancel();
     for (int i = 0; i < GroupCount; i++)
-        groups[i].markColourUnknown();
+        if (groups[i].isConfigured() && groups[i].isRgbw())
+            groups[i].rgbwCancel();
 }
 
 void DaliModule::koHandleDimm(GroupObject &ko)
@@ -1049,7 +944,7 @@ void DaliModule::koHandleScene(GroupObject &ko)
             continue;
 
         logDebugP("Found scene number: %u, save: %u", i, save);
-        markAllColoursUnknown(); // a scene may change the colours stored in the drivers
+        rgbwCancelAll(); // a scene changes levels and colours in the drivers
         if (save && !ParamDGWS_save)
         {
             logDebugP("Save not allowed. Skip!");
