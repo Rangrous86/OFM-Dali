@@ -4,7 +4,7 @@ Dieser Fork ergänzt das OpenKNX-DALI-Gateway um **RGBW (4. Kanal „Weiß“)**
 
 Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (abgezweigt bei Commit `6e7aca5`; am 17.11.2026 der Upstream-Stand `a120578` mit Fix #7 `eed5a33` „export group settings“ hereingemergt, er korrigiert vier vertauschte HCL-Parameternamen im Gruppen-Template, Logik und Speicherlayout unverändert). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
 
-> **Stand (17.11.2026):** Branch `v1dev` = Firmware-Stand **`v13`** (Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation **0.14** (keine ETS-Änderung gegenüber `v12`; wegen des Upstream-Fixes #7 muss die Applikation aber neu erzeugt werden, siehe 6.1). `v13` steuert RGBW **wie den bestehenden RGB-Code** an (jedes Telegramm = ein DALI-Befehl = ein Fade, keine Busabfrage im Betrieb, kein Warten auf das Ende eines Fades) und weicht nur dort ab, wo der Treiber mit seiner einzigen Fade-Engine es verlangt: Sammelfenster, temporäre Farbe + `DAPC` in einem Fade (automatische Aktivierung), siehe [1.5](#15-ein--und-ausschalten) und [5.1](#51-ansteuerung-in-v13-konzept-und-testplan). **`v13` ist noch nicht kompiliert und nicht auf Hardware getestet**; als Nächstes steht der Testplan in 5.1 an. Für diesen Test ist die Diagnose `RGBW_DIAG` vorübergehend eingeschaltet (Build-Tag `v13-diag`, siehe 1.7); sie wird in der finalen Version entfernt.
+> **Stand (17.11.2026):** Branch `v1dev` = Firmware-Stand **`v13`** (Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation: Gegenüber `v12` ist nur das Gruppen-Template durch den Upstream-Fix #7 geändert (vier HCL-Parameternamen); die RGBW-Ansteuerung von `v13` ändert an der ETS nichts (keine neuen Parameter oder Objekte, gleiche Speicherbelegung). Die Applikation muss neu erzeugt werden; vor dem Update die Applikationsversion prüfen (siehe 6.1). `v13` steuert RGBW **wie den bestehenden RGB-Code** an (jedes Telegramm = ein DALI-Befehl = ein Fade, keine Busabfrage im Betrieb, kein Warten auf das Ende eines Fades) und weicht nur dort ab, wo der Treiber mit seiner einzigen Fade-Engine es verlangt: Sammelfenster, temporäre Farbe + `DAPC` in einem Fade (automatische Aktivierung), siehe [1.5](#15-ein--und-ausschalten) und [5.1](#51-ansteuerung-in-v13-konzept-und-testplan). **`v13` ist noch nicht kompiliert und nicht auf Hardware getestet**; als Nächstes steht der Testplan in 5.1 an. Für diesen Test ist die Diagnose `RGBW_DIAG` vorübergehend eingeschaltet (Build-Tag `v13-diag`, siehe 1.7); sie wird in der finalen Version entfernt.
 >
 > Der Vorgänger **`v12`** (Verfahren „Farbe bei Pegel 0, per `QUERY_STATUS` auf das Ende des Farb-Fades warten, dann Pegel“) ist mit einem echten Treiber (DA4-M, 4-Kanal-Konstantspannungs-Dimmer im Modus RGBW) am `GW-REG1-Dali` ausgiebig getestet. Er liegt archiviert im Branch **`v1dev-v12`** und wird nicht mehr verändert; er ist der Rückfall, falls `v13` am Treiber nicht funktioniert. Alle Testergebnisse in dieser README mit Version v6–v12 stammen von diesem Vorgänger. Ein Zwischenentwurf `v13aa` (automatische Aktivierung nur beim Einschalten) wurde nie gebaut oder getestet und ist durch `v13` ersetzt.
 >
@@ -206,7 +206,7 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 
 **Status: umgesetzt (Branch `v1dev`, Build-Tag `v13-diag`), noch nicht kompiliert und nicht auf Hardware getestet.**
 
-**Warum der Wechsel:** `v12` löste die Fade-Abbrüche (B1) mit `QUERY_STATUS`-Abfragen und Warten auf das Ende des Farb-Fades. Das funktioniert am DA4-M, kostet aber zwei Fades nacheinander, Buszeit und Sonderfälle. Der Maintainer möchte keine Abfragen und kein Warten. `v13` folgt deshalb dem RGB-Code und nutzt die automatische Aktivierung der DT8-Norm: Eine temporäre Farbe ohne `ACTIVATE` wird vom folgenden `DAPC` übernommen, Farbe und Pegel faden in einem Fade. Ablauf und Regeln: [1.5](#15-ein--und-ausschalten).
+**Warum der Wechsel:** `v12` löste die Fade-Abbrüche (B1) mit `QUERY_STATUS`-Abfragen und Warten auf das Ende des Farb-Fades. Das funktioniert am DA4-M, kostet aber zwei Fades nacheinander, Buszeit und Sonderfälle. `v13` folgt deshalb dem RGB-Code und nutzt die automatische Aktivierung der DT8-Norm: Eine temporäre Farbe ohne `ACTIVATE` wird vom folgenden `DAPC` übernommen, Farbe und Pegel faden in einem Fade. Ablauf und Regeln: [1.5](#15-ein--und-ausschalten).
 
 **Voraussetzung:** Der Treiber muss die automatische Aktivierung können. Das ist am DA4-M **ungetestet** und wird mit T2, T5 und T9 geprüft.
 
@@ -233,11 +233,11 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 | T13 (beobachten) | Broadcast Ein / Aus mit A0 als RGBW-Kanal | Aus: sofort ein `DAPC 0`. Ein: `DAPC FE`, danach temporäre Farbe + `DAPC FE` an A0 (1.8) |
 | T14 | Regression der anderen Farbtypen und Kanaltypen (Testfall 14, Diagnose dafür auskommentieren) | unverändert |
 
-**Entscheidungsregel:** Bestehen T1–T10, bleibt `v13` der Stand von `v1dev`, und es geht mit 5.6 weiter. Kann der DA4-M keine automatische Aktivierung (T2, T5 oder T9 zeigen die alte Farbe), ist `v1dev-v12` der Rückfall; das Ergebnis wird als Befund dokumentiert und mit dem Maintainer besprochen.
+**Entscheidungsregel:** Bestehen T1–T10, bleibt `v13` der Stand von `v1dev`, und es geht mit 5.6 weiter. Kann der DA4-M keine automatische Aktivierung (T2, T5 oder T9 zeigen die alte Farbe), ist `v1dev-v12` der Rückfall; das Ergebnis wird als Befund dokumentiert.
 
 ### 5.2 Schalter „Farbtelegramm bei ausgeschaltetem Kanal“
 
-**Status: für RGBW durch `v13` erledigt, ein ETS-Schalter ist vorerst nicht geplant.** Der Maintainer möchte als Standard „nur Farbe setzen, ohne Einschalten“, damit bestehende Installationen gleich bleiben. `v13` macht das bei RGBW so (wie RGB, Lampe bleibt aus, Status bleibt *Aus*); nur der Slider-Modus schaltet ein, weil dort die Helligkeit im Farbwert steckt. Damit entfällt für RGBW die früher geplante ETS-Version 0.15. Die anderen Farbtypen (HSV, RGB, TW, xyY) bleiben unverändert, einschließlich des falschen Status *Ein* (`TODO get real`); ob das korrigiert werden soll, ist eine Frage an den Maintainer.
+**Status: für RGBW durch `v13` erledigt, ein ETS-Schalter ist vorerst nicht geplant.** Als Standard gilt bei RGBW wie bei RGB: Farbe setzen, ohne einzuschalten, damit bestehende Installationen gleich bleiben. `v13` macht das bei RGBW so (wie RGB, Lampe bleibt aus, Status bleibt *Aus*); nur der Slider-Modus schaltet ein, weil dort die Helligkeit im Farbwert steckt. Die anderen Farbtypen (HSV, RGB, TW, xyY) bleiben unverändert, einschließlich des falschen Status *Ein* (`TODO get real`); ob das korrigiert werden soll, ist eine Frage an den Maintainer.
 
 ### 5.3 HCL mit RGBW
 
@@ -302,7 +302,7 @@ git checkout -B v1dev rgbw/v1dev
 
 **2. ETS-Applikation und Header erzeugen**
 
-In `GW-REG1-Dali/src/DaliGateway.xml` die `ApplicationVersion` erhöhen (aktuell `0.14.0`; Teil `x.y` = ETS-Version, `z` = Firmware-Revision; `ReplacesVersions` nennt die ersetzten Versionen), dann:
+In `GW-REG1-Dali/src/DaliGateway.xml` die `ApplicationVersion` erhöhen (Teil `x.y` = ETS-Version, `z` = Firmware-Revision; `ReplacesVersions` nennt die ersetzten Versionen), dann:
 
 ```powershell
 cd ..\GW-REG1-Dali
@@ -310,6 +310,8 @@ OpenKNXproducer create --Debug -h include/knxprod.h src/DaliGateway
 ```
 
 Dabei entsteht `include/knxprod.h` mit `PT_colorType_RGBW` (= 4) und den neu berechneten Parameter-Offsets sowie `src/DaliGateway.knxprod` für die ETS. `include/knxprod.h` nicht von Hand ändern, sie wird immer vom Producer erzeugt.
+
+> **Applikationsversion vor jedem Update prüfen:** Die neue `ApplicationVersion` muss höher sein als die bereits in der ETS importierte, und die im Gerät verwendete Version muss in `ReplacesVersions` stehen, sonst lässt sich das Gerät nicht per *Aktualisieren* umstellen (B16). Eine schon einmal vergebene Version nicht wiederverwenden: Die ETS kennt sie bereits, und ob sie einen geänderten Inhalt unter derselben Nummer übernimmt, ist nicht sicher. Die Versionsnummern in dieser README gelten nur für unseren Testaufbau; für ein Release wird die Version beim Pull Request festgelegt.
 
 **3. ETS importieren**
 
