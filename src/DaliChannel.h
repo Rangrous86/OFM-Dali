@@ -9,7 +9,7 @@
 
 #define DimmInterval 200
 // ---------------------------------------------------------------------------------------------------------
-// TEMPORARY DIAGNOSIS - ENABLED FOR THE v14 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
+// TEMPORARY DIAGNOSIS - ENABLED FOR THE v13 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
 // Purpose: check the automatic activation mechanism on the bus. The log shows every DALI frame (incl. our own
 // echo, DaliModule::loopDiagFrames), so it can be seen objectively that the temporary colour goes out WITHOUT
 // ACTIVATE and the DAPC follows right behind it. If T1 fails, this separates a sequence error of the gateway
@@ -21,9 +21,9 @@
 // ---------------------------------------------------------------------------------------------------------
 #define RGBW_DIAG
 #ifdef RGBW_DIAG
-#define RGBW_BUILD_TAG "v14-diag"
+#define RGBW_BUILD_TAG "v13-diag"
 #else
-#define RGBW_BUILD_TAG "v14"
+#define RGBW_BUILD_TAG "v13"
 #endif
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 // apart, in any order) are merged into one DALI command (temporary colour + DAPC = one fade). 0 = send at once.

@@ -1,9 +1,9 @@
 # RGBW-Gegenüberstellung: Ausgangscode ↔ Änderung
 
-> **⚠ Veraltet (Hinweis vom 17.11.2026):** Dieses Dokument beschreibt im Wesentlichen den Stand **v6** (13.11.2026). Maßgeblich ist die [README](../README.md) mit dem aktuellen Stand `v13aa` im Branch `v1dev`. Besonders überholt sind:
-> - **Abschnitt 3.5:** „alle 0 → Farbe → Schwarz → Aus“ gilt nicht mehr; Ausschalten ist ein normales `DAPC 0` (Befund B3, `blackoff` Standard aus).
+> **⚠ Veraltet (Hinweis vom 17.11.2026):** Dieses Dokument beschreibt im Wesentlichen den Stand **v6** (13.11.2026). Maßgeblich ist die [README](../README.md) mit dem aktuellen Stand `v13` im Branch `v1dev`. Besonders überholt sind:
+> - **Abschnitt 3.5:** „alle 0 → Farbe → Schwarz → Aus“ gilt nicht mehr; Ausschalten ist ein normales `DAPC 0` (Befund B3).
 > - **Abschnitt 5:** „nicht in-place updatebar“ ist überholt (Befund B16).
-> - **Abschnitt 8:** Das eingebettete „vollständige Diff“ und der eingebettete `RgbwHelper.h` sind auf Stand v6. Es fehlen u. a. Slider-Modus, Farbabfrage beim Start, Fade-Abfrage per `QUERY_STATUS`, Stopp-Abfrage, Broadcast-Behandlung und die automatische Aktivierung.
+> - **Abschnitt 8:** Das eingebettete „vollständige Diff“ und der eingebettete `RgbwHelper.h` sind auf Stand v6. Es fehlen u. a. Slider-Modus, Stopp-Abfrage, Broadcast-Behandlung und die Ansteuerung von `v13` (Sammelfenster, automatische Aktivierung).
 > - **Abschnitt 1:** Die Aussage „Nicht geändert: `DaliModule.cpp`“ stimmt nicht mehr (Broadcast, Konsole, Szenen).
 >
 > Das Dokument wird vor dem Pull Request neu erzeugt (Diff dann automatisch aus Git).

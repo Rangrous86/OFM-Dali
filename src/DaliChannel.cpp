@@ -182,7 +182,7 @@ uint16_t DaliChannel::rgbwFadeMs = 1000;
 bool DaliChannel::rgbwFadeQueryStarted = false;
 
 // ---------------------------------------------------------------------------------------------------------
-// RGBW control (concept v14, see README section 1.5):
+// RGBW control (v13, see README sections 1.5 and 5.1):
 // The driver has ONE fade engine (DA4-M, B1): every new fade command (DAPC, ACTIVATE) aborts the running fade and
 // the driver stays where it is. RGBW therefore follows the RGB code (every telegram = one DALI command = one fade,
 // no bus query, no waiting for the end of a fade) with these deviations:
