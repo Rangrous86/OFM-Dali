@@ -1,5 +1,13 @@
 # RGBW-Gegenüberstellung: Ausgangscode ↔ Änderung
 
+> **⚠ Veraltet (Hinweis vom 17.11.2026):** Dieses Dokument beschreibt im Wesentlichen den Stand **v6** (13.11.2026). Maßgeblich ist die [README](../README.md) mit dem aktuellen Stand `v13aa` im Branch `v1dev`. Besonders überholt sind:
+> - **Abschnitt 3.5:** „alle 0 → Farbe → Schwarz → Aus“ gilt nicht mehr; Ausschalten ist ein normales `DAPC 0` (Befund B3, `blackoff` Standard aus).
+> - **Abschnitt 5:** „nicht in-place updatebar“ ist überholt (Befund B16).
+> - **Abschnitt 8:** Das eingebettete „vollständige Diff“ und der eingebettete `RgbwHelper.h` sind auf Stand v6. Es fehlen u. a. Slider-Modus, Farbabfrage beim Start, Fade-Abfrage per `QUERY_STATUS`, Stopp-Abfrage, Broadcast-Behandlung und die automatische Aktivierung.
+> - **Abschnitt 1:** Die Aussage „Nicht geändert: `DaliModule.cpp`“ stimmt nicht mehr (Broadcast, Konsole, Szenen).
+>
+> Das Dokument wird vor dem Pull Request neu erzeugt (Diff dann automatisch aus Git).
+
 Vergleich des **Ausgangscodes** (`OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `6e7aca5`) mit dem Stand in `feature/rgbw`.
 Der Ausgangscode kennt die Farbtypen HSV, RGB, TW und xyY – **kein RGBW**.
 

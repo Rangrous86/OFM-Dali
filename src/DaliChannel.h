@@ -8,10 +8,23 @@
 #include "DaliConstants.h"
 
 #define DimmInterval 200
-// Temporary diagnosis for the RGBW colour switch-on (remove before a PR): level queries after the
-// colour sequence and a log of every DALI frame (see DaliModule::loopDiagFrames).
-// #define RGBW_DIAG
+// ---------------------------------------------------------------------------------------------------------
+// TEMPORARY DIAGNOSIS - ENABLED FOR THE v13aa TEST (T1/T2), MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
+// Purpose: check the automatic activation mechanism on the bus. The log shows every DALI frame (incl. our own
+// echo, DaliModule::loopDiagFrames), so it can be seen objectively that the temporary colour goes out WITHOUT
+// ACTIVATE and the DAPC follows right behind it. If T1 fails, this separates a sequence error of the gateway
+// from a driver that does not take over the temporary colour. In addition, QUERY_STATUS / QUERY_ACTUAL_LEVEL
+// probes at fixed times after every RGBW switch-on (and the "blackoff 1" switch-off, DaliChannel::loopDiag).
+// Side effects (test only): extra frames on the bus; the level probes update the "Dimmen Status" object, the
+// RGBW status (slider mode) and the "last value" with intermediate levels of the running fade. For tests of
+// status objects, "switch on with last value" or bus load, comment the define out again.
+// ---------------------------------------------------------------------------------------------------------
+#define RGBW_DIAG
+#ifdef RGBW_DIAG
+#define RGBW_BUILD_TAG "v13aa-diag"
+#else
 #define RGBW_BUILD_TAG "v13aa"
+#endif
 // RGBW automatic activation (onmode 2, default in this test version): the colour is only set temporarily
 // (no ACTIVATE) and the level command that follows activates it, so colour and level fade together in ONE fade.
 // Collection window (ms): a switch-on waits this long for a second telegram of the same command (Home Assistant:

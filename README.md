@@ -4,7 +4,7 @@ Dieser Fork ergänzt das OpenKNX-DALI-Gateway um **RGBW (4. Kanal „Weiß“)**
 
 Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (abgezweigt bei Commit `6e7aca5`; am 17.11.2026 der Upstream-Stand `a120578` mit Fix #7 `eed5a33` „export group settings“ hereingemergt, er korrigiert vier vertauschte HCL-Parameternamen im Gruppen-Template, Logik und Speicherlayout unverändert). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
 
-> **Stand (17.11.2026):** Branch `v1dev` = Firmware-Stand **`v13aa`** (Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation **0.14**. Neu gegenüber `v12` ist die **automatische Aktivierung beim Einschalten** (Farbe nur temporär setzen, der Pegelbefehl übernimmt sie, ein Fade statt zwei, siehe [5.1](#51-einschalten-mit-farbe-abfrage-oder-automatische-aktivierung)). **`v13aa` ist noch nicht kompiliert und nicht auf Hardware getestet**; als Nächstes steht der Testplan T1–T8 an.
+> **Stand (17.11.2026):** Branch `v1dev` = Firmware-Stand **`v13aa`** (Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation **0.14**. Neu gegenüber `v12` ist die **automatische Aktivierung beim Einschalten** (Farbe nur temporär setzen, der Pegelbefehl übernimmt sie, ein Fade statt zwei, siehe [5.1](#51-einschalten-mit-farbe-abfrage-oder-automatische-aktivierung)). **`v13aa` ist noch nicht kompiliert und nicht auf Hardware getestet**; als Nächstes steht der Testplan T1–T9 an. Für diesen Test ist die Diagnose `RGBW_DIAG` vorübergehend eingeschaltet (Build-Tag `v13aa-diag`, siehe 1.7); sie wird in der finalen Version entfernt.
 >
 > Der Vorgänger **`v12`** (Verfahren „Farbe, auf das Ende des Farb-Fades warten, dann Pegel“) ist mit einem echten Treiber (DA4-M, 4-Kanal-Konstantspannungs-Dimmer im Modus RGBW) am `GW-REG1-Dali` ausgiebig getestet. Er liegt archiviert im Branch **`v1dev-v12`** und wird nicht mehr verändert. Das v12-Einschaltverfahren steckt weiterhin in `v13aa` und ist zur Laufzeit per Konsole `onmode 1` erreichbar. Alle Testergebnisse in dieser README mit Version v6–v12 stammen von diesem Vorgänger.
 >
@@ -85,7 +85,10 @@ Home Assistant sendet bei einer Leuchte **mit** Helligkeitsadresse zuerst die Fa
 | Farbtelegramm an einen **eingeschalteten** Kanal | Nur die Farbe ändert sich, die Helligkeit bleibt. |
 | *Schalten* / *Dimmen absolut* | wie bisher. Die Farbe bleibt dabei erhalten (Rot, dann 25 % = Rot mit 25 %). |
 
-Zusätzlich wurde `koHandleDimmAbs` korrigiert: Der interne Ein/Aus-Merker (`currentState`) folgt jetzt dem Wert von *Dimmen absolut* (0 % = aus). Vorher blieb er nach „Dimmen auf 0“ auf *Ein* stehen, und ein folgendes Farbtelegramm wurde ignoriert (Treppenhauslicht-Kanäle ausgenommen).
+**Änderungen, die für alle Kanal- und Farbtypen gelten** (nicht nur RGBW, daher Regressionstest 14):
+- `koHandleDimmAbs`: Der interne Ein/Aus-Merker (`currentState`) folgt jetzt dem Wert von *Dimmen absolut* (0 % = aus). Vorher blieb er nach „Dimmen auf 0“ auf *Ein* stehen, und ein folgendes Farbtelegramm wurde ignoriert (Treppenhauslicht-Kanäle ausgenommen).
+- Nach dem Stopp eines relativen Dimmens wird der Pegel einmal (≈ 300 ms danach) per `QUERY_ACTUAL_LEVEL` abgefragt und gemeldet (B11).
+- Die Startwerte für „Einschalten mit letztem Wert“ sind als DALI-Pegel 100 % bzw. 10 % gesetzt statt der Zahlen 100 und 10 (siehe 5.5).
 
 Hinweis zum Ausgangscode: Bei den anderen Farbtypen (HSV, RGB, TW, xyY) schickt ein Farbtelegramm an einen ausgeschalteten Kanal die Farbe sofort an den Treiber und aktualisiert nur die KNX-Statusobjekte (`// TODO get real`), es sendet keinen DALI-Einschaltbefehl. Das wurde hier bewusst **nicht** angefasst (siehe [5.2](#52-schalter-farbtelegramm-bei-ausgeschaltetem-kanal)).
 
@@ -101,7 +104,21 @@ Hinweis zum Ausgangscode: Bei den anderen Farbtypen (HSV, RGB, TW, xyY) schickt 
 
 ### 1.7 Serielle Konsole (Feintuning und Diagnose)
 
-`onmode m [nnnn]` (`2` = automatische Aktivierung, **Standard**; `1` = Farbe zuerst, Verfahren von `v12`; `0` = Pegel zuerst, nur wenn Schwarz im Treiber gespeichert ist; nnnn = feste Pause vor dem Pegel bei Modus 1, 0 = automatisch per `QUERY_STATUS`), `aawin nnn` (Sammelfenster für Modus 2 in ms, 0–1000, Standard 80, 0 = sofort senden), `settle nnnn` (Pause im Fallback von Modus 0, 0–5000 ms), `margin nnn` (Reserve auf die Fade-Zeit, 0–2000 ms), `blackoff 0|1` (Farbe vor dem Ausschalten auf 0/0/0/0, Standard 0), `getCol yy [sel]` (fragt Farbtyp-Merkmale, Farbstatus und die Farbwerte des Treibers ab, ändert nichts; ohne Selektor: Report 233–236, aktuell 9–12, temporär 201–204 je R, G, B, W). Mit `#define RGBW_DIAG` in `DaliChannel.h` (Standard aus, nur Test) zusätzlich Log der DALI-Frames und der Abfragen `QUERY_ACTUAL_LEVEL`/`QUERY_STATUS`; diese Diagnose entfällt vor einem Pull Request.
+`onmode m [nnnn]` (`2` = automatische Aktivierung, **Standard**; `1` = Farbe zuerst, Verfahren von `v12`; `0` = Pegel zuerst, nur wenn Schwarz im Treiber gespeichert ist; nnnn = feste Pause vor dem Pegel bei Modus 1, 0 = automatisch per `QUERY_STATUS`), `aawin nnn` (Sammelfenster für Modus 2 in ms, 0–1000, Standard 80, 0 = sofort senden), `settle nnnn` (Pause im Fallback von Modus 0, 0–5000 ms), `margin nnn` (Reserve auf die Fade-Zeit, 0–2000 ms), `blackoff 0|1` (Farbe vor dem Ausschalten auf 0/0/0/0, Standard 0), `getCol yy [sel]` (fragt Farbtyp-Merkmale, Farbstatus und die Farbwerte des Treibers ab, ändert nichts; ohne Selektor: Report 233–236, aktuell 9–12, temporär 201–204 je R, G, B, W). Mit `#define RGBW_DIAG` in `DaliChannel.h` zusätzlich Log jedes DALI-Frames und Abfragen `QUERY_ACTUAL_LEVEL`/`QUERY_STATUS` zu festen Zeiten nach jedem RGBW-Einschalten (und dem Ausschalten mit `blackoff 1`). **Für den Test von `v13aa` ist die Diagnose vorübergehend eingeschaltet** (Build-Tag `v13aa-diag`), um den Mechanismus der automatischen Aktivierung auf dem Bus zu prüfen (siehe 5.1). Nebenwirkungen: zusätzliche Frames; die Pegelabfragen setzen *Dimmen Status*, den RGBW-Status (Slider-Modus) und den „letzten Wert“ auf Zwischenwerte des laufenden Fades. Für Tests dieser Punkte das `#define` auskommentieren. **Die Diagnose wird in der finalen Version entfernt.**
+
+### 1.8 Broadcast (bekannte Lücken, ungetestet)
+
+| Ereignis | Verhalten mit RGBW-Kanälen |
+|----------|----------------------------|
+| **Broadcast Ein** (Objekt *Broadcast Schalten*) | Zuerst `DAPC FE` (100 %) an alle, wie im Ausgangscode; Tag/Nacht-Einschaltwerte gelten dabei nicht. Danach stellt jeder RGBW-Kanal und jede RGBW-Gruppe, die aus war, die Farbe wieder her (`rgbwOn(254)`): bei `onmode 2` nach dem Sammelfenster temporäre Farbe + `DAPC FE`, bei `onmode 1` Farbe + `ACTIVATE` und danach der Pegel noch einmal. |
+| **Broadcast Aus** | Ohne RGBW-Kanal ein einzelnes `DAPC 0` an alle, wie im Ausgangscode. Mit RGBW-Kanal wird jeder konfigurierte Kanal und jede Gruppe einzeln ausgeschaltet (RGBW über `rgbwOff`, also `DAPC 0`), Geräte, die das Gateway nicht kennt, bekommen das Broadcast-Aus erst nach der längsten RGBW-Wartezeit (≈ 1,46 s). |
+| *Broadcast Dimmen absolut*, Taster am Gerät (`RECALL MAX`/`OFF`) | wie im Ausgangscode, **ohne** RGBW-Behandlung. |
+
+Bekannte Lücken:
+- **Broadcast Ein:** Der Pegel geht vor der Farbe raus. Das ist der Fall aus Befund B1: Bei `onmode 1` bricht das `ACTIVATE` der Farbe den Pegel-Fade ab, bei `onmode 2` kommt ein zweiter `DAPC`. Möglich ist, dass kurz die alte Farbe zu sehen ist. Sind eine RGBW-Gruppe und ihre Mitglieder konfiguriert, laufen zwei Farbsequenzen.
+- **Broadcast Aus:** Die Wartezeit für unbekannte Geräte ist nur für `blackoff 1` nötig; mit dem Standard verzögert sie das Ausschalten ohne Grund, und es gehen viele einzelne Frames statt eines Broadcasts raus. Geplante Vereinfachung (nach dem Test von `v13aa`): bei `blackoff 0` ein einzelnes `DAPC 0` an alle, die RGBW-Kanäle verwerfen nur ihre ausstehenden Schritte.
+- *Broadcast Dimmen absolut* und der Taster setzen weder die Farbe noch den Status der RGBW-Kanäle.
+- Nichts davon ist auf Hardware getestet (siehe T9 in 5.1 und 5.6 Punkt 4).
 
 ---
 
@@ -184,7 +201,7 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 
 **Was sich damit nicht ändert:** Ein reines Farbtelegramm an eine *brennende* Lampe braucht weiterhin `ACTIVATE`. Ein reines Farbtelegramm an einen *ausgeschalteten* Kanal schaltet die Leuchte weiterhin ein, weil das Gateway den Kanal als „ein“ führt und den gespeicherten Einschaltwert sendet; das Verhalten „nur Farbe merken“ bringt erst der Schalter in 5.2.
 
-**Testplan `v13aa` (Kanal A0, Konsole mit `onmode`/`aawin`-Ausgaben mitlesen):**
+**Testplan `v13aa` (Kanal A0, Konsole mitlesen):** Der Build hat die Diagnose eingeschaltet (`v13aa-diag`, siehe 1.7). Für T1/T2 im Log nach `RGBW: automatic activation` die Frame-Zeilen `DALI … ms: 0x…` lesen. Erwartet für A0 (Werte nach DALI/IEC 62386-209, am Log zu bestätigen): `0xA3rr`, `0xC3gg`, `0xC5bb` (DTR0–2), `0xC108` (Gerätetyp 8), `0x01EB` (temporär RGB), `0xA3ww`, `0xC3FF`, `0xC5FF`, `0xC108`, `0x01EC` (temporär WAF), **kein `0x01E2` (ACTIVATE)**, direkt danach `0x00nn` (`DAPC` mit dem Einschaltwert). Danach zeigen die Zeilen `DIAG status … fadeRunning=` und `Got new actual level … (t+… ms)` den Verlauf des Fades.
 
 | # | Aktion | Erwartung |
 |---|--------|-----------|
@@ -196,6 +213,7 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 | T6 | Slider-Modus (A5/B2), Wert aus „aus“ | richtige Farbe und Helligkeit |
 | T7 | Regression Lampe an: Farbe, Farbe + Helligkeit (HA-Paar), relatives Dimmen nach Farbe | wie `v12` |
 | T8 | `aawin 0` und HA-Paar aus „aus“ | prüfen, ob der zweite `DAPC` den Fade abbricht (Begründung für das Fenster) |
+| T9 (optional, nur beobachten) | Broadcast Ein und Broadcast Aus mit A0 als RGBW-Kanal, Leuchte vorher aus bzw. an | festhalten, was die Leuchte zeigt und was das Log meldet. Erwartet bei Ein: zuerst `DAPC FE` an alle (Leuchte geht in der gespeicherten Farbe auf 100 %), ≈ 80 ms später temporäre Farbe + `DAPC FE` an A0; mögliche Wirkung: kurz die alte Farbe oder ein zweiter Fade. Erwartet bei Aus: `DAPC 0` an A0 sofort, Broadcast-Aus für unbekannte Geräte erst nach ≈ 1,5 s (siehe 1.8). Kein Bestehen/Durchfallen, dient als Grundlage für Punkt D (Broadcast-Aus vereinfachen) |
 
 **Entscheidungsregel:** Besteht `v13aa` T1–T7 und läuft ruhiger als `v12` (ein Fade statt Farb-Fade plus Pegel-Fade), bleibt sie der Stand von `v1dev` und wir testen mit ihr weiter. Bei Abweichungen entscheiden wir zwischen Rückfall per `onmode 1` als Standard und dem Archivstand `v1dev-v12`; die Treiberfähigkeit wird dokumentiert. Beide Stände laufen mit der ETS-Applikation 0.14; nach dem Upstream-Fix #7 (Gruppen-Template) muss die Applikation aber neu erzeugt werden (siehe 6.1).
 
@@ -228,7 +246,7 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 ### 5.5 Erledigte Punkte der früheren Wunschliste
 
 - **Treiberzustand beim Start übernehmen:** erledigt für Einzelkanäle (Pegel und Ein/Aus seit v8, Farbe seit v10, B12). Offen: Gruppen und Broadcast, sehr viele RGBW-Kanäle (vier DALI-Abfragen pro Kanal beim Start), ein Treiber ohne je gesetzte Farbe (Antwort 255 oder 0 ungeprüft), das Verhalten der Report-Werte **während** eines Fades.
-- **Kosmetik: Startwerte „letzter Wert“:** `_lastDayValue = 100` / `_lastNightValue = 10` (schon im Ausgangscode) werden als DALI-Pegel gelesen (≈ 1,5 % bzw. ≈ 0,1 %); in v8 für RGBW auf 100 % und 10 % als Pegel umgerechnet (Standardwert 254 bestätigt, Test 1). Betrifft nur das erste Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war.
+- **Kosmetik: Startwerte „letzter Wert“:** `_lastDayValue = 100` / `_lastNightValue = 10` (schon im Ausgangscode) werden als DALI-Pegel gelesen (≈ 1,5 % bzw. ≈ 0,1 %); in v8 auf 100 % und 10 % als Pegel umgerechnet (Standardwert 254 bestätigt, Test 1). Die Änderung steckt im Startwert der Variablen und gilt damit für **alle Kanaltypen**, nicht nur für RGBW. Betrifft nur das erste Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war.
 - **Status nach dem Stopp eines relativen Dimmens:** erledigt (v9, B11).
 
 ### 5.6 Noch zu testen (Reihenfolge)
@@ -244,7 +262,7 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 
 ### 5.7 Vor dem Pull Request
 
-`RGBW_DIAG`-Diagnosecode entfernen oder deaktiviert lassen; offene Fragen an den Maintainer klären (Abschnitt 6 der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), u. a. das Log `Dali: unhandled KO: 1` beim Heartbeat, die Warnung „loop took longer than usual“, die knappe KNX-Reserve von 63 Byte, die Idee der einstellbaren Dimmkurve); (erledigt am 17.11.: veraltete Kommentare zu B2/B3 korrigiert); die Gegenüberstellung aktualisieren (u. a. Abschnitt 5 zur Updatefähigkeit, B16, und Abschnitt 6). **PR erst nach ausdrücklichem Go.**
+`RGBW_DIAG`-Diagnosecode entfernen (für den Test von `v13aa` vorübergehend eingeschaltet); offene Fragen an den Maintainer klären (Abschnitt 6 der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), u. a. das Log `Dali: unhandled KO: 1` beim Heartbeat, die Warnung „loop took longer than usual“, die knappe KNX-Reserve von 63 Byte, die Idee der einstellbaren Dimmkurve); (erledigt am 17.11.: veraltete Kommentare zu B2/B3 korrigiert); die Gegenüberstellung aktualisieren (u. a. Abschnitt 5 zur Updatefähigkeit, B16, und Abschnitt 6). **PR erst nach ausdrücklichem Go.**
 
 ---
 
@@ -291,7 +309,7 @@ Dabei entsteht `include/knxprod.h` mit `PT_colorType_RGBW` (= 4) und den neu ber
 
 Environment `develop_REG1_USB_V1` bauen (VS Code / PlatformIO: *Build*). Ist kein automatischer Upload möglich (picotool braucht unter Windows den WinUSB-Treiber via Zadig), das Gerät mit gedrückter BOOTSEL-Taste anstecken und `.pio/build/develop_REG1_USB_V1/firmware.uf2` auf das Laufwerk `RPI-RP2` kopieren. Danach das Gerät per ETS programmieren (Vollständiger Download).
 
-**Archivstand `v12`:** Im Ordner `OFM-Dali` `git fetch rgbw`, dann `git checkout -B v1dev-v12 rgbw/v1dev-v12`; gleiche Umgebung bauen und flashen. Zurück auf den aktuellen Stand: `git checkout -B v1dev rgbw/v1dev`. Die Version steht im Log bei jedem Farbtelegramm (`Color absolute [v13aa]` bzw. `[v12]`). Hinweis: `v1dev-v12` enthält den Upstream-Fix #7 nicht.
+**Archivstand `v12`:** Im Ordner `OFM-Dali` `git fetch rgbw`, dann `git checkout -B v1dev-v12 rgbw/v1dev-v12`; gleiche Umgebung bauen und flashen. Zurück auf den aktuellen Stand: `git checkout -B v1dev rgbw/v1dev`. Die Version steht im Log bei jedem Farbtelegramm (`Color absolute [v13aa-diag]`, ohne Diagnose `[v13aa]`, bzw. `[v12]`). Hinweis: `v1dev-v12` enthält den Upstream-Fix #7 nicht.
 
 **Praktische Hinweise:** Testkanal A0, Gruppenadressen 20/0/0 bis 20/0/7 (Schalten, Dimmen absolut, Farbe RGBW, Farbe RGBW Status, Schalten Status, Dimmen Status, Dimmen relativ, HCL Kurve). Nach Änderungen am Speicherlayout die ETS-Applikationsversion erhöhen und in der ETS *Aktualisieren* wählen. *Nur Testaufbau, nichts am Gateway selbst:* Die HCL braucht eine gültige Uhrzeit aus KO 4 (GA 0/0/4, DPT 19.001), normalerweise von einem KNX-Zeitgeber. Fällt der Zeitgeber aus, meldet die HCL `Ungueltige Sonnenstandsdaten`. Zum Testen die Uhrzeit von Hand per `knx.send` (Home Assistant) an 0/0/4 schicken (8 Byte: Jahr−1900, Monat, Tag, Wochentag·32+Stunde, Minute, Sekunde, `0x20`, `0x80`; als Dezimalbytes, z. B. `[126, 11, 15, 244, 21, 30, 32, 128]`).
 
