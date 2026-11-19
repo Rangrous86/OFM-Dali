@@ -12,9 +12,11 @@
 // TEMPORARY DIAGNOSIS - ENABLED FOR THE v13 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
 // Purpose: check the automatic activation mechanism on the bus. The log shows every DALI frame (incl. our own
 // echo, DaliModule::loopDiagFrames), so it can be seen objectively that the temporary colour goes out WITHOUT
-// ACTIVATE and the DAPC follows right behind it. If T1 fails, this separates a sequence error of the gateway
-// from a driver that does not take over the temporary colour. In addition, QUERY_STATUS / QUERY_ACTUAL_LEVEL
-// probes at fixed times after every RGBW command from the collection window (DaliChannel::loopDiag).
+// ACTIVATE and the DAPC follows right behind it. If phase 2 of the test fails, this separates a sequence error of
+// the gateway from a driver that does not take over the temporary colour. In addition, QUERY_STATUS /
+// QUERY_ACTUAL_LEVEL probes at fixed times after every RGBW command from the collection window
+// (DaliChannel::loopDiag); the probes can be switched off at runtime with the console command "diagq 0"
+// (the frame log stays on).
 // Side effects (test only): extra frames on the bus; the level probes update the "Dimmen Status" object, the
 // RGBW status (slider mode) and the "last value" with intermediate levels of the running fade. For tests of
 // status objects, "switch on with last value" or bus load, comment the define out again.
@@ -26,13 +28,14 @@
 #define RGBW_BUILD_TAG "v13"
 #endif
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
-// apart, in any order) are merged into one DALI command (temporary colour + DAPC = one fade). 0 = send at once.
+// apart) are merged into one DALI command (temporary colour + DAPC = one fade). From "off" only level-then-colour is
+// merged: a colour to a switched-off channel goes out at once with ACTIVATE. 0 = send at once.
 // Changeable at runtime: console command "aawin".
 #define RgbwWindowMs 80
 // RGBW: bus time of a colour sequence in front of a DAPC (10-12 DALI frames)
 #define RgbwTxMs 310
 // RGBW: reserve (ms) on top of the fade time when deciding whether an own fade can still run
-#define RgbwFadeReserveMs 100
+#define RgbwFadeReserveMs 300
 // RGBW point 3 (colour alone / level alone on a lit channel), console "p3mode":
 // C = like RGB, A = driver targets (GO TO LAST ACTIVE LEVEL / COPY REPORT TO TEMPORARY, DALI-2),
 // B = own target with time check (any DT8 driver), auto = A for DALI-2 drivers, otherwise B
@@ -54,6 +57,10 @@ class DaliChannel : public OpenKNX::Channel
 		static uint8_t rgbwP3Mode;
 		static bool rgbwDali2;
 		static bool rgbwVersionQueryStarted;
+		static bool rgbwFadeQueryDone;
+#ifdef RGBW_DIAG
+		static bool rgbwDiagProbes;
+#endif
 		static uint8_t rgbwEffectiveP3Mode();
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 

@@ -378,6 +378,9 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("aastat", "aastat => RGBW: read the DT8 automatic activation (gear features/status) of all configured RGBW channels");
     openknx.console.printHelpLine("aaon", "aaon [yy] => RGBW: switch DT8 automatic activation on permanently (stored in the driver); without yy all configured RGBW channels");
     openknx.console.printHelpLine("p3mode", "p3mode auto|0|1|2 => RGBW colour/level alone on a lit lamp: auto (A for DALI-2, else B), 1 = A driver targets, 2 = B own target, 0 = like RGB");
+#ifdef RGBW_DIAG
+    openknx.console.printHelpLine("diagq", "diagq 0|1 => RGBW test diagnosis: level/status probes after each command off/on (frame log stays on)");
+#endif
     openknx.console.printHelpLine("aawin", "aawin nnn => RGBW collection window in ms, telegrams within it go out as one command (default 80, 0 = at once)");
 }
 
@@ -451,6 +454,16 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
         logInfoP("RGBW point 3 mode = %s (DALI-2 detected: %s)", arg.c_str(), DaliChannel::rgbwDali2 ? "yes" : "no");
         return true;
     }
+
+#ifdef RGBW_DIAG
+    if (command == "diagq")
+    {
+        if (hasArg && (arg == "0" || arg == "1"))
+            DaliChannel::rgbwDiagProbes = arg == "1";
+        logInfoP("RGBW diagnosis level/status probes after each command: %s (diagq 0|1; the frame log stays on)", DaliChannel::rgbwDiagProbes ? "on" : "off");
+        return true;
+    }
+#endif
 
     if (command == "aawin")
     {

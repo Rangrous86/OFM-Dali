@@ -106,7 +106,7 @@ Home Assistant sendet bei einer Leuchte **mit** Helligkeitsadresse zuerst die Fa
 
 In Modus A kommen Pegel bzw. Farbe vom **Treiber selbst**, das Gateway muss sie nicht kennen; das stimmt auch nach Szenen, relativem Dimmen, Befehlen anderer DALI-Master und bei Gruppenmitgliedern mit unterschiedlichen Farben.
 
-**Zeitprüfung in Modus B:** Das Gateway merkt sich bei jedem eigenen `DAPC` an einen RGBW-Kanal Zeitpunkt und Zielpegel und bei jeder eigenen Farbe den Zeitpunkt, nur im RAM (9 Byte pro Kanal, bei 64 Kanälen und 16 Gruppen unter 1 kB). Ein Fade „kann noch laufen“, wenn der Befehl weniger als 310 ms (Buszeit einer Farbsequenz) + Fade-Zeit + 100 ms her ist. Es gibt dafür keine Abfrage auf dem Bus. Der Pegel wird nie geschätzt: Gesendet wird nur ein Zielpegel, den das Gateway selbst kurz vorher gesendet hat. Verworfen wird der gemerkte Zielpegel bei allem, was den Pegel ohne festes Ziel ändert (Start von relativem Dimmen, Ausschalten, Szene, Sperre, Gruppen- und Broadcast-Befehle, HCL-Helligkeit) und sobald die Prüfung ihn als abgelaufen erkennt (so bleibt auch der Überlauf von `millis()` nach ≈ 49,7 Tagen ohne Folgen).
+**Zeitprüfung in Modus B:** Das Gateway merkt sich bei jedem eigenen `DAPC` an einen RGBW-Kanal Zeitpunkt und Zielpegel und bei jeder eigenen Farbe den Zeitpunkt, nur im RAM (9 Byte pro Kanal, bei 64 Kanälen und 16 Gruppen unter 1 kB). Ein Fade „kann noch laufen“, wenn der Befehl weniger als 310 ms (Buszeit einer Farbsequenz) + Fade-Zeit + 300 ms Reserve her ist (gemessen endete ein Farb-Fade bei 1 s Fade-Zeit bis ≈ 1,57 s nach dem Farbtelegramm, B7). Es gibt dafür keine Abfrage auf dem Bus. Der Pegel wird nie geschätzt: Gesendet wird nur ein Zielpegel, den das Gateway selbst kurz vorher gesendet hat. Verworfen wird der gemerkte Zielpegel bei allem, was den Pegel ohne festes Ziel ändert (Start von relativem Dimmen, Ausschalten, Szene, Sperre, Gruppen- und Broadcast-Befehle, HCL-Helligkeit) und sobald die Prüfung ihn als abgelaufen erkennt (so bleibt auch der Überlauf von `millis()` nach ≈ 49,7 Tagen ohne Folgen).
 
 **Abfragen beim Start:** Das Gateway fragt **einmal** die Fade-Zeit (`QUERY_FADE_SPEEDS`) und die DALI-Version (`QUERY VERSION NUMBER`, ab `0x08` = DALI-2) ab, jeweils am ersten RGBW-Kanal bzw. am Referenz-EVG einer RGBW-Gruppe, und nutzt die Werte für **alle** RGBW-Kanäle. Alle RGBW-Treiber einer Anlage sollten deshalb vom selben Typ sein und dieselbe Übergangszeit haben (siehe Abschnitt 4). Ohne Antwort gelten 1000 ms bzw. DALI-1 (Modus B).
 
@@ -131,7 +131,7 @@ Hinweis zum Ausgangscode: Bei den anderen Farbtypen (HSV, RGB, TW, xyY) schickt 
 
 ### 1.7 Serielle Konsole (Feintuning und Diagnose)
 
-`p3mode auto|0|1|2` (Modus für Farbe allein / Helligkeit allein bei brennender Lampe, siehe 1.5: `auto` = A bei DALI-2-Treibern, sonst B; `1` = A; `2` = B; `0` = C wie RGB; Standard `auto`), `aawin nnn` (Sammelfenster in ms, 0–1000, Standard 80, 0 = jedes Telegramm sofort senden); beide gelten bis zum Neustart. `aastat` (liest bei allen konfigurierten RGBW-Kanälen die DT8-Einstellung *automatische Aktivierung* aus, Gear Features/Status Bit 0), `aaon [yy]` (soll die automatische Aktivierung **dauerhaft** im Treiber einschalten, ohne `yy` bei allen konfigurierten RGBW-Kanälen; einmal ausführen genügt. Nach DALI muss ein Konfigurationsbefehl zweimal kurz hintereinander ankommen, das erledigt `aaon` selbst, fragt danach nach und versucht bei Bedarf automatisch eine zweite Sendeform. Nach unserem Verständnis der Norm behält der Treiber die Einstellung auch stromlos; ob sich die Einstellung am DA4-M so setzen lässt, ist **ungetestet**, 5.1 Phase 1). Beide nur von Hand, das Gateway fragt oder schreibt diese Einstellung nie selbst. `getCol yy [sel]` (fragt Farbtyp-Merkmale, Farbstatus und die Farbwerte des Treibers ab, ändert nichts; ohne Selektor: Report 233–236, aktuell 9–12, temporär 201–204 je R, G, B, W). Die Befehle `onmode`, `settle`, `margin` und `blackoff` aus `v12` gibt es in `v13` nicht mehr.
+`p3mode auto|0|1|2` (Modus für Farbe allein / Helligkeit allein bei brennender Lampe, siehe 1.5: `auto` = A bei DALI-2-Treibern, sonst B; `1` = A; `2` = B; `0` = C wie RGB; Standard `auto`), `aawin nnn` (Sammelfenster in ms, 0–1000, Standard 80, 0 = jedes Telegramm sofort senden); beide gelten bis zum Neustart. Nur im Diagnose-Build: `diagq 0|1` schaltet die Pegel- und Statusabfragen der Diagnose nach jedem Befehl aus bzw. ein (Standard ein, das Frame-Log bleibt an; gilt bis zum Neustart). `aastat` (liest bei allen konfigurierten RGBW-Kanälen die DT8-Einstellung *automatische Aktivierung* aus, Gear Features/Status Bit 0), `aaon [yy]` (soll die automatische Aktivierung **dauerhaft** im Treiber einschalten, ohne `yy` bei allen konfigurierten RGBW-Kanälen; einmal ausführen genügt. Nach DALI muss ein Konfigurationsbefehl zweimal kurz hintereinander ankommen, das erledigt `aaon` selbst, fragt danach nach und versucht bei Bedarf automatisch eine zweite Sendeform. Nach unserem Verständnis der Norm behält der Treiber die Einstellung auch stromlos; ob sich die Einstellung am DA4-M so setzen lässt, ist **ungetestet**, 5.1 Phase 1). Beide nur von Hand, das Gateway fragt oder schreibt diese Einstellung nie selbst. `getCol yy [sel]` (fragt Farbtyp-Merkmale, Farbstatus und die Farbwerte des Treibers ab, ändert nichts; ohne Selektor: Report 233–236, aktuell 9–12, temporär 201–204 je R, G, B, W). Die Befehle `onmode`, `settle`, `margin` und `blackoff` aus `v12` gibt es in `v13` nicht mehr.
 
 Mit `#define RGBW_DIAG` in `DaliChannel.h` zusätzlich Log jedes DALI-Frames und Abfragen `QUERY_ACTUAL_LEVEL`/`QUERY_STATUS` zu festen Zeiten nach jedem RGBW-Befehl aus dem Sammelfenster. **Für den Test von `v13` ist die Diagnose vorübergehend eingeschaltet** (Build-Tag `v13-diag`), um die automatische Aktivierung auf dem Bus zu prüfen (siehe 5.1). Nebenwirkungen: zusätzliche Frames; die Pegelabfragen setzen *Dimmen Status*, den RGBW-Status (Slider-Modus) und den „letzten Wert“ auf Zwischenwerte des laufenden Fades. Für Tests dieser Punkte das `#define` auskommentieren. **Die Diagnose wird in der finalen Version entfernt.**
 
@@ -221,7 +221,7 @@ Alle Tests: DA4-M im Modus RGBW, Kanal A0, Auslösung über ETS-Gruppenmonitor o
 
 **Warum der Wechsel:** `v12` löste die Fade-Abbrüche (B1) mit `QUERY_STATUS`-Abfragen und Warten auf das Ende des Farb-Fades. Das funktioniert am DA4-M, kostet aber zwei Fades nacheinander, Buszeit und Sonderfälle. `v13` folgt deshalb dem RGB-Code und nutzt die automatische Aktivierung der DT8-Norm: Eine temporäre Farbe ohne `ACTIVATE` wird vom folgenden `DAPC` übernommen, Farbe und Pegel faden in einem Fade. Ablauf und Regeln: [1.5](#15-ein--und-ausschalten).
 
-**Voraussetzung:** Der Treiber muss die automatische Aktivierung können und sie muss eingeschaltet sein (nach unserem Verständnis der DT8-Norm eine im Treiber gespeicherte Einstellung, Gear Features/Status Bit 0). Ob sie ab Werk an ist und ob sie sich per `aaon` einschalten lässt, ist am DA4-M **ungetestet**. Phase 1 des Testablaufs prüft die Einstellung, Phase 2 die Wirkung.
+**Voraussetzung:** Der Treiber muss die automatische Aktivierung können und sie muss eingeschaltet sein (nach unserem Verständnis der DT8-Norm eine im Treiber gespeicherte Einstellung, Gear Features/Status Bit 0). Nach der Variablentabelle der Norm (wiedergegeben in der Beckhoff-Dokumentation) ist sie ab Werk und nach RESET eingeschaltet; ob der DA4-M sich daran hält und ob sie sich per `aaon` einschalten lässt, ist **ungetestet** (der DA4-M ist nur für die Teile 101, 102 und 207 DALI-2-zertifiziert, nicht für Teil 209). Phase 1 des Testablaufs prüft die Einstellung, Phase 2 die Wirkung.
 
 **Erwartete DALI-Frames** (Diagnose-Log, Zeilen `DALI … ms: 0x…`, Werte nach IEC 62386-209, am Log zu bestätigen), Kanal A0:
 - temporäre Farbe: `0xA3rr`, `0xC3gg`, `0xC5bb` (DTR0–2), `0xC108` (Gerätetyp 8), `0x01EB` (temporär RGB), `0xA3ww`, `0xC3FF`, `0xC5FF`, `0xC108`, `0x01EC` (temporär WAF)
@@ -245,7 +245,7 @@ Die erste Runde prüft nur die Änderung von `v12` auf `v13` an **einem** Einzel
 
 | # | Prüfen | Erwartung |
 |---|---|---|
-| 0.1 | Log nach dem Neustart | `RGBW: fade time x=… = … ms` und `RGBW: DALI version 0x.. = DALI-2/DALI-1, point 3 mode A/B` |
+| 0.1 | Log nach dem Neustart | `RGBW: fade time x=… = … ms` und danach `RGBW: DALI version 0x.. = DALI-2/DALI-1, point 3 mode A/B` (die Versionsabfrage startet erst nach der Fade-Abfrage, weil die DALI-Bibliothek bei zwei offenen Abfragen eine Antwort verliert) |
 | 0.2 | `p3mode` und `aawin` ohne Wert | `auto` und 80 |
 
 **Phase 1 – Konsole: automatische Aktivierung im EVG** (Voraussetzung für alles Weitere)
@@ -269,7 +269,7 @@ Bleibt es nach `aaon` bei `OFF`, wird Phase 2 trotzdem gemacht: Entscheidend ist
 | 2.2 | Lampe an, Blau 50 % | Grün, 20 ms später *Dimmen absolut* 80 % | Grün 80 % in **einem** Fade. Log **ein** `level 246 with temporary colour (one fade)`; Frames `0x01EB`, `0x01EC`, **kein** `0x01E2`, dann `0x00F6`. Blau mit 80 % = keine automatische Aktivierung. Zusätzlich beobachten: fadet die Farbe weich mit oder springt sie? |
 | 2.3 | Lampe an, Grün 80 % | Rot, 20 ms später *Dimmen absolut* 80 % (gleicher Pegel) | Rot: Aktivierung auch ohne Pegeländerung. Beobachten: fadet die Farbe (mit der Fade-Zeit) oder springt sie? |
 | 2.4 | *Schalten* Aus (der Treiber hat Rot) | *Dimmen absolut* 50 %, 20 ms später Blau | Lampe kommt direkt in Blau, kein Rot zu sehen, ein Fade; Log ein Befehl, kein `0x01E2` |
-| 2.5 | nach 2.4 | `getCol 00` | Report = Blau; die temporären Werte festhalten (zurückgesetzt oder nicht) |
+| 2.5 | nach 2.4 | `getCol 00` | aktuell 9–12 = Blau; temporär 201–204 nach der Norm 255 (MASK, nach der Aktivierung zurückgesetzt). Report 233–236 nur notieren (Report ist nach der Norm ein Abfragepuffer, kein Ist-Wert) |
 
 Zeigen 2.2–2.4 die alte Farbe, trägt `v13` am DA4-M nicht: Rückfall `v1dev-v12`, Ergebnis als Befund festhalten.
 
@@ -285,7 +285,7 @@ Zeigen 2.2–2.4 die alte Farbe, trägt `v13` am DA4-M nicht: Rückfall `v1dev-v
 | 3.6 | danach *Schalten* Ein | zuletzt gesetzte Farbe |
 | 3.7 | *Dimmen absolut* 0 %, dann Grün, dann *Schalten* Ein | Grün lässt die Lampe aus, *Ein* bringt Grün (der Merker hängt nicht auf *Ein*) |
 | 3.8 | Lampe aus, *Dimmen absolut* 50 % | gespeicherte Farbe mit 50 %, ein Fade |
-| 3.9 | **Haltedauer (B5b):** Lampe aus, eine andere Farbe als zuletzt, 1 min warten, `getCol 00`, danach *Dimmen relativ: Heller* aus Aus (**nicht** vorher einschalten) | Report = neue Farbe, `RECALL MIN` kommt in der neuen Farbe. Grundlage für die Entscheidung über C2 (unten) |
+| 3.9 | **Haltedauer (B5b):** Lampe aus, eine andere Farbe als zuletzt, 1 min warten, `getCol 00`, danach *Dimmen relativ: Heller* aus Aus (**nicht** vorher einschalten) | aktuell 9–12 = neue Farbe (Report nur notieren), `RECALL MIN` kommt in der neuen Farbe. Grundlage für die Entscheidung über C2 (unten) |
 | 3.10 | *Heller* bei brennender Lampe + Stopp; *Dunkler* bis zum Minimum | Status nach dem Stopp = echter Pegel (B11); am Minimum aus, Dimmen endet, keine Telegrammflut (B10) |
 | 3.11 | *Heller* direkt nach einer Farbe | Mischfarbe möglich (hingenommen), nur beobachten |
 | 3.12 | Farbverlauf: etwa 20 Farben im Abstand von ≈ 0,5 s | je Farbe `colour (ACTIVATE)`, keine Warnungen, Verlauf weich |
@@ -299,7 +299,7 @@ Zeigen 2.2–2.4 die alte Farbe, trägt `v13` am DA4-M nicht: Rückfall `v1dev-v
 | 4.3 | `aawin 0`, dann 4.1 wiederholen | zwei Befehle; in Modus C sind Mischfarbe oder falscher Pegel möglich (zeigt, wofür das Fenster da ist) |
 | 4.4 | `aawin 80` | zurückgestellt |
 
-**Phase 5 – Modus B, Zeitprüfung im RAM** (`p3mode 2`; Zeitfenster = 310 ms + Fade-Zeit + 100 ms, bei 1 s Fade-Zeit ≈ 1,4 s)
+**Phase 5 – Modus B, Zeitprüfung im RAM** (`p3mode 2`; Zeitfenster = 310 ms + Fade-Zeit + 300 ms, bei 1 s Fade-Zeit ≈ 1,6 s)
 
 | # | Aktion (Lampe an) | Erwartung |
 |---|---|---|
@@ -313,13 +313,16 @@ Zeigen 2.2–2.4 die alte Farbe, trägt `v13` am DA4-M nicht: Rückfall `v1dev-v
 
 | # | Aktion | Erwartung |
 |---|---|---|
-| 6.1 | **Report während eines Fades:** Fade-Zeit des EVG vorübergehend lang stellen (z. B. 8 s, EVG-Einstellungen in der ETS), Lampe an, Farbe ändern, sofort `getCol 00` (Report und aktuell direkt nacheinander); danach Fade-Zeit zurückstellen | Report 233–236 = Zielfarbe, aktuell 9–12 = Zwischenwerte. Zeigen beide Zwischenwerte, taugt Modus A für „Helligkeit allein“ nicht → Modus B |
+| 6.1 | **Report während eines Fades:** Fade-Zeit des EVG vorübergehend lang stellen (z. B. 8 s, EVG-Einstellungen in der ETS), Lampe an, Farbe ändern, sofort `getCol 00` (Report und aktuell direkt nacheinander); danach Fade-Zeit zurückstellen | Report 233–236 = Zielfarbe, aktuell 9–12 = Zwischenwerte. Nach IEC 62386-209:2011 ist die Report-Farbe allerdings ein Abfragepuffer (gefüllt u. a. von STORE ACTUAL LEVEL IN DTR und den Abfragen POWER ON / SYSTEM FAILURE / SCENE LEVEL), die Zielfarbe ist dort also nicht zu erwarten. Zeigt Report nicht die Zielfarbe, taugt Modus A für „Helligkeit allein“ nicht → Modus B |
 | 6.2 | Lampe an (mindestens 3 s ruhig), nur Farbe | `colour with the driver's own level (go to last active level)`, Frames mit `0x010A`, ohne `0x01E2`; Helligkeit bleibt |
 | 6.3 | Lampe an, nur *Dimmen absolut*: einmal ruhig, einmal 300 ms nach einer Farbe | `level N with the driver's own colour (copy report to temporary)`, Frames `0x01EE`, `0x00nn`; Farbe bleibt bzw. läuft zur Zielfarbe weiter |
 | 6.4 | *Dimmen absolut*, 300 ms später Farbe | neuer Pegel **und** neue Farbe, kein Rücksprung auf den alten Pegel |
 | 6.5 | *Heller* + Stopp, danach Farbe | die gedimmte Helligkeit bleibt |
 | 6.6 | Lampe aus, Farbe | Lampe bleibt aus, Frames mit `0x01E2`, **kein** `0x010A` |
 | 6.7 | Farbverlauf wie 3.12 | je Farbe `0x010A`, Verlauf weich, Helligkeit konstant |
+| 6.8 | **Alter Report:** `diagq 0`, Lampe an in Rot, *Heller* + Stopp (das Gateway fragt danach den Pegel ab), 3 s warten, Blau, 3 s warten, *Dimmen absolut* 50 % | Farbe bleibt Blau. Springt sie auf Rot, kopiert `COPY REPORT TO TEMPORARY` eine alte Farbe → Modus A für „Helligkeit allein“ nicht verwenden. Danach `diagq 1` |
+
+Phase 6.2–6.5 zusätzlich einmal mit `diagq 0` wiederholen: Die Pegelabfragen der Diagnose können den Report-Puffer füllen und so ein anderes Ergebnis erzeugen als im Betrieb ohne Diagnose.
 
 **Phase 7 – Slider-Modus** (ETS: *Helligkeit bei RGBW = Aus dem RGBW-Wert*, Applikation programmieren; danach zurückstellen)
 
@@ -349,7 +352,7 @@ Zeigen 2.2–2.4 die alte Farbe, trägt `v13` am DA4-M nicht: Rückfall `v1dev-v
 **Mögliche Code-Änderungen nach der ersten Runde** (bewusst noch nicht umgesetzt):
 - **C1:** Eine Farbe an einen ausgeschalteten Kanal läuft nicht über das Sammelfenster, deshalb gehen bei Home Assistant aus „aus“ zwei Farbsequenzen raus (Phase 4.2). Möglich: die Farbe auch dann ins Fenster legen und `ACTIVATE` nur senden, wenn keine Helligkeit folgt.
 - **C2:** Das Einschalten schickt immer die Farbe des Gateways mit. Abwägung: Es **hilft**, wenn der Treiber eine andere Farbe hat als zuletzt gesendet, z. B. nach einem Stromausfall nur des Treibers (er startet dann mit seinen Einschaltwerten) oder falls er eine bei ausgeschalteter Lampe gesetzte Farbe nicht länger hält (B5b, Phase 3.9). Es **schadet**, weil es Szenen- und Gruppenfarben und Farben eines anderen DALI-Masters überschreibt (Abschnitt 4), und es kostet ≈ 310 ms Buszeit pro Kanal; im Normalfall hat der Treiber die Farbe schon. Alternative: Das Einschalten sendet wie bei RGB nur den `DAPC`. Entscheidung nach den Tests.
-- **C3:** `rgbwCancel` setzt den Zeitpunkt der letzten Farbe nicht zurück. In Modus B kann eine Helligkeit, die innerhalb von ≈ 1,4 s nach Farbe und Szene kommt, die Szenenfarbe überschreiben.
+- **C3:** `rgbwCancel` setzt den Zeitpunkt der letzten Farbe nicht zurück. In Modus B kann eine Helligkeit, die innerhalb von ≈ 1,6 s nach Farbe und Szene kommt, die Szenenfarbe überschreiben.
 - **C4:** Das Gateway liest die Einstellung *automatische Aktivierung* bisher nie selbst. Ist sie aus, bleibt in Modus A eine Farbe allein ganz ohne Wirkung, und bei Farbe + Helligkeit bleibt die alte Farbe. Möglich: beim Start einmal am ersten RGBW-Kanal den Gear-Status abfragen (wie die DALI-Version), bei *aus* eine Warnung ins Log schreiben und auf Modus C schalten. Entscheidung nach Phase 1.
 
 ### 5.2 Schalter „Farbtelegramm bei ausgeschaltetem Kanal“

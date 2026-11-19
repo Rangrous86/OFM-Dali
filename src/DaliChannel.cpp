@@ -171,6 +171,8 @@ void DaliChannel::loopDiag()
 
 void DaliChannel::diagStart()
 {
+    if (!rgbwDiagProbes)
+        return;
     _diagStart = millis();
     _diagStep = 0;
     _diagStatusStep = 0;
@@ -184,6 +186,10 @@ bool DaliChannel::rgbwFadeQueryStarted = false;
 uint8_t DaliChannel::rgbwP3Mode = RgbwP3Auto;
 bool DaliChannel::rgbwDali2 = false;
 bool DaliChannel::rgbwVersionQueryStarted = false;
+bool DaliChannel::rgbwFadeQueryDone = false;
+#ifdef RGBW_DIAG
+bool DaliChannel::rgbwDiagProbes = true;
+#endif
 
 // ---------------------------------------------------------------------------------------------------------
 // RGBW control (v13, see README sections 1.5 and 5.1):
@@ -191,7 +197,8 @@ bool DaliChannel::rgbwVersionQueryStarted = false;
 // the driver stays where it is. RGBW therefore follows the RGB code (every telegram = one DALI command = one fade,
 // no bus query, no waiting for the end of a fade) with these deviations:
 // 1. Collection window (rgbwWindowMs, default 80 ms): telegrams that arrive close together (Home Assistant sends
-//    colour and brightness ~20 ms apart, in any order) are merged. At the end of the window the colour goes out
+//    colour and brightness ~20 ms apart) are merged (from "off" only level-then-colour, a colour to a switched-off
+//    channel goes out at once with ACTIVATE). At the end of the window the colour goes out
 //    as a temporary value (SET TEMPORARY RGB/WAF, no ACTIVATE) and the DAPC right behind it: the DAPC activates the
 //    colour ("automatic activation"), colour and level fade together in one fade.
 // 2. Switch-on (Schalten Ein, Dimmen absolut > 0) always sends the stored colour as temporary value with the DAPC.
@@ -418,7 +425,10 @@ void DaliChannel::loopFadeQuery()
         rgbwFadeQueryStarted = true;
         _fadeQueryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_FADE_SPEEDS, false, true);
         if (_fadeQueryId == 0)
+        {
+            rgbwFadeQueryDone = true;
             logDebugP("RGBW: fade time query could not be sent, using %i ms", rgbwFadeMs);
+        }
         return;
     }
 
@@ -426,6 +436,7 @@ void DaliChannel::loopFadeQuery()
     if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
         return;
     _fadeQueryId = 0;
+    rgbwFadeQueryDone = true;
     if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
         (response.frame.flags & DALI_FRAME_ERROR))
     {
@@ -441,11 +452,13 @@ void DaliChannel::loopFadeQuery()
 // Reads the DALI version ONCE (QUERY VERSION NUMBER at the first RGBW channel or group with a reference address).
 // DALI-2 answers 0x08 or higher (version 2.0 = 8). Decides the automatic mode of point 3 (A for DALI-2, otherwise B)
 // for all RGBW channels. Without an answer the driver counts as DALI-1.
+// Starts only after the fade time query has finished: with two open queries the DALI library (Master::getResponse,
+// dali b0d8e33) hands the first caller the entry of the second one, and the first answer is lost.
 void DaliChannel::loopVersionQuery()
 {
     if (_versionQueryId == 0)
     {
-        if (rgbwVersionQueryStarted || !isRgbw())
+        if (rgbwVersionQueryStarted || !isRgbw() || !rgbwFadeQueryDone)
             return;
         if (_isGroup && _dimmReferenceAddress == NoDimmReference)
             return;
