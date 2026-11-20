@@ -111,8 +111,6 @@ void DaliChannel::loop1()
     loopError();
     loopQueryLevel();
     loopRgbwWindow();
-    loopFadeQuery();
-    loopVersionQuery();
     loopStopQuery();
 #ifdef RGBW_DIAG
     loopDiag();
@@ -181,83 +179,36 @@ void DaliChannel::diagStart()
 #endif
 
 uint16_t DaliChannel::rgbwWindowMs = RgbwWindowMs;
-uint16_t DaliChannel::rgbwFadeMs = 1000;
-bool DaliChannel::rgbwFadeQueryStarted = false;
-uint8_t DaliChannel::rgbwP3Mode = RgbwP3Auto;
-bool DaliChannel::rgbwDali2 = false;
-bool DaliChannel::rgbwVersionQueryStarted = false;
-bool DaliChannel::rgbwFadeQueryDone = false;
 #ifdef RGBW_DIAG
 bool DaliChannel::rgbwDiagProbes = true;
 #endif
 
 // ---------------------------------------------------------------------------------------------------------
-// RGBW control (v13, see README sections 1.5 and 5.1):
-// The driver has ONE fade engine (DA4-M, B1): every new fade command (DAPC, ACTIVATE) aborts the running fade and
-// the driver stays where it is. RGBW therefore follows the RGB code (every telegram = one DALI command = one fade,
-// no bus query, no waiting for the end of a fade) with these deviations:
-// 1. Collection window (rgbwWindowMs, default 80 ms): telegrams that arrive close together (Home Assistant sends
-//    colour and brightness ~20 ms apart) are merged (from "off" only level-then-colour, a colour to a switched-off
-//    channel goes out at once with ACTIVATE). At the end of the window the colour goes out
-//    as a temporary value (SET TEMPORARY RGB/WAF, no ACTIVATE) and the DAPC right behind it: the DAPC activates the
-//    colour ("automatic activation"), colour and level fade together in one fade.
+// RGBW control (v14, see README sections 1.5 and 5.1, plan after phase 3):
+// The driver has ONE fade engine (DA4-M, B1): every new fade command (DAPC, ACTIVATE, UP/DOWN) aborts the running
+// fade and the driver stays where it is. RGBW follows the RGB code (every telegram = one DALI command = one fade, no
+// bus query, no waiting for the end of a fade, no time marks) with these deviations:
+// 1. Collection window (rgbwWindowMs, default 80 ms): every RGBW command goes through it. Telegrams that arrive close
+//    together (Home Assistant sends colour and brightness ~20 ms apart) become ONE command: the colour as temporary
+//    value (SET TEMPORARY RGB/WAF, no ACTIVATE) and the DAPC right behind it; the DAPC activates the colour
+//    ("automatic activation"), colour and level fade together.
 // 2. Switch-on (Schalten Ein, Dimmen absolut > 0) always sends the stored colour as temporary value with the DAPC.
 //    Without a known colour only the DAPC goes out (like RGB).
-// 3. A colour alone or a level alone on a lit channel also carries the other target, so a running fade of the
-//    driver is never left half way. Selected with rgbwP3Mode (console "p3mode"):
-//    A (DALI-2, default when the driver reports DALI-2): colour alone = temporary colour + GO TO LAST ACTIVE LEVEL
-//      (the driver takes its own level target), level alone = COPY REPORT TO TEMPORARY + DAPC (the driver takes its
-//      own colour). No time check, single channels and groups.
-//    B (any DT8 driver, default for DALI-1): single channels only, time check in RAM: a colour alone while the own
-//      level fade can still run = temporary colour + DAPC with the level target the gateway sent itself; a level
-//      alone while the own colour fade can still run = temporary colour (gateway colour) + DAPC.
-//    C (like RGB): colour alone = ACTIVATE, level alone = DAPC; an aborted fade is accepted.
-// 4. Groups in mode B: a colour without level goes out with ACTIVATE (members may be on different levels).
-// 5. A colour for a switched-off channel goes out with ACTIVATE like RGB, the lamp stays off and the status stays
-//    "off". Exception: brightness from the RGBW value (slider mode), there a colour > 0 switches on.
-// Every command that carries both targets makes an aborted fade harmless: the driver fades from where it is.
+// 3. Group = standard: a group command always carries both targets (temporary colour + DAPC), also a colour alone
+//    (with the stored group level) or a level alone (with the stored group colour). All members return to the
+//    state of the group.
+// 4. Single channel = exception: a colour alone on a lit channel goes out with ACTIVATE, a level alone as DAPC.
+//    Sent separately (outside the window), the second command may abort the fade of the first one (B26, accepted).
+// 5. A colour for a switched-off channel goes out with ACTIVATE (after the window), the lamp stays off. Exception:
+//    brightness from the RGBW value (slider mode), there a colour > 0 switches on.
+// 6. Relative dimming: 300 ms after its end (stop or maximum) the stored colour is sent again with ACTIVATE (B25).
+// 7. Broadcast: level only (module). Broadcast RGBW: own value, the channels keep their state; "Broadcast zurueck"
+//    sends the stored state of every RGBW group and of every RGBW channel that is in no RGBW group.
+// 8. Lock: level only, no colour (S1-S4 corrected for RGBW); optionally restore the stored state on unlock.
 // ---------------------------------------------------------------------------------------------------------
 bool DaliChannel::isRgbw()
 {
     return (_isGroup ? ParamDGWG_colorType : ParamDGW_colorType) == PT_colorType_RGBW;
-}
-
-// Effective mode for point 3: A, B or C (auto = A for DALI-2 drivers, otherwise B)
-uint8_t DaliChannel::rgbwEffectiveP3Mode()
-{
-    if (rgbwP3Mode == RgbwP3Auto)
-        return rgbwDali2 ? RgbwP3DriverTargets : RgbwP3OwnTarget;
-    return rgbwP3Mode;
-}
-
-// Time (ms, counted from queueing) in which a fade started by this gateway can still run in the driver:
-// bus time of a colour sequence in front of it + fade time of the driver + reserve
-uint16_t DaliChannel::rgbwFadeWindowMs()
-{
-    return RgbwTxMs + rgbwFadeMs + RgbwFadeReserveMs;
-}
-
-// A level command of this gateway (with a fixed target) was sent so recently that its fade can still run.
-// An expired time is cleared, so the overflow of millis() (~49.7 days) cannot make an old value look recent.
-bool DaliChannel::levelFadeMayRun()
-{
-    if (_levelSentAt == 0)
-        return false;
-    if ((unsigned long)(millis() - _levelSentAt) < rgbwFadeWindowMs())
-        return true;
-    _levelSentAt = 0;
-    return false;
-}
-
-// A colour of this gateway was sent so recently that its fade can still run (cleared when expired, see above)
-bool DaliChannel::colourFadeMayRun()
-{
-    if (_colourSentAt == 0)
-        return false;
-    if ((unsigned long)(millis() - _colourSentAt) < rgbwFadeWindowMs())
-        return true;
-    _colourSentAt = 0;
-    return false;
 }
 
 // Level request (Schalten Ein, Dimmen absolut > 0, level from the colour value in slider mode). arc > 0.
@@ -302,61 +253,41 @@ void DaliChannel::rgbwFlush()
     _winPending = false;
     const bool colourKnown = !RgbwHelper::isOff(currentColor);
 
-    const uint8_t mode = rgbwEffectiveP3Mode();
-
     if (_winLevel > 0)
     {
-        if (colourKnown && (_winFromOff || _winColour))
+        if (colourKnown && (_winFromOff || _winColour || _isGroup))
         {
-            // switch-on or colour + level in the window: both targets from the gateway, one fade
+            // switch-on, colour + level in the window, or a group (always both targets): one fade
             sendColor(false); // temporary colour, activated by the DAPC
             daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
             logDebugP("RGBW: level %i with temporary colour (one fade)", _winLevel);
         }
-        else if (!_winFromOff && mode == RgbwP3DriverTargets)
-        {
-            // A: level alone on a lit channel, the driver copies its own colour (report) into the temporary colour,
-            // the DAPC activates it: a running colour fade goes on to its target instead of stopping half way
-            daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::COPY_REPORT_TO_TEMP, _isGroup);
-            daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
-            logDebugP("RGBW: level %i with the driver's own colour (copy report to temporary)", _winLevel);
-        }
-        else if (colourKnown && mode == RgbwP3OwnTarget && colourFadeMayRun())
-        {
-            // B: the own colour fade can still run, the DAPC would abort it: take the gateway colour along
-            sendColor(false);
-            daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
-            logDebugP("RGBW: level %i with temporary colour (own colour fade may still run)", _winLevel);
-        }
         else
         {
+            // single channel, level alone on a lit channel (like RGB)
             daliMaster.sendArc(_channelIndex, _winLevel, _isGroup);
             logDebugP("RGBW: level %i", _winLevel);
         }
-        _levelSentAt = millis() | 1; // never 0 (= none)
-        _levelTarget = _winLevel;
     }
     else if (_winColour && colourKnown)
     {
-        if (mode == RgbwP3DriverTargets)
+        if (!currentState)
         {
-            // A: colour alone on a lit channel or group, the driver goes to its own level target (GO TO LAST ACTIVE
-            // LEVEL, DALI-2) and activates the temporary colour with it: one fade, a running level fade is not lost
-            sendColor(false);
-            daliMaster.sendCommand(_channelIndex, Dali::Command::GO_TO_LAST, _isGroup);
-            logDebugP("RGBW: colour with the driver's own level (go to last active level)");
+            // switched-off channel or group: the colour fades in unseen at level 0, the lamp stays off
+            sendColor(true);
+            logDebugP("RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)");
         }
-        else if (mode == RgbwP3OwnTarget && !_isGroup && levelFadeMayRun())
+        else if (_isGroup)
         {
-            // B: the own level fade can still run, ACTIVATE would abort it. Send the colour with the level target
-            // the gateway sent itself, the driver fades from where it is to both targets.
+            // group: colour alone with the stored group level, one fade, all members to the group state
+            uint8_t level = rgbwStoredLevel();
             sendColor(false);
-            daliMaster.sendArc(_channelIndex, _levelTarget, _isGroup);
-            _levelSentAt = millis() | 1;
-            logDebugP("RGBW: colour with the running level target %i (one fade)", _levelTarget);
+            daliMaster.sendArc(_channelIndex, level, _isGroup);
+            logDebugP("RGBW: group colour with the group level %i (one fade)", level);
         }
         else
         {
+            // single channel, colour alone on a lit channel (like RGB)
             sendColor(true);
             logDebugP("RGBW: colour (ACTIVATE)");
         }
@@ -370,14 +301,13 @@ void DaliChannel::rgbwFlush()
 #endif
 }
 
-// Drops a pending window and the level target (scene, lock, group or broadcast command, relative dimming)
+// Drops a pending window (scene, lock, group or broadcast command)
 void DaliChannel::rgbwCancel()
 {
     _winPending = false;
     _winLevel = 0;
     _winColour = false;
     _winFromOff = false;
-    _levelSentAt = 0;
 }
 
 // Plain level off; the colour stays stored in gateway and driver
@@ -389,100 +319,49 @@ void DaliChannel::rgbwOff()
     daliMaster.sendArc(_channelIndex, 0x00, _isGroup);
 }
 
-// Broadcast on: DAPC 254 went out to everybody already. A switched-off RGBW channel with a known colour gets its
-// colour together with the same level (temporary colour + DAPC): the driver fades to both targets.
-void DaliChannel::rgbwBroadcastOn()
+// Stored level of a lit channel or group (DALI arc value): the last level, otherwise the switch-on value
+uint8_t DaliChannel::rgbwStoredLevel()
 {
-    rgbwCancel();
-    if (!currentState && !RgbwHelper::isOff(currentColor))
-    {
+    if (currentStep > 0)
+        return currentStep;
+    uint8_t onValue = isNight ? _onNight : _onDay;
+    if (onValue == 0)
+        onValue = isNight ? _lastNightValue : _lastDayValue;
+    return onValue;
+}
+
+// Sends the stored state as one command: temporary colour + DAPC with the stored level (on) or 0 (off). From "off"
+// the colour fades in unseen while the lamp goes out. Without a known colour only the DAPC goes out.
+void DaliChannel::rgbwSendState()
+{
+    uint8_t level = currentState ? rgbwStoredLevel() : 0;
+    if (!RgbwHelper::isOff(currentColor))
         sendColor(false);
-        daliMaster.sendArc(_channelIndex, 0xFE, _isGroup);
-    }
-    currentState = true;
+    daliMaster.sendArc(_channelIndex, level, _isGroup);
+    logDebugP("RGBW: stored state sent again: %s, level %i", currentState ? "on" : "off", level);
+#ifdef RGBW_DIAG
+    diagStart();
+#endif
 }
 
-// Broadcast off: DAPC 0 went out to everybody, only the state is updated here
-void DaliChannel::rgbwBroadcastOff()
+// "Broadcast zurueck": this channel or group gets its own stored state again (locked ones keep their lock state)
+void DaliChannel::rgbwRestore()
 {
+    if (!_isConfigured || !isRgbw() || _isStaircase || currentIsLocked)
+        return;
     rgbwCancel();
-    currentState = false;
+    rgbwSendState();
 }
 
-// Reads the fade time ONCE for all RGBW channels (QUERY_FADE_SPEEDS at the first RGBW channel or group with a
-// reference address; high nibble = fade time, low = fade rate). All RGBW drivers of an installation are expected
-// to have the same fade time (README). Without an answer the default of 1000 ms stays.
-void DaliChannel::loopFadeQuery()
+// Single channel: member of at least one configured RGBW group (gets its state from the group on "Broadcast zurueck")
+bool DaliChannel::isInRgbwGroup(DaliChannel *groups)
 {
-    static const uint32_t fadeTimes[16] = {0, 700, 1000, 1400, 2000, 2800, 4000, 5700, 8000, 11300, 16000, 22600, 32000, 45300, 64000, 90500};
-
-    if (_fadeQueryId == 0)
-    {
-        if (rgbwFadeQueryStarted || !isRgbw())
-            return;
-        if (_isGroup && _dimmReferenceAddress == NoDimmReference)
-            return;
-        rgbwFadeQueryStarted = true;
-        _fadeQueryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_FADE_SPEEDS, false, true);
-        if (_fadeQueryId == 0)
-        {
-            rgbwFadeQueryDone = true;
-            logDebugP("RGBW: fade time query could not be sent, using %i ms", rgbwFadeMs);
-        }
-        return;
-    }
-
-    Dali::Response response = daliMaster.getResponse(_fadeQueryId);
-    if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
-        return;
-    _fadeQueryId = 0;
-    rgbwFadeQueryDone = true;
-    if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
-        (response.frame.flags & DALI_FRAME_ERROR))
-    {
-        logDebugP("RGBW: fade time query failed, using %i ms", rgbwFadeMs);
-        return;
-    }
-    uint8_t raw = response.frame.data & 0xFF;
-    uint32_t fade = fadeTimes[raw >> 4];
-    rgbwFadeMs = fade > 65000 ? 65000 : fade; // 16 bit
-    logInfoP("RGBW: fade time x=%i = %i ms (raw 0x%02X), used for all RGBW channels", raw >> 4, rgbwFadeMs, raw);
-}
-
-// Reads the DALI version ONCE (QUERY VERSION NUMBER at the first RGBW channel or group with a reference address).
-// DALI-2 answers 0x08 or higher (version 2.0 = 8). Decides the automatic mode of point 3 (A for DALI-2, otherwise B)
-// for all RGBW channels. Without an answer the driver counts as DALI-1.
-// Starts only after the fade time query has finished: with two open queries the DALI library (Master::getResponse,
-// dali b0d8e33) hands the first caller the entry of the second one, and the first answer is lost.
-void DaliChannel::loopVersionQuery()
-{
-    if (_versionQueryId == 0)
-    {
-        if (rgbwVersionQueryStarted || !isRgbw() || !rgbwFadeQueryDone)
-            return;
-        if (_isGroup && _dimmReferenceAddress == NoDimmReference)
-            return;
-        rgbwVersionQueryStarted = true;
-        _versionQueryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_VERSION, false, true);
-        if (_versionQueryId == 0)
-            logDebugP("RGBW: version query could not be sent, treated as DALI-1");
-        return;
-    }
-
-    Dali::Response response = daliMaster.getResponse(_versionQueryId);
-    if (response.state == Dali::ResponseState::SENT || response.state == Dali::ResponseState::WAITING)
-        return;
-    _versionQueryId = 0;
-    if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER ||
-        (response.frame.flags & DALI_FRAME_ERROR))
-    {
-        logInfoP("RGBW: version query failed, treated as DALI-1 (point 3 mode B)");
-        return;
-    }
-    uint8_t raw = response.frame.data & 0xFF;
-    rgbwDali2 = raw >= 0x08;
-    logInfoP("RGBW: DALI version 0x%02X = %s, point 3 mode %s", raw, rgbwDali2 ? "DALI-2" : "DALI-1",
-             rgbwEffectiveP3Mode() == RgbwP3DriverTargets ? "A (driver targets)" : (rgbwEffectiveP3Mode() == RgbwP3OwnTarget ? "B (own target)" : "C (like RGB)"));
+    if (_isGroup)
+        return false;
+    for (int i = 0; i < GroupCount; i++)
+        if ((_groups >> i) & 1 && groups[i].isConfigured() && groups[i].isRgbw())
+            return true;
+    return false;
 }
 
 // One level query a short time after the stop of a relative dimming, so that the status objects show the level
@@ -497,6 +376,12 @@ void DaliChannel::loopStopQuery()
     // dimming started again, or the channel is off for us (a late answer must not switch the status on again)
     if (_dimmDirection != DimmDirection::None || !currentState)
         return;
+    if (isRgbw() && !_isStaircase && !RgbwHelper::isOff(currentColor))
+    {
+        // an UP/DOWN right after a colour aborts the colour fade (B25): the stored colour once more
+        logDebugP("RGBW: colour again after relative dimming");
+        sendColor(true);
+    }
     logDebugP("Query actual level after the dimming stop");
     queryActualLevel();
 }
@@ -519,7 +404,8 @@ void DaliChannel::loopDimming()
 {
     if (_dimmDirection != DimmDirection::None)
     {
-        // RGBW: like RGB, no wait. An UP/DOWN right after a colour change can abort the colour fade (accepted).
+        // RGBW: like RGB, no wait. An UP/DOWN right after a colour change aborts the colour fade: the colour is sent
+        // again 300 ms after the end of the dimming (loopStopQuery, B25).
         if(millis() - _dimmLast > DimmInterval)
         {
             if (_dimmDirection == DimmDirection::Up)
@@ -536,11 +422,15 @@ void DaliChannel::loopDimming()
                     logDebugP("Dimm Stop at 254");
                     _dimmDirection = DimmDirection::None;
                     updateCurrentDimmValue();
+                    if (isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness)
+                        _stopQueryAt = (millis() + 300) | 1; // level query and colour again (B25)
                 }else if (*currentDimmValue >= _max)
                 {
                     logDebugP("Dimm Stop at max %i (%i)", _max, *currentDimmValue);
                     _dimmDirection = DimmDirection::None;
                     updateCurrentDimmValue();
+                    if (isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness)
+                        _stopQueryAt = (millis() + 300) | 1; // level query and colour again (B25)
                 }
             }
             else if (_dimmDirection == DimmDirection::Down)
@@ -879,6 +769,20 @@ void DaliChannel::koHandleSwitch(GroupObject &ko)
     logDebugP("Switching");
     if (currentIsLocked)
     {
+        if (rgbwRestoreOnUnlock())
+        {
+            // RGBW, restore on unlock: store only, it goes out at the unlock
+            currentState = ko.value(DPT_Switch);
+            if (currentState)
+            {
+                uint8_t onValue = isNight ? _onNight : _onDay;
+                if (onValue == 0)
+                    onValue = isNight ? _lastNightValue : _lastDayValue;
+                currentStep = onValue;
+            }
+            logDebugP("RGBW: locked, stored for the unlock: %s", currentState ? "on" : "off");
+            return;
+        }
         logErrorP("is locked");
         return;
     }
@@ -1021,10 +925,9 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
 
     if (isRgbw() && !_isStaircase)
     {
-        // a pending window goes out first; UP/DOWN has no fixed level target (point 3 does not apply afterwards)
+        // a pending window goes out first
         if (_winPending)
             rgbwFlush();
-        _levelSentAt = 0;
     }
 
     currentDimmValue = &currentStep;
@@ -1046,6 +949,8 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
                 daliMaster.sendCommand(_channelIndex, Dali::Command::RECALL_MIN, _isGroup, true);
                 *currentDimmValue = _min;
                 currentState = true;
+                if (isRgbw() && !_isStaircase)
+                    setSwitchState(true, false); // RGBW: "on" right away, not only at the stop (B23, C5)
                 queryActualLevel();
                 logDebugP("starting with min %i", _min);
                 _dimmLast = millis();
@@ -1064,6 +969,16 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
     logDebugP("Dimming absolute");
     if (currentIsLocked)
     {
+        if (rgbwRestoreOnUnlock())
+        {
+            // RGBW, restore on unlock: store only, it goes out at the unlock
+            uint8_t arc = DaliHelper::percentToArc((uint8_t)ko.value(Dpt(5, 1)));
+            if (arc > 0)
+                currentStep = arc;
+            currentState = arc > 0;
+            logDebugP("RGBW: locked, stored for the unlock: level %i", arc);
+            return;
+        }
         logErrorP("is locked");
         return;
     }
@@ -1133,6 +1048,15 @@ void DaliChannel::koHandleLock(GroupObject &ko)
     if (currentIsLocked == value)
         return;
     currentIsLocked = value;
+    if (isRgbw() && !_isStaircase)
+    {
+        // RGBW: own branch with the corrections S1-S4 (README 5.1 plan point 8; 5.8 G4 for the other types)
+        if (currentIsLocked)
+            rgbwLock();
+        else
+            rgbwUnlock();
+        return;
+    }
     uint8_t behave;
     uint8_t behavevalue;
     if (currentIsLocked)
@@ -1185,11 +1109,92 @@ void DaliChannel::koHandleLock(GroupObject &ko)
     setDimmState(DaliHelper::percentToArc(behavevalue));
 }
 
+// RGBW lock: "restore on unlock" (parameter, RGBW only)
+bool DaliChannel::rgbwRestoreOnUnlock()
+{
+    return isRgbw() && !_isStaircase && (_isGroup ? ParamDGWG_unlockRestore : ParamDGW_unlockRestore);
+}
+
+// DALI arc value of a lock / unlock behaviour (S1: "Anschalten" = switch-on value, "Ausschalten" = 0; S2: the fixed
+// value is a percentage)
+uint8_t DaliChannel::rgbwLockArc(uint8_t behave, uint8_t percentValue)
+{
+    switch (behave)
+    {
+    case PT_lock_on:
+    {
+        uint8_t onValue = isNight ? _onNight : _onDay;
+        if (onValue == 0)
+            onValue = isNight ? _lastNightValue : _lastDayValue;
+        return onValue;
+    }
+    case PT_lock_value:
+        return DaliHelper::percentToArc(percentValue);
+    default: // PT_lock_off
+        return 0;
+    }
+}
+
+// RGBW lock: level only, no colour (the lamp keeps the colour of the driver). With "restore on unlock" the stored
+// state (on/off, level, colour) stays as it is and only the status follows the lamp.
+void DaliChannel::rgbwLock()
+{
+    // S3: groups read the group parameters
+    uint8_t behave = _isGroup ? ParamDGWG_lockbehave : ParamDGW_lockbehave;
+    uint8_t percent = _isGroup ? ParamDGWG_lockvalue : ParamDGW_lockvalue;
+    logDebugP("RGBW: locking (behaviour %i)", behave);
+    rgbwCancel();
+    _dimmDirection = DimmDirection::None; // a running relative dimming ends with the lock
+    if (behave == PT_lock_no)
+        return;
+    uint8_t arc = rgbwLockArc(behave, percent);
+    daliMaster.sendArc(_channelIndex, arc, _isGroup);
+    if (rgbwRestoreOnUnlock())
+    {
+        setDimmState(arc, false, true);
+        setSwitchState(arc > 0, false);
+    }
+    else
+    {
+        setDimmState(arc, true, true);
+        currentState = arc > 0; // S4
+    }
+}
+
+// RGBW unlock: with "restore on unlock" the stored state (incl. the commands received while locked) goes out as one
+// command; otherwise the unlock behaviour (level only, no colour)
+void DaliChannel::rgbwUnlock()
+{
+    logDebugP("RGBW: unlocking");
+    rgbwCancel();
+    if (rgbwRestoreOnUnlock())
+    {
+        rgbwSendState();
+        setDimmState(currentState ? rgbwStoredLevel() : 0, false, true);
+        setSwitchState(currentState, false);
+        sendRgbwState();
+        return;
+    }
+    uint8_t behave = _isGroup ? ParamDGWG_unlockbehave : ParamDGW_unlockbehave;
+    uint8_t percent = _isGroup ? ParamDGWG_unlockvalue : ParamDGW_unlockvalue;
+    if (behave == PT_lock_no)
+        return;
+    uint8_t arc = rgbwLockArc(behave, percent);
+    daliMaster.sendArc(_channelIndex, arc, _isGroup);
+    setDimmState(arc, true, true);
+    currentState = arc > 0; // S4
+}
+
 void DaliChannel::koHandleColor(GroupObject &ko)
 {
     logDebugP("Color absolute [%s]", RGBW_BUILD_TAG);
     if (currentIsLocked)
     {
+        if (rgbwRestoreOnUnlock())
+        {
+            handleColorRGBW(ko, true); // RGBW, restore on unlock: store only, it goes out at the unlock
+            return;
+        }
         logErrorP("is locked");
         return;
     }
@@ -1264,7 +1269,7 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
     sendColor();
 }
 
-void DaliChannel::handleColorRGBW(GroupObject &ko)
+void DaliChannel::handleColorRGBW(GroupObject &ko, bool storeOnly)
 {
     // DPT 251.600 has 6 bytes: R, G, B, W, reserved, validity bits (mR, mG, mB, mW)
     if (ko.valueSize() != RgbwHelper::DataLength)
@@ -1289,6 +1294,12 @@ void DaliChannel::handleColorRGBW(GroupObject &ko)
 
     logDebugP("Got RGBW: %i %i %i %i (valid %X)%s", newColor[0], newColor[1], newColor[2], newColor[3], valid, _isGroup && valid != 0x0F ? " group: channels that are not valid are 0" : "");
 
+    if (RgbwHelper::isOff(newColor) && storeOnly)
+    {
+        currentState = false;
+        logDebugP("RGBW: locked, stored for the unlock: off");
+        return;
+    }
     if (RgbwHelper::isOff(newColor))
     {
         // R = G = B = W = 0 -> switch the channel off (status objects report "Off", 0 %).
@@ -1305,6 +1316,17 @@ void DaliChannel::handleColorRGBW(GroupObject &ko)
     const bool slider = rgbwSliderMode();
     if (slider)
         RgbwHelper::normalise(currentColor, _mix);
+    if (storeOnly)
+    {
+        if (slider)
+        {
+            uint8_t sliderArc = rgbwArcFromColour();
+            currentStep = sliderArc == 0 ? 1 : sliderArc;
+            currentState = true;
+        }
+        logDebugP("RGBW: locked, stored for the unlock: colour %i %i %i %i", currentColor[0], currentColor[1], currentColor[2], currentColor[3]);
+        return;
+    }
     sendRgbwState();
 
     if (slider)
@@ -1320,17 +1342,12 @@ void DaliChannel::handleColorRGBW(GroupObject &ko)
         setDimmState(sliderArc, true, true);
         currentState = true;
     }
-    else if (currentState)
-    {
-        // lit channel: colour alone, through the collection window (merged with a level that follows)
-        rgbwRequestColour();
-    }
     else
     {
-        // switched-off channel: like RGB, the colour goes to the driver with ACTIVATE (fades unseen at level 0),
-        // the lamp stays off and the status stays "off". The next switch-on sends the colour again with its DAPC.
-        logDebugP("RGBW: colour for a switched-off channel, lamp stays off");
-        sendColor(true);
+        // colour alone, through the collection window (merged with a level or switch-on that follows). At its end:
+        // switched-off channel = ACTIVATE (lamp stays off, status "off"), lit single channel = ACTIVATE, lit group =
+        // temporary colour + DAPC with the group level (rgbwFlush)
+        rgbwRequestColour();
     }
 }
 
@@ -1415,7 +1432,7 @@ void DaliChannel::setBrightness(uint8_t value)
 {
     logDebugP("Set Brightness: %i %%", value);
     if (isRgbw())
-        rgbwCancel(); // HCL changes the level: the level target of point 3 is no longer valid
+        rgbwCancel(); // HCL changes the level: a pending window is dropped
     daliMaster.sendArc(_channelIndex, DaliHelper::percentToArc(value), _isGroup);
     sendKoStateOnChange(DGW_Kodimm_state, value, Dpt(5, 1));
 }
@@ -1496,8 +1513,6 @@ void DaliChannel::sendColorAsRGBW(uint8_t r, uint8_t g, uint8_t b, uint8_t w, bo
     b = RgbwHelper::daliLevel(b);
     w = RgbwHelper::daliLevel(w);
     logDebugP("Send RGBW: %i %i %i %i%s", r, g, b, w, activate ? "" : " (temporary, activated by the following DAPC)");
-    // a colour fade starts now (ACTIVATE) or with the DAPC that follows (temporary colour)
-    _colourSentAt = millis() | 1; // never 0 (= none)
 
     // 1. RGB level (DTR0 = R, DTR1 = G, DTR2 = B)
     daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, r);
@@ -1691,9 +1706,9 @@ void DaliChannel::setGroupState(uint16_t group, bool state)
     if (group == AllGroups || _groups & 1 << group)
     {
         setSwitchState(state, false);
-        // RGBW: the on/off flag follows what the driver reports / a group or broadcast command did. A pending window
-        // and the level target of this channel are no longer valid.
-        if (isRgbw() && !_isStaircase)
+        // RGBW: the on/off flag follows what a group or broadcast command did, a pending window is dropped. Locked
+        // with "restore on unlock": the stored state stays (it is sent again at the unlock).
+        if (isRgbw() && !_isStaircase && !(currentIsLocked && rgbwRestoreOnUnlock()))
         {
             rgbwCancel();
             currentState = state;
@@ -1705,10 +1720,14 @@ void DaliChannel::setGroupState(uint16_t group, uint8_t value)
 {
     if (group == AllGroups || _groups & (1 << group))
     {
-        setDimmState(value, true, true);
+        // RGBW locked with "restore on unlock": only the status follows the lamp, the stored state stays
+        const bool keep = isRgbw() && !_isStaircase && currentIsLocked && rgbwRestoreOnUnlock();
+        setDimmState(value, !keep, true);
+        if (keep)
+            setSwitchState(value > 0, false);
         // RGBW: also at start (level read from the driver): a lamp that is lit is "on" for us, otherwise "brighter"
-        // would jump to the minimum. A pending window and the level target are no longer valid.
-        if (isRgbw() && !_isStaircase)
+        // would jump to the minimum. A pending window is dropped.
+        if (isRgbw() && !_isStaircase && !keep)
         {
             rgbwCancel();
             currentState = value > 0;

@@ -92,6 +92,9 @@
               <Parameter Id="%AID%_P-%T%3%CC%036" Name="%C%rgbwBri" ParameterType="%AID%_PT-rgbwBri" Text="Helligkeit bei RGBW" Value="0">
                 <Memory CodeSegment="%AID%_RS-04-00000" Offset="17" BitOffset="5" />
               </Parameter>
+              <Parameter Id="%AID%_P-%T%3%CC%037" Name="%C%unlockRestore" ParameterType="%AID%_PT-noyes" Text="Bei Entsperren vorherigen Zustand wiederherstellen" Value="0">
+                <Memory CodeSegment="%AID%_RS-04-00000" Offset="4" BitOffset="2" />
+              </Parameter>
             </Parameters>
             <ParameterRefs>
               <ParameterRef RefId="%AID%_P-%T%3%CC%001" Id="%AID%_P-%T%3%CC%001_R-%T%3%CC%00101" Name="%C%name" />
@@ -125,6 +128,7 @@
               <ParameterRef RefId="%AID%_P-%T%3%CC%034" Id="%AID%_P-%T%3%CC%034_R-%T%3%CC%03401" Name="%C%hcl_auto_day" />
               <ParameterRef RefId="%AID%_P-%T%3%CC%035" Id="%AID%_P-%T%3%CC%035_R-%T%3%CC%03501" Name="%C%scene" />
               <ParameterRef RefId="%AID%_P-%T%3%CC%036" Id="%AID%_P-%T%3%CC%036_R-%T%3%CC%03601" Name="%C%rgbwBri" />
+              <ParameterRef RefId="%AID%_P-%T%3%CC%037" Id="%AID%_P-%T%3%CC%037_R-%T%3%CC%03701" Name="%C%unlockRestore" />
             </ParameterRefs>
             <ComObjectTable>
               <ComObject Id="%AID%_O-%T%3%CC%000" Name="%C%switch" Text="G%C-1% {{0}}" Number="%K0%" FunctionText="Schalten" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" />
@@ -336,6 +340,16 @@
                       <choose ParamRefId="%AID%_P-%T%3%CC%010_R-%T%3%CC%01001">
                         <when test="3">
                           <ParameterRefRef RefId="%AID%_P-%T%3%CC%011_R-%T%3%CC%01101" />
+                        </when>
+                      </choose>
+                      <choose ParamRefId="%AID%_P-%T%3%CC%019_R-%T%3%CC%01901">
+                        <when test="4">
+                          <ParameterRefRef RefId="%AID%_P-%T%3%CC%037_R-%T%3%CC%03701" />
+                          <choose ParamRefId="%AID%_P-%T%3%CC%037_R-%T%3%CC%03701">
+                            <when test="1">
+                              <ParameterSeparator Id="%AID%_PS-nnn" Text="RGBW: Befehle während der Sperre werden gespeichert. Beim Entsperren kommt der gespeicherte Zustand (Ein/Aus, Helligkeit, Farbe); &quot;Verhalten bei Entsperren&quot; gilt dann nicht." UIHint="Information" />
+                            </when>
+                          </choose>
                         </when>
                       </choose>
                     </when>

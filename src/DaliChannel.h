@@ -9,11 +9,10 @@
 
 #define DimmInterval 200
 // ---------------------------------------------------------------------------------------------------------
-// TEMPORARY DIAGNOSIS - ENABLED FOR THE v13 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
+// TEMPORARY DIAGNOSIS - ENABLED FOR THE v14 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
 // Purpose: check the automatic activation mechanism on the bus. The log shows every DALI frame (incl. our own
 // echo, DaliModule::loopDiagFrames), so it can be seen objectively that the temporary colour goes out WITHOUT
-// ACTIVATE and the DAPC follows right behind it. If phase 2 of the test fails, this separates a sequence error of
-// the gateway from a driver that does not take over the temporary colour. In addition, QUERY_STATUS /
+// ACTIVATE and the DAPC follows right behind it. In addition, QUERY_STATUS /
 // QUERY_ACTUAL_LEVEL probes at fixed times after every RGBW command from the collection window
 // (DaliChannel::loopDiag); the probes can be switched off at runtime with the console command "diagq 0"
 // (the frame log stays on).
@@ -23,45 +22,24 @@
 // ---------------------------------------------------------------------------------------------------------
 #define RGBW_DIAG
 #ifdef RGBW_DIAG
-#define RGBW_BUILD_TAG "v13-diag"
+#define RGBW_BUILD_TAG "v14-diag"
 #else
-#define RGBW_BUILD_TAG "v13"
+#define RGBW_BUILD_TAG "v14"
 #endif
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
-// apart) are merged into one DALI command (temporary colour + DAPC = one fade). From "off" only level-then-colour is
-// merged: a colour to a switched-off channel goes out at once with ACTIVATE. 0 = send at once.
-// Changeable at runtime: console command "aawin".
+// apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
+// window, also a colour to a switched-off channel. 0 = send at once. Changeable at runtime: console command "aawin".
 #define RgbwWindowMs 80
-// RGBW: bus time of a colour sequence in front of a DAPC (10-12 DALI frames)
-#define RgbwTxMs 310
-// RGBW: reserve (ms) on top of the fade time when deciding whether an own fade can still run
-#define RgbwFadeReserveMs 300
-// RGBW point 3 (colour alone / level alone on a lit channel), console "p3mode":
-// C = like RGB, A = driver targets (GO TO LAST ACTIVE LEVEL / COPY REPORT TO TEMPORARY, DALI-2),
-// B = own target with time check (any DT8 driver), auto = A for DALI-2 drivers, otherwise B
-#define RgbwP3LikeRgb 0
-#define RgbwP3DriverTargets 1
-#define RgbwP3OwnTarget 2
-#define RgbwP3Auto 255
 #define DimmStatusInterval 500
 
 class DaliChannel : public OpenKNX::Channel
 {
 	public:
-		// RGBW: collection window (console "aawin") and the fade time of the drivers, read ONCE at start from the
-		// first RGBW channel and used for all of them
+		// RGBW: collection window (console "aawin")
 		static uint16_t rgbwWindowMs;
-		static uint16_t rgbwFadeMs;
-		static bool rgbwFadeQueryStarted;
-		// RGBW point 3 mode (console "p3mode") and the DALI version of the drivers, read ONCE at start
-		static uint8_t rgbwP3Mode;
-		static bool rgbwDali2;
-		static bool rgbwVersionQueryStarted;
-		static bool rgbwFadeQueryDone;
 #ifdef RGBW_DIAG
 		static bool rgbwDiagProbes;
 #endif
-		static uint8_t rgbwEffectiveP3Mode();
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 
         DaliChannel(Dali::Master &master);
@@ -74,8 +52,10 @@ class DaliChannel : public OpenKNX::Channel
 		bool isRgbw();
 		void rgbwOff();
 		void rgbwCancel();
-		void rgbwBroadcastOn();
-		void rgbwBroadcastOff();
+		// "Broadcast zurueck": sends the stored state of this RGBW channel or group again (not when locked)
+		void rgbwRestore();
+		// single channel: member of at least one configured RGBW group
+		bool isInRgbwGroup(DaliChannel *groups);
 
 		void setup() override;
 		void processInputKo(GroupObject &ko) override;
@@ -182,20 +162,15 @@ class DaliChannel : public OpenKNX::Channel
 		void rgbwStartWindow();
 		void rgbwFlush();
 		void loopRgbwWindow();
-		void loopFadeQuery();
-		uint32_t _fadeQueryId = 0;
-		void loopVersionQuery();
-		uint32_t _versionQueryId = 0;
-
-		// Time (0 = none) and target (DALI arc value) of the last own DAPC with a fixed target, and time of the last
-		// own colour (ACTIVATE or temporary colour with DAPC). Kept in RAM, checked against the fade time only
-		// (no bus query), cleared when expired.
-		unsigned long _levelSentAt = 0;
-		uint8_t _levelTarget = 0;
-		unsigned long _colourSentAt = 0;
-		uint16_t rgbwFadeWindowMs();
-		bool levelFadeMayRun();
-		bool colourFadeMayRun();
+		// Sends the stored state as one command: on = temporary colour + DAPC (stored level), off = temporary
+		// colour + DAPC 0 (the colour fades in unseen while the lamp goes out)
+		void rgbwSendState();
+		uint8_t rgbwStoredLevel();
+		// Lock of an RGBW channel or group (S1-S4 corrected, README 5.1 plan point 8) and "restore on unlock"
+		bool rgbwRestoreOnUnlock();
+		void rgbwLock();
+		void rgbwUnlock();
+		uint8_t rgbwLockArc(uint8_t behave, uint8_t percentValue);
 
 		// RGBW brightness from the colour value ("slider" mode, parameter rgbwBri): the largest channel of the RGBW
 		// value is the brightness (255 = 100 %), the ratio of the channels is the colour mix. The driver ignores
@@ -208,7 +183,8 @@ class DaliChannel : public OpenKNX::Channel
 		void rgbwSliderStatus(uint8_t arc);
 
 		// After the stop of a relative dimming the real level is queried once (the last UP/DOWN is still running
-		// in the driver when the stop arrives, so the level queried during dimming is one step behind).
+		// in the driver when the stop arrives, so the level queried during dimming is one step behind). RGBW: the
+		// stored colour is sent again at the same time (an UP/DOWN right after a colour aborts the colour fade, B25).
 		unsigned long _stopQueryAt = 0;
 		void loopStopQuery();
 
@@ -259,7 +235,7 @@ class DaliChannel : public OpenKNX::Channel
 		void handleColorRGB(GroupObject &ko);
 		void handleColorTW(GroupObject &ko);
 		void handleColorXYY(GroupObject &ko);
-		void handleColorRGBW(GroupObject &ko);
+		void handleColorRGBW(GroupObject &ko, bool storeOnly = false); // storeOnly: locked, restore on unlock
 		void koHandleColorRel(GroupObject &ko, ColorChannel channel);
 		void koHandleColorAbs(GroupObject &ko, ColorChannel channel);
 		void koHandleHclCurve(GroupObject &ko);

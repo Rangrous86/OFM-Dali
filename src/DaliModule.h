@@ -66,6 +66,8 @@ class DaliModule : public OpenKNX::Module
 		void broadcastOff();
 		void broadcastOn();
 		void rgbwCancelAll();
+		void koHandleBroadcastRgbw(GroupObject &ko);
+		void koHandleBroadcastBack(GroupObject &ko);
 #ifdef RGBW_DIAG
 		// Frames seen on the DALI bus (incl. our own echo), filled on core 1, logged on core 0
 		struct DiagFrame { unsigned long ms; unsigned long data; uint8_t size; uint8_t flags; };

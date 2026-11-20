@@ -1,4 +1,5 @@
 #include "DaliModule.h"
+#include "RgbwHelper.h"
 #include <cctype>
 #include "OpenKNX/DateTime.h"
 
@@ -377,7 +378,6 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W report (233-236), actual (9-12), temporary (201-204)");
     openknx.console.printHelpLine("aastat", "aastat => RGBW: read the DT8 automatic activation (gear features/status) of all configured RGBW channels");
     openknx.console.printHelpLine("aaon", "aaon [yy] => RGBW: switch DT8 automatic activation on permanently (stored in the driver); without yy all configured RGBW channels");
-    openknx.console.printHelpLine("p3mode", "p3mode auto|0|1|2 => RGBW colour/level alone on a lit lamp: auto (A for DALI-2, else B), 1 = A driver targets, 2 = B own target, 0 = like RGB");
 #ifdef RGBW_DIAG
     openknx.console.printHelpLine("diagq", "diagq 0|1 => RGBW test diagnosis: level/status probes after each command off/on (frame log stays on)");
 #endif
@@ -427,31 +427,6 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
     if (command == "stepDown")
     {
         cmdHandleStepDown(hasArg, arg);
-        return true;
-    }
-
-    if (command == "p3mode")
-    {
-        if (!hasArg || arg.empty())
-        {
-            logErrorP("p3mode auto|0|1|2 (auto = A for DALI-2 drivers, otherwise B; 0 = C like RGB; 1 = A driver targets; 2 = B own target), now %s",
-                      DaliChannel::rgbwP3Mode == RgbwP3Auto ? "auto" : (DaliChannel::rgbwP3Mode == RgbwP3DriverTargets ? "1" : (DaliChannel::rgbwP3Mode == RgbwP3OwnTarget ? "2" : "0")));
-            return true;
-        }
-        if (arg == "auto")
-            DaliChannel::rgbwP3Mode = RgbwP3Auto;
-        else if (arg == "0")
-            DaliChannel::rgbwP3Mode = RgbwP3LikeRgb;
-        else if (arg == "1")
-            DaliChannel::rgbwP3Mode = RgbwP3DriverTargets;
-        else if (arg == "2")
-            DaliChannel::rgbwP3Mode = RgbwP3OwnTarget;
-        else
-        {
-            logErrorP("p3mode auto|0|1|2");
-            return true;
-        }
-        logInfoP("RGBW point 3 mode = %s (DALI-2 detected: %s)", arg.c_str(), DaliChannel::rgbwDali2 ? "yes" : "no");
         return true;
     }
 
@@ -624,7 +599,7 @@ void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
 }
 
 // DT8 "automatic activation" (gear features/status bit 0): a temporary colour is taken over by the next arc power
-// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW v13 depends on it. Console only, never at start:
+// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start (README 5.1, C4):
 // "aastat" reads it from all configured RGBW channels, "aaon [yy]" switches it on permanently (stored in the driver).
 int16_t DaliModule::rgbwQueryGearFeatures(uint8_t addr)
 {
@@ -921,6 +896,16 @@ void DaliModule::processGlobalKo(int koNum, GroupObject &ko)
             koHandleDimm(ko);
             break;
 
+        // broadcast RGBW (colour + level in one command, the channels keep their state)
+        case DGW_Kobroadcast_rgbw:
+            koHandleBroadcastRgbw(ko);
+            break;
+
+        // broadcast back: stored states of the RGBW groups and channels again
+        case DGW_Kobroadcast_back:
+            koHandleBroadcastBack(ko);
+            break;
+
         // Tag/Nacht Objekt
         case DGW_Kodaynight:
             koHandleDayNight(ko);
@@ -954,30 +939,79 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
     logDebugP("Broadcast Switch set");
 }
 
-// Broadcast on: DAPC 254 to everybody (as before); a switched-off RGBW channel or group additionally gets its colour
-// together with the same level (temporary colour + DAPC, see DaliChannel::rgbwBroadcastOn)
+// Broadcast on: DAPC 254 to everybody, level only, no colour (README 5.1 plan point 6): every RGBW lamp comes in
+// the colour stored in its driver. The states follow in broadcastGroupState.
 void DaliModule::broadcastOn()
 {
+    rgbwCancelAll();
     daliMaster.sendArc(BroadcastAddress, 0xFE, true);
-    for (int i = 0; i < ChannelCount; i++)
-        if (channels[i].isConfigured() && channels[i].isRgbw())
-            channels[i].rgbwBroadcastOn();
-    for (int i = 0; i < GroupCount; i++)
-        if (groups[i].isConfigured() && groups[i].isRgbw())
-            groups[i].rgbwBroadcastOn();
 }
 
-// Broadcast off: one DAPC 0 to everybody (as before). RGBW channels and groups only drop a pending collection window
-// and their level target.
+// Broadcast off: one DAPC 0 to everybody
 void DaliModule::broadcastOff()
 {
+    rgbwCancelAll();
     daliMaster.sendArc(BroadcastAddress, 0x00, true);
-    for (int i = 0; i < ChannelCount; i++)
-        if (channels[i].isConfigured() && channels[i].isRgbw())
-            channels[i].rgbwBroadcastOff();
+}
+
+// Broadcast RGBW (DPT 251.600): colour and level to everybody in ONE command (temporary colour + DAPC to the
+// broadcast address). The level is the largest channel (like the slider mode), the colour the mix of the channels.
+// The colour only reaches RGBW drivers (DT8 RGBWAF), the level reaches all drivers. Channels and groups keep their
+// own stored state and no status is sent: the broadcast is a temporary state of the lamps, "Broadcast zurueck"
+// brings the stored states back. All channels 0 = DAPC 0 to everybody.
+void DaliModule::koHandleBroadcastRgbw(GroupObject &ko)
+{
+    if (ko.valueSize() != RgbwHelper::DataLength)
+    {
+        logErrorP("Broadcast RGBW: unexpected object size %i", (int)ko.valueSize());
+        return;
+    }
+    uint8_t colour[4] = {0, 0, 0, 0};
+    const uint8_t valid = RgbwHelper::decode(ko.valueRef(), colour);
+    if (valid == 0)
+    {
+        logDebugP("Broadcast RGBW: no valid channel in telegram, ignored");
+        return;
+    }
+    rgbwCancelAll();
+    if (RgbwHelper::isOff(colour))
+    {
+        logDebugP("Broadcast RGBW: all channels 0 -> DAPC 0 to everybody");
+        daliMaster.sendArc(BroadcastAddress, 0x00, true);
+        return;
+    }
+    uint8_t mix[4];
+    RgbwHelper::normalise(colour, mix);
+    uint8_t arc = DaliHelper::percentToArc(RgbwHelper::percentFromAmplitude(RgbwHelper::maxChannel(colour)));
+    if (arc == 0)
+        arc = 1;
+    logDebugP("Broadcast RGBW: %i %i %i %i -> mix %i %i %i %i, level %i (one fade)", colour[0], colour[1], colour[2], colour[3], mix[0], mix[1], mix[2], mix[3], arc);
+
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, RgbwHelper::daliLevel(mix[0]));
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR1, RgbwHelper::daliLevel(mix[1]));
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR2, RgbwHelper::daliLevel(mix[2]));
+    daliMaster.sendExtendedCommand(BroadcastAddress, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_RGB_LEVEL, true);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR, RgbwHelper::daliLevel(mix[3]));
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR1, 255);
+    daliMaster.sendSpecialCommand(Dali::SpecialCommand::SET_DTR2, 255);
+    daliMaster.sendExtendedCommand(BroadcastAddress, 0x08, Dali::ExtendedCommandDT8::SET_TEMP_WAF_LEVEL, true);
+    daliMaster.sendArc(BroadcastAddress, arc, true); // activates the temporary colour (automatic activation)
+}
+
+// Broadcast zurueck: every RGBW group gets its stored state again, then every RGBW channel that is in no configured
+// RGBW group (members get the state of their group: the gateway does not track the members after group commands,
+// 5.8 G3). Locked channels and groups are skipped. Only RGBW (README 5.1, F1); one command each.
+void DaliModule::koHandleBroadcastBack(GroupObject &ko)
+{
+    if (!ko.value(DPT_Switch))
+        return;
+    logDebugP("Broadcast zurueck: RGBW groups and RGBW channels without group get their stored state");
     for (int i = 0; i < GroupCount; i++)
         if (groups[i].isConfigured() && groups[i].isRgbw())
-            groups[i].rgbwBroadcastOff();
+            groups[i].rgbwRestore();
+    for (int i = 0; i < ChannelCount; i++)
+        if (channels[i].isConfigured() && channels[i].isRgbw() && !channels[i].isInRgbwGroup(groups))
+            channels[i].rgbwRestore();
 }
 
 // A DALI scene changes levels (and colours) in the drivers: RGBW channels and groups drop a pending collection window
