@@ -4,7 +4,7 @@ Dieser Fork ergänzt das OpenKNX-DALI-Gateway um **RGBW (4. Kanal „Weiß“)**
 
 Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (abgezweigt bei Commit `6e7aca5`; am 17.11.2026 der Upstream-Stand `a120578` mit Fix #7 `eed5a33` „export group settings“ hereingemergt, er korrigiert vier vertauschte HCL-Parameternamen im Gruppen-Template, Logik und Speicherlayout unverändert). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
 
-> **Stand (20.11.2026, abends):** Branch `v1dev` = Firmware-Stand **`v14`** (Build-Tag `v14-diag`, Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), **neue ETS-Applikation 0.16 nötig** (zwei neue Broadcast-Objekte, ein neuer Parameter je Kanal und Gruppe, siehe 1.1; Speicherlayout sonst unverändert, die neuen Parameter liegen in bisher freien Bits). `v14` setzt die Entscheidungen nach der ersten Testrunde um ([5.1, Plan](#plan-nach-phase-3-stand-20112026)): **Modus 0 fest** (A/B, `p3mode`, Zeitmarken, Fade-Zeit- und Versionsabfrage entfallen), **jeder RGBW-Befehl läuft durchs Sammelfenster** (C1), **Gruppe = Standard** (immer Farbe + Pegel), **Einzel-EVG = Ausnahme** (einzeln), Farbe erneut nach relativem Dimmen (B25), **Broadcast nur Pegel**, neu **Broadcast RGBW** und **Broadcast zurück**, **Sperre bei RGBW korrigiert** (S1–S4) mit **„Bei Entsperren vorherigen Zustand wiederherstellen“**, *Schalten Status* sofort bei *Heller* aus Aus (C5). **`v14` ist noch nicht kompiliert und nicht auf Hardware getestet** (nur Syntaxprüfung mit Platzhaltern für die erzeugten Header); als Nächstes Build, ETS 0.16 und der Schnelldurchlauf in [5.1](#testablauf-v14-schnelldurchlauf-nach-dem-umbau).
+> **Stand (20.11.2026, abends):** Branch `v1dev` = Firmware-Stand **`v14`** (Build-Tag `v14-diag`, Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), **neue ETS-Applikation 1.0 nötig** (0.16 gibt es nicht: die ETS-Version ist ein Byte, Unterversion 0–15) (zwei neue Broadcast-Objekte, ein neuer Parameter je Kanal und Gruppe, siehe 1.1; Speicherlayout sonst unverändert, die neuen Parameter liegen in bisher freien Bits). `v14` setzt die Entscheidungen nach der ersten Testrunde um ([5.1, Plan](#plan-nach-phase-3-stand-20112026)): **Modus 0 fest** (A/B, `p3mode`, Zeitmarken, Fade-Zeit- und Versionsabfrage entfallen), **jeder RGBW-Befehl läuft durchs Sammelfenster** (C1), **Gruppe = Standard** (immer Farbe + Pegel), **Einzel-EVG = Ausnahme** (einzeln), Farbe erneut nach relativem Dimmen (B25), **Broadcast nur Pegel**, neu **Broadcast RGBW** und **Broadcast zurück**, **Sperre bei RGBW korrigiert** (S1–S4) mit **„Bei Entsperren vorherigen Zustand wiederherstellen“**, *Schalten Status* sofort bei *Heller* aus Aus (C5). **`v14` ist noch nicht kompiliert und nicht auf Hardware getestet** (nur Syntaxprüfung mit Platzhaltern für die erzeugten Header); als Nächstes Build, ETS 0.16 und der Schnelldurchlauf in [5.1](#testablauf-v14-schnelldurchlauf-nach-dem-umbau).
 >
 > **`v13`** (Modi A/B/C, getestet am 19./20.11. am DA4-M, Phase 0–4, Ergebnisse in 5.1) liegt in der Git-Historie dieses Branches. Der Vorgänger **`v12`** (Verfahren „Farbe bei Pegel 0, per `QUERY_STATUS` auf das Ende des Farb-Fades warten, dann Pegel“) liegt archiviert im Branch **`v1dev-v12`**. Alle Testergebnisse in dieser README mit Version v6–v12 stammen von diesem Vorgänger.
 >
@@ -417,7 +417,7 @@ Ziel: Der DT8-Code soll möglichst **ohne Merker und Zeitmarken** auskommen. Vor
 11. **Broadcast – Farbe RGBW und Broadcast – Zurück** (**entschieden** 20.11., ETS-Änderung): eigener Broadcast-Wert, Kanäle und Gruppen behalten ihren Zustand, kein Status; *Zurück* stellt Gruppen und Kanäle ohne Gruppe wieder her (1.8). **F1** (nur RGBW oder alle Kanaltypen?): **nur RGBW**, Erweiterung auf alle Typen als Frage an den Maintainer (5.8), weil andere Typen hier nicht testbar sind. **F2** (soll auch der normale Broadcast den gespeicherten Zustand stehen lassen?): **nein**, normaler Broadcast wie im Ausgangscode; Frage an den Maintainer (5.8).
 12. **„Bei Entsperren vorherigen Zustand wiederherstellen“** (Punkt 9, Variante (b); **E1** entschieden: eigener Ja/Nein-Parameter, 1 Bit, speicherarm; Verhalten siehe 1.5, Zeile *Sperre*).
 
-**Umgesetzt in `v14`** (Commit `4c8e4b5`, 20.11.): Punkte 1–12. Nach der Umsetzung: Build, ETS 0.16, Update, dann der Schnelldurchlauf unten.
+**Umgesetzt in `v14`** (Commit `4c8e4b5`, 20.11.): Punkte 1–12. Nach der Umsetzung: Build, ETS 1.0, Update, dann der Schnelldurchlauf unten.
 
 #### Testablauf `v14` (Schnelldurchlauf nach dem Umbau)
 
@@ -560,14 +560,14 @@ git checkout -B v1dev rgbw/v1dev
 
 **2. ETS-Applikation und Header erzeugen**
 
-In `GW-REG1-Dali/src/DaliGateway.xml` die `ApplicationVersion` erhöhen (Teil `x.y` = ETS-Version, `z` = Firmware-Revision; `ReplacesVersions` nennt die ersetzten Versionen) – für `v14` auf **`0.16.0`**, `0.15` in `ReplacesVersions` ergänzen (neue Objekte und Parameter, siehe 1.1) –, dann:
+In `GW-REG1-Dali/src/DaliGateway.xml` die `ApplicationVersion` erhöhen (Teil `x.y` = ETS-Version, `z` = Firmware-Revision; `ReplacesVersions` nennt die ersetzten Versionen) – für `v14` auf **`1.0.0`** (nach 0.15 kommt 1.0, die Unterversion geht nur bis 15), `0.15` in `ReplacesVersions` ergänzen (neue Objekte und Parameter, siehe 1.1) –, dann:
 
 ```powershell
 cd ..\GW-REG1-Dali
-OpenKNXproducer create --Debug -h include/knxprod.h src/DaliGateway
+& "$HOME\bin\OpenKNXproducer.exe" create --Debug -h include/knxprod.h src/DaliGateway
 ```
 
-Dabei entsteht `include/knxprod.h` mit `PT_colorType_RGBW` (= 4) und den neu berechneten Parameter-Offsets sowie `src/DaliGateway.knxprod` für die ETS. `include/knxprod.h` nicht von Hand ändern, sie wird immer vom Producer erzeugt.
+Der Producer liegt in `~/bin` und steht nicht im Suchpfad, daher der volle Pfad. Der PlatformIO-Build erzeugt den Header **nicht** neu. Dabei entsteht `include/knxprod.h` mit `PT_colorType_RGBW` (= 4) und den neu berechneten Parameter-Offsets sowie `src/DaliGateway.knxprod` für die ETS. `include/knxprod.h` nicht von Hand ändern, sie wird immer vom Producer erzeugt.
 
 > **Applikationsversion vor jedem Update prüfen:** Die neue `ApplicationVersion` muss höher sein als die bereits in der ETS importierte, und die im Gerät verwendete Version muss in `ReplacesVersions` stehen, sonst lässt sich das Gerät nicht per *Aktualisieren* umstellen (B16). Eine schon einmal vergebene Version nicht wiederverwenden: Die ETS kennt sie bereits, und ob sie einen geänderten Inhalt unter derselben Nummer übernimmt, ist nicht sicher. Die Versionsnummern in dieser README gelten nur für unseren Testaufbau; für ein Release wird die Version beim Pull Request festgelegt.
 
