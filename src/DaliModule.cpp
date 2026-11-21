@@ -119,7 +119,6 @@ void DaliModule::setup1(bool conf) {
     daliMaster.init(REG1_APP_PIN6, REG1_APP_PIN7);
 }
 
-
 #ifdef DALI_NO_TIMER
 bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
 {

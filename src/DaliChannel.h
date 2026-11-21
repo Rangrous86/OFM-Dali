@@ -171,7 +171,6 @@ class DaliChannel : public OpenKNX::Channel
 		unsigned long _stopQueryAt = 0;
 		void loopStopQuery();
 
-
 		//Turn-on with last value
 		// DALI arc values (not percent): 100 % and 10 % until the first level is known
 		uint8_t _lastDayValue = DaliHelper::percentToArc((uint8_t)100);
