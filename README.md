@@ -45,7 +45,11 @@ Telegramm DPT 251.600:
 | 4 | reserviert (0x00) |
 | 5 | Bit 3 = R gültig, Bit 2 = G gültig, Bit 1 = B gültig, Bit 0 = W gültig |
 
-Beispiele: rein Weiß `00 00 00 FF 00 0F`, nur Weiß auf 50 % `00 00 00 80 00 01`, nur Rot ändern `FF 00 00 00 00 08`, alles aus `00 00 00 00 00 0F`.
+Beispiele: rein Weiß `00 00 00 FF 00 0F`, nur Rot ändern `FF 00 00 00 00 08` (bei Einzeladressen; die anderen Kanäle bleiben), alles aus `00 00 00 00 00 0F`.
+
+Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit bei RGBW* ab (Abschnitt 4):
+- **Über Objekt „Dimmen absolut“** (Standard): Die Werte bestimmen nur die **Mischung**. `00 00 00 80 00 0F` ist wie `00 00 00 FF 00 0F` reines Weiß. Die Helligkeit kommt über *Dimmen absolut*, *Schalten* oder *Dimmen relativ*.
+- **Aus dem RGBW-Wert:** Der größte Kanal ist die **Helligkeit**. `00 00 00 80 00 0F` ist dann Weiß mit etwa 50 %.
 
 ## 2. Was ist neu?
 

@@ -45,7 +45,11 @@ Telegram DPT 251.600:
 | 4 | reserved (0x00) |
 | 5 | bit 3 = R valid, bit 2 = G valid, bit 1 = B valid, bit 0 = W valid |
 
-Examples: pure white `00 00 00 FF 00 0F`, white only at 50 % `00 00 00 80 00 01`, change red only `FF 00 00 00 00 08`, all off `00 00 00 00 00 0F`.
+Examples: pure white `00 00 00 FF 00 0F`, change red only `FF 00 00 00 00 08` (single addresses; the other channels stay), all off `00 00 00 00 00 0F`.
+
+Whether values below 100 % change the brightness depends on the parameter *Helligkeit bei RGBW* (brightness with RGBW, section 4):
+- **Via object "Dimmen absolut"** (default): the values only set the **mix**. `00 00 00 80 00 0F` is pure white just like `00 00 00 FF 00 0F`. The brightness comes from *Dimmen absolut*, *Schalten* or *Dimmen relativ*.
+- **From the RGBW value:** the largest channel is the **brightness**. `00 00 00 80 00 0F` is then white at about 50 %.
 
 ## 2. What is new?
 
