@@ -4,9 +4,9 @@ Dieser Fork ergänzt das OpenKNX-DALI-Gateway um **RGBW (4. Kanal „Weiß“)**
 
 Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (abgezweigt bei Commit `6e7aca5`; am 17.11.2026 der Upstream-Stand `a120578` mit Fix #7 `eed5a33` „export group settings“ hereingemergt, er korrigiert vier vertauschte HCL-Parameternamen im Gruppen-Template, Logik und Speicherlayout unverändert). Das Verhalten der bisherigen Farbtypen HSV, RGB, TW und xyY bleibt unverändert.
 
-> **Stand (21.11.2026, abends):** Branch `v1dev` = Firmware-Stand **`v14b`** (Build-Tag `v14b`, Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation **1.0** (0.16 gibt es nicht: die ETS-Version ist ein Byte, Unterversion 0–15; zwei neue Broadcast-Objekte, ein neuer Parameter je Kanal und Gruppe, siehe 1.1; Speicherlayout sonst unverändert, die neuen Parameter liegen in bisher freien Bits). `v14` setzt die Entscheidungen nach der ersten Testrunde um ([5.1, Plan](#plan-nach-phase-3-stand-20112026)): **Modus 0 fest** (A/B, `p3mode`, Zeitmarken, Fade-Zeit- und Versionsabfrage entfallen), **jeder RGBW-Befehl läuft durchs Sammelfenster** (C1), **Gruppe = Standard** (immer Farbe + Pegel), **Einzel-EVG = Ausnahme** (einzeln), Farbe erneut nach relativem Dimmen (B25), **Broadcast nur Pegel**, neu **Broadcast RGBW** und **Broadcast zurück**, **Sperre bei RGBW korrigiert** (S1–S4) mit **„Bei Entsperren vorherigen Zustand wiederherstellen“**, *Schalten Status* sofort bei *Heller* aus Aus (C5). **`v14b`** ergänzt zwei Korrekturen aus dem Test (B27: kein zweites Nachsenden der Farbe nach einem Stopp am Maximum; B28: *Broadcast zurück* in zwei Durchgängen) und entfernt die Testdiagnose (`RGBW_DIAG`).
+> **Stand (21.11.2026, abends):** Branch `v1dev` = Firmware-Stand **`v14b`** (Build-Tag `v14b`, Build `develop_REG1_USB_V1`, Projekt `GW-REG1-Dali`), ETS-Applikation **0.13** (eine Version über dem offiziellen Release 0.12 von `GW-REG1-Dali`, damit ein Gerät mit 0.12 in der ETS direkt aktualisiert werden kann; die Testversionen 0.13–0.15 und 1.0 aus den Testrunden sind verworfen. Zwei neue Broadcast-Objekte, ein neuer Parameter je Kanal und Gruppe, siehe 1.1; Speicherlayout sonst unverändert, die neuen Parameter liegen in bisher freien Bits). `v14` setzt die Entscheidungen nach der ersten Testrunde um ([5.1, Plan](#plan-nach-phase-3-stand-20112026)): **Modus 0 fest** (A/B, `p3mode`, Zeitmarken, Fade-Zeit- und Versionsabfrage entfallen), **jeder RGBW-Befehl läuft durchs Sammelfenster** (C1), **Gruppe = Standard** (immer Farbe + Pegel), **Einzel-EVG = Ausnahme** (einzeln), Farbe erneut nach relativem Dimmen (B25), **Broadcast nur Pegel**, neu **Broadcast RGBW** und **Broadcast zurück**, **Sperre bei RGBW korrigiert** (S1–S4) mit **„Bei Entsperren vorherigen Zustand wiederherstellen“**, *Schalten Status* sofort bei *Heller* aus Aus (C5). **`v14b`** ergänzt zwei Korrekturen aus dem Test (B27: kein zweites Nachsenden der Farbe nach einem Stopp am Maximum; B28: *Broadcast zurück* in zwei Durchgängen) und entfernt die Testdiagnose (`RGBW_DIAG`).
 >
-> **Test am 21.11.2026 mit zwei DA4-M (A0, A1) bestanden:** Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers und Neustart des Gateways ([5.1, Schnelldurchlauf und Ergebnisse](#testablauf-v14-schnelldurchlauf-nach-dem-umbau)). Getestet mit Diagnose (`v14-diag`/`v14b-diag`); der Stand **ohne** Diagnose ist noch nicht kompiliert und nicht auf Hardware geprüft (nur der Diagnosecode entfernt, 5.7).
+> **Test am 21.11.2026 mit zwei DA4-M (A0, A1) bestanden:** Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers und Neustart des Gateways ([5.1, Schnelldurchlauf und Ergebnisse](#testablauf-v14-schnelldurchlauf-nach-dem-umbau)). Getestet mit Diagnose (`v14-diag`/`v14b-diag`); der Stand **ohne** Diagnose ist am 21.11. abends als Firmware 0.13.0 gebaut, geflasht und im Schlusstest (T1, T2) geprüft.
 >
 > **`v13`** (Modi A/B/C, getestet am 19./20.11. am DA4-M, Phase 0–4, Ergebnisse in 5.1) liegt in der Git-Historie dieses Branches. Der Vorgänger **`v12`** (Verfahren „Farbe bei Pegel 0, per `QUERY_STATUS` auf das Ende des Farb-Fades warten, dann Pegel“) liegt archiviert im Branch **`v1dev-v12`**. Alle Testergebnisse in dieser README mit Version v6–v12 stammen von diesem Vorgänger.
 >
@@ -425,11 +425,11 @@ Ziel: Der DT8-Code soll möglichst **ohne Merker und Zeitmarken** auskommen. Vor
 11. **Broadcast – Farbe RGBW und Broadcast – Zurück** (**entschieden** 20.11., ETS-Änderung): eigener Broadcast-Wert, Kanäle und Gruppen behalten ihren Zustand, kein Status; *Zurück* stellt Gruppen und Kanäle ohne Gruppe wieder her (1.8). **F1** (nur RGBW oder alle Kanaltypen?): **nur RGBW**, Erweiterung auf alle Typen als Frage an den Maintainer (5.8), weil andere Typen hier nicht testbar sind. **F2** (soll auch der normale Broadcast den gespeicherten Zustand stehen lassen?): **nein**, normaler Broadcast wie im Ausgangscode; Frage an den Maintainer (5.8).
 12. **„Bei Entsperren vorherigen Zustand wiederherstellen“** (Punkt 9, Variante (b); **E1** entschieden: eigener Ja/Nein-Parameter, 1 Bit, speicherarm; Verhalten siehe 1.5, Zeile *Sperre*).
 
-**Umgesetzt in `v14`** (Commit `4c8e4b5`, 20.11.): Punkte 1–12. Nach der Umsetzung: Build, ETS 1.0, Update, dann der Schnelldurchlauf unten.
+**Umgesetzt in `v14`** (Commit `4c8e4b5`, 20.11.): Punkte 1–12. Nach der Umsetzung: Build, ETS 1.0 (Testversion, später durch 0.13 ersetzt), Update, dann der Schnelldurchlauf unten.
 
 #### Testablauf `v14` (Schnelldurchlauf nach dem Umbau)
 
-Aufbau: A0 (DA4-M) in DALI-Gruppe 0 und 1, A1 (DA4-M) in Gruppe 0 und 2 (G0 = beide, G1 = nur A0, G2 = nur A1). ETS 1.0: A0, A1, G0, G1, G2 als RGBW, Gruppenadressen 20/0/0–20/0/35, Broadcast 20/0/36–20/0/39 (Farbe RGBW 20/0/38, Zurück 20/0/39). Sperrobjekte (A0 20/0/40, A1 20/0/41, G0 20/0/42, G1 20/0/43, G2 20/0/44) vor den Sperrtests eingeblendet, Sperrverhalten je Objekt verschieden (siehe S1–S4b). **Stand 21.11. 01:30:** Update auf 1.0 erledigt, 0.1/0.2 **bestanden** (keine Abfragen beim Start, `aastat` A0 und A1 ON, `aawin` 80); weiter mit E1. **Stand 21.11. 10:05:** E1–E4 **bestanden** (Ergebnisse unter der Tabelle), neuer Befund B27; weiter mit G1. **Stand 21.11. 14:20:** G1–G4 und B1–B4 **bestanden**, neuer Befund B28; B27 und B28 in `v14b` umgesetzt (Commit `56b7a94`, nicht kompiliert), Tests K1/K2 offen; danach S1–S4, A1, R1. **Stand 21.11. 20:00:** `v14b` geflasht (`v14b-diag`), K1, K2, S1–S4b, A1a/b, R1 und R1b **bestanden**; **der Schnelldurchlauf ist abgeschlossen**. Vorher `aastat` (beide ON?). Jeder Test wird vorher angekündigt und erst nach „Go“ gesendet. Diagnose an (`v14-diag`). Erwartete Logzeilen sind die aus `rgbwFlush`/`rgbwSendState`.
+Aufbau: A0 (DA4-M) in DALI-Gruppe 0 und 1, A1 (DA4-M) in Gruppe 0 und 2 (G0 = beide, G1 = nur A0, G2 = nur A1). ETS 1.0 (Testversion; seit dem Schlusstest 0.13): A0, A1, G0, G1, G2 als RGBW, Gruppenadressen 20/0/0–20/0/35, Broadcast 20/0/36–20/0/39 (Farbe RGBW 20/0/38, Zurück 20/0/39). Sperrobjekte (A0 20/0/40, A1 20/0/41, G0 20/0/42, G1 20/0/43, G2 20/0/44) vor den Sperrtests eingeblendet, Sperrverhalten je Objekt verschieden (siehe S1–S4b). **Stand 21.11. 01:30:** Update auf 1.0 erledigt, 0.1/0.2 **bestanden** (keine Abfragen beim Start, `aastat` A0 und A1 ON, `aawin` 80); weiter mit E1. **Stand 21.11. 10:05:** E1–E4 **bestanden** (Ergebnisse unter der Tabelle), neuer Befund B27; weiter mit G1. **Stand 21.11. 14:20:** G1–G4 und B1–B4 **bestanden**, neuer Befund B28; B27 und B28 in `v14b` umgesetzt (Commit `56b7a94`, nicht kompiliert), Tests K1/K2 offen; danach S1–S4, A1, R1. **Stand 21.11. 20:00:** `v14b` geflasht (`v14b-diag`), K1, K2, S1–S4b, A1a/b, R1 und R1b **bestanden**; **der Schnelldurchlauf ist abgeschlossen**. Vorher `aastat` (beide ON?). Jeder Test wird vorher angekündigt und erst nach „Go“ gesendet. Diagnose an (`v14-diag`). Erwartete Logzeilen sind die aus `rgbwFlush`/`rgbwSendState`.
 
 | # | Bereich | Aktion | Erwartung |
 |---|---|---|---|
@@ -505,7 +505,7 @@ Aufbau wie oben (A0 in G0 und G1, A1 in G0 und G2). Frames an Gruppen: `DAPC` `0
 
 #### Ergebnisse `v14b`: Korrekturen, Sperre, Ausfall, Neustart (Stand 21.11.2026, 20:00)
 
-`v14b-diag` geflasht (PlatformIO-Build, `firmware.uf2` per BOOTSEL), ETS-Applikation unverändert 1.0, nur Parameter und Download (Sperrobjekte eingeblendet). Laufzeit im Log nach dem Flashen ab 00:00:01; im Log steht `Color absolute [v14b-diag]`.
+`v14b-diag` geflasht (PlatformIO-Build, `firmware.uf2` per BOOTSEL), ETS-Applikation unverändert 1.0 (Testversion), nur Parameter und Download (Sperrobjekte eingeblendet). Laufzeit im Log nach dem Flashen ab 00:00:01; im Log steht `Color absolute [v14b-diag]`.
 
 | # | Gesendet | Ergebnis | Bewertung |
 |---|---|---|---|
@@ -521,6 +521,17 @@ Aufbau wie oben (A0 in G0 und G1, A1 in G0 und G2). Frames an Gruppen: `DAPC` `0
 | R1b | Grün an A0 (vorher ETS, Monitor und Treiber neu gestartet; Gateway seit R1 ≈ 55 min in Betrieb) | `Color absolute [v14b-diag]`, **eine** Zeile `RGBW: colour (ACTIVATE)` (`0x1EB`, `0x1EC`, `0x1E2`, kein `DAPC`), Pegel bleibt 220; ETS nur 20/0/3 Grün. Treiberstatus jetzt `0x96`/`0x86` (Bit 7 „Power Cycle erkannt“ aus A1a) | **bestanden** |
 
 **Ergebnis 21.11.:** Der Schnelldurchlauf `v14`/`v14b` ist vollständig bestanden. B23 (für RGBW), B25, B27 und B28 sind behoben; neu dokumentiert sind B29 (Empfehlung „Inaktiv“), G22 und F3 (Broadcast, für den Maintainer).
+
+#### Schlusstest ohne Diagnose (Stand 21.11.2026, 23:40)
+
+Firmware **0.13.0** (Stand `v14b`, Commit `b71a36f`, ohne `RGBW_DIAG`), ETS-Applikation 0.13 neu importiert, Gerät neu eingefügt (gleiche Parameter und Gruppenadressen wie im Test, ohne Sperrobjekte), Download. `i`: Firmware 0.13.0, Programming 1.1.123 (Configured), Version 0.13; `aastat`: EVG 0 und 1 automatische Aktivierung ON. Gesendet über Home Assistant (`light.turn_on`, `knx.send`).
+
+| # | Gesendet | Ergebnis | Bewertung |
+|---|---|---|---|
+| T1 | `light.turn_off`, dann `light.turn_on` Grün 50 % an A0 (HA sendet Farbe und Helligkeit 21 ms auseinander) | `RGBW: off`; `Color absolute [v14b]` (ohne „-diag“), **eine** Zeile `RGBW: level 229 with temporary colour (one fade)`, keine `DALI …`/`DIAG …`-Zeilen. ETS: nur 20/0/3 Grün, 20/0/4 Ein, 20/0/5 50,6 % (keine Zwischenwerte mehr). Lampe grün ≈ 50 %. Beim Aus kein Status (A0 war für das Gateway schon aus) | **bestanden** |
+| T2 | G0 Ein (20/0/15), 3 s später Rot an G0 (20/0/20) | `Turning on day value`, `RGBW: level 254` (Gruppenfarbe nach dem Neustart unbekannt); dann `Color absolute [v14b]`, **eine** Zeile `RGBW: group colour with the group level 254 (one fade)`. ETS: 20/0/16 Ein, 20/0/19 100 %, 20/0/21 Rot. Beide Lampen rot 100 % | **bestanden** |
+
+Ohne Diagnose verhält sich der Code wie im Test mit Diagnose; der Dimmstatus kommt nur noch mit dem Endwert.
 
 
 **Entscheidungen nach der ersten Runde:**
@@ -579,7 +590,8 @@ Aufbau wie oben (A0 in G0 und G1, A1 in G0 und G2). Frames an Gruppen: `DAPC` `0
 
 | Punkt | Stand |
 |---|---|
-| `RGBW_DIAG`-Diagnosecode entfernen | **erledigt** 21.11. (`v14b`, 1.7); der Stand ohne Diagnose ist noch auf Hardware zu prüfen (kurzer Durchlauf E1/G1) |
+| `RGBW_DIAG`-Diagnosecode entfernen | **erledigt** 21.11. (`v14b`, 1.7); ohne Diagnose als 0.13.0 geflasht und im Schlusstest T1/T2 geprüft (5.1) |
+| ETS-Version | **0.13** (eine über dem Release 0.12), Testversionen verworfen (6.1) |
 | Home-Assistant-Testskript `script.dali_rgbw_testfolge` löschen | **erledigt** 21.11. |
 | Gegenüberstellung neu erzeugen | **erledigt** 21.11. (Stand `v14b`, [`doc/RGBW-Gegenueberstellung.md`](doc/RGBW-Gegenueberstellung.md)) |
 | Build-Tag im Log (`Color absolute [v14b]`, `RGBW_BUILD_TAG`) | offen: vor dem PR entfernen oder behalten (Entscheidung) |
@@ -652,7 +664,7 @@ git checkout -B v1dev rgbw/v1dev
 
 **2. ETS-Applikation und Header erzeugen**
 
-In `GW-REG1-Dali/src/DaliGateway.xml` die `ApplicationVersion` erhöhen (Teil `x.y` = ETS-Version, `z` = Firmware-Revision; `ReplacesVersions` nennt die ersetzten Versionen) – für `v14` auf **`1.0.0`** (nach 0.15 kommt 1.0, die Unterversion geht nur bis 15), `0.15` in `ReplacesVersions` ergänzen (neue Objekte und Parameter, siehe 1.1) –, dann:
+In `GW-REG1-Dali/src/DaliGateway.xml` die `ApplicationVersion` erhöhen (Teil `x.y` = ETS-Version, `z` = Firmware-Revision; `ReplacesVersions` nennt die ersetzten Versionen) – für den Stand `v14b` auf **`0.13.0`** mit `ReplacesVersions="0.0 0.10 0.11 0.12"`, also eine Version über dem offiziellen Release `0.12.0` (`OpenKNX/GW-REG1-Dali`, Tag `v0.12`). So lässt sich ein Gerät mit 0.12 in der ETS per *Aktualisieren* umstellen. Die Testversionen 0.13–0.15 und 1.0 aus den Testrunden sind verworfen; wer sie im ETS-Katalog hat, löscht sie vor dem Import (ein Gerät mit 1.0 lässt sich nicht auf 0.13 zurückstellen, es muss neu eingefügt werden) –, dann:
 
 ```powershell
 cd ..\GW-REG1-Dali
