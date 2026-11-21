@@ -8,7 +8,7 @@ Basis: `OpenKNX/OFM-Dali`, Branch **`v1dev`** (abgezweigt bei Commit `6e7aca5`; 
 >
 > **`v13`** (Modi A/B/C, getestet am 19./20.11. am DA4-M, Phase 0–4, Ergebnisse in 5.1) liegt in der Git-Historie dieses Branches. Der Vorgänger **`v12`** (Verfahren „Farbe bei Pegel 0, per `QUERY_STATUS` auf das Ende des Farb-Fades warten, dann Pegel“) liegt archiviert im Branch **`v1dev-v12`**. Alle Testergebnisse in dieser README mit Version v6–v12 stammen von diesem Vorgänger.
 >
-> Offen sind außerdem die Wechselwirkungen mit mehreren Kanälen in Gruppen und den anderen Farbtypen (Testaufbau seit 20.11.: zweiter DA4-M an A1, A0 in Gruppe 0, A1 in Gruppe 0 und 1).
+> Offen sind außerdem die Wechselwirkungen mit mehreren Kanälen in Gruppen und den anderen Farbtypen (Testaufbau seit 21.11.: zweiter DA4-M an A1; A0 in Gruppe 0 und 1, A1 in Gruppe 0 und 2; G0 = A0 + A1, G1 = nur A0, G2 = nur A1).
 
 **So ist diese README aufgebaut:** Funktion ([1](#1-funktionsüberblick)), Befunde zum Treiber mit Status ([2](#2-befunde-zum-treiber-da4-m-mit-status)), zusammengefasste Tests ([3](#3-testübersicht)), Einschränkungen ([4](#4-bekannte-einschränkungen)), Offenes und Pläne ([5](#5-offene-punkte-und-entscheidungen)), Testanleitung ([6](#6-testanleitung)). Alle Messprotokolle, Logzeilen und Zwischenstände stehen **ungekürzt** in der [Rohfassung](doc/README-Rohfassung-2026-11-16.md). Details zu den Änderungen am Code: [`doc/RGBW-Gegenueberstellung.md`](doc/RGBW-Gegenueberstellung.md).
 
@@ -114,7 +114,7 @@ Hinweis zum Ausgangscode: Bei den anderen Farbtypen (HSV, RGB, TW, xyY) schickt 
 
 ### 1.6 Gruppen
 
-*(Hardware-Tests für Gruppen stehen noch aus; Testaufbau: A0 in Gruppe 0, A1 in Gruppe 0 und 1.)*
+*(Hardware-Tests für Gruppen stehen noch aus; Testaufbau: G0 = A0 + A1, G1 = nur A0, G2 = nur A1.)*
 
 - **Gruppe = Standard** (`v14`, **entschieden**): Jeder Gruppenbefehl bei brennender Gruppe trägt Farbe **und** Pegel (temporäre Farbe + `DAPC`), auch eine Farbe allein (mit dem Gruppenpegel des Gateways) und eine Helligkeit allein (mit der Gruppenfarbe des Gateways). Alle Mitglieder kehren damit zum Gruppenzustand zurück, auch einzeln umgestellte; ein laufender Fade wird nicht halb stehen gelassen. Ist die Gruppe aus, geht eine Farbe allein mit `ACTIVATE` (Lampe bleibt aus). Kennt das Gateway noch keine Gruppenfarbe (nach dem Neustart), geht nur der `DAPC`.
 - **Immer die komplette Farbe** (siehe Hinweis in 1.2). Der Treiber bekommt immer alle vier Kanäle in einer Sequenz; ein Telegramm, dessen gültige Kanäle alle 0 sind, schaltet die Gruppe aus.
@@ -421,7 +421,7 @@ Ziel: Der DT8-Code soll möglichst **ohne Merker und Zeitmarken** auskommen. Vor
 
 #### Testablauf `v14` (Schnelldurchlauf nach dem Umbau)
 
-Aufbau: A0 (DA4-M) in DALI-Gruppe 0; A1 (DA4-M) in Gruppe 0 und 1. In der ETS: A1, Gruppe 0 und Gruppe 1 als RGBW einrichten, je mit eigenen Gruppenadressen; Sperrobjekte bei A0 und Gruppe 0 einblenden. Vorher `aastat` (beide ON?). Jeder Test wird vorher angekündigt und erst nach „Go“ gesendet. Diagnose an (`v14-diag`). Erwartete Logzeilen sind die aus `rgbwFlush`/`rgbwSendState`.
+Aufbau: A0 (DA4-M) in DALI-Gruppe 0 und 1, A1 (DA4-M) in Gruppe 0 und 2 (G0 = beide, G1 = nur A0, G2 = nur A1). ETS 1.0: A0, A1, G0, G1, G2 als RGBW, Gruppenadressen 20/0/0–20/0/35, Broadcast 20/0/36–20/0/39 (Farbe RGBW 20/0/38, Zurück 20/0/39). Sperrobjekte bei A0 und G0 erst vor den Sperrtests einblenden. **Stand 21.11. 01:30:** Update auf 1.0 erledigt, 0.1/0.2 **bestanden** (keine Abfragen beim Start, `aastat` A0 und A1 ON, `aawin` 80); weiter mit E1. Vorher `aastat` (beide ON?). Jeder Test wird vorher angekündigt und erst nach „Go“ gesendet. Diagnose an (`v14-diag`). Erwartete Logzeilen sind die aus `rgbwFlush`/`rgbwSendState`.
 
 | # | Bereich | Aktion | Erwartung |
 |---|---|---|---|
@@ -437,7 +437,7 @@ Aufbau: A0 (DA4-M) in DALI-Gruppe 0; A1 (DA4-M) in Gruppe 0 und 1. In der ETS: A
 | G4 | Gruppe | Gruppe aus, Farbe an Gruppe 0 | beide bleiben aus, danach Ein: in der neuen Farbe |
 | B1 | Broadcast | *Broadcast Schalten* Ein / Aus | nur `DAPC FE` bzw. `DAPC 0`, keine Farbsequenzen; Leuchten in ihrer Treiberfarbe |
 | B2 | Broadcast | *Broadcast – Farbe RGBW* (z. B. Rot 100 %) | eine Farbsequenz an die Broadcast-Adresse (Adressbyte `0xFF`/`0xFE` im Frame-Log prüfen) + `DAPC`; beide Leuchten rot; **kein** Status an Kanälen/Gruppen |
-| B3 | Broadcast | danach *Broadcast – Zurück* | erst Gruppe 0 und 1 (`stored state sent again`), A0/A1 nicht einzeln (in Gruppen); Leuchten zurück im Gruppenzustand |
+| B3 | Broadcast | danach *Broadcast – Zurück* | erst G0, G1, G2 (`stored state sent again`), A0/A1 nicht einzeln (in Gruppen); Leuchten zurück im Gruppenzustand |
 | S1 | Sperre | A0: Sperren mit *Ausschalten*, dann Entsperren mit *Anschalten* (Parameter „wiederherstellen“ = Nein) | Sperren: aus (S1 richtig herum), Entsperren: Einschaltwert; Farbe bleibt; *Schalten Status* passt (S4) |
 | S2 | Sperre | A0: *Fester Wert* 50 % | ≈ 50 % (Pegel 229, S2) |
 | S3 | Sperre | Gruppe 0: Sperrverhalten anders als A0 einstellen | Gruppe nutzt ihre eigenen Werte (S3) |
