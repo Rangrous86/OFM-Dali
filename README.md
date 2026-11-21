@@ -81,7 +81,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 - Sperre: eigener Zweig mit korrigiertem Verhalten (siehe 5).
 - Broadcast *Schalten* sendet nur den Pegel, keine Farbe.
 
-**ETS und Speicher:** Der Parameter *Farbe ansteuern per* hat jetzt 3 Bit und liegt deshalb an anderer Stelle im Parameterspeicher (Einzeladresse Byte 21, Gruppe Byte 17); die neuen Parameter nutzen frei gewordene Bits. Die Blockgröße ist unverändert. KNX-Speicher: 63 Byte frei. Alle Einzelheiten: [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md).
+**ETS und Speicher:** Der Parameter *Farbe ansteuern per* hat jetzt 3 Bit und liegt deshalb an anderer Stelle im Parameterspeicher (Einzeladresse Byte 21, Gruppe Byte 17); die neuen Parameter nutzen frei gewordene Bits. Die Blockgröße ist unverändert. KNX-Speicher: 63 Byte frei. Die vollständige Liste aller ersetzten Stellen im Ausgangscode, einschließlich der Änderungen ohne sichtbare Wirkung (z. B. `currentColor` wird mit 0 initialisiert), steht in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 2.
 
 ## 4. Einrichtung in der ETS
 

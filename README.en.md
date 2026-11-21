@@ -81,7 +81,7 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 - Lock: own branch with corrected behaviour (see 5).
 - Broadcast *switch* sends the level only, no colour.
 
-**ETS and memory:** the parameter *Farbe ansteuern per* (colour control) now has 3 bits and therefore moved within the parameter memory (single address byte 21, group byte 17); the new parameters use the freed bits. The block size is unchanged. KNX memory: 63 bytes free. All details: [comparison (German)](doc/RGBW-Gegenueberstellung.md).
+**ETS and memory:** the parameter *Farbe ansteuern per* (colour control) now has 3 bits and therefore moved within the parameter memory (single address byte 21, group byte 17); the new parameters use the freed bits. The block size is unchanged. KNX memory: 63 bytes free. The complete list of all replaced places in the original code, including changes without visible effect (e.g. `currentColor` is initialised with 0), is in the [comparison (German)](doc/RGBW-Gegenueberstellung.md), section 2.
 
 ## 4. ETS setup
 
