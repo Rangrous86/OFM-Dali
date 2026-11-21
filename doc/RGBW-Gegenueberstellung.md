@@ -31,7 +31,7 @@ Der Parameter hatte 2 Bit (Werte 0–3, alle vergeben). Für den fünften Wert (
 | Einzeladresse | Byte 7, Bit 5–6 (2 Bit) | Byte 21, Bit 5–7 (3 Bit) | *Helligkeit bei RGBW* Byte 7 Bit 5, *wiederherstellen* Byte 7 Bit 6 |
 | Gruppe | Byte 4, Bit 2–3 (2 Bit) | Byte 17, Bit 2–4 (3 Bit) | *Helligkeit bei RGBW* Byte 17 Bit 5, *wiederherstellen* Byte 4 Bit 2 |
 
-Folge: neue ETS-Applikationsversion (im Test 1.0; die alten Versionen stehen in `ReplacesVersions`, das Gerät lässt sich per *Aktualisieren* umstellen). KNX-Speicher: Schätzung 36801 von 36864 Byte (63 Byte Reserve, README B17).
+Folge: neue ETS-Applikationsversion **0.13** (eine über dem Release 0.12; `ReplacesVersions="0.0 0.10 0.11 0.12"`, ein Gerät mit 0.12 lässt sich per *Aktualisieren* umstellen). KNX-Speicher: Schätzung 36801 von 36864 Byte (63 Byte Reserve, README B17).
 
 ## 3. Ablauf im Code (`v14b`)
 
