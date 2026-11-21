@@ -61,7 +61,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 | **Gruppen geben den ganzen Zustand vor** | Jeder Gruppenbefehl bei brennender Gruppe trägt Farbe **und** Pegel; einzeln umgestellte Mitglieder kehren zum Gruppenzustand zurück. |
 | **Farbe nach relativem Dimmen** | Hat ein Taster direkt nach einem Farbwechsel gedimmt, wird die Farbe nach dem Dimmen noch einmal gesendet. |
 | **Broadcast – Farbe RGBW** (neues Modul-Objekt) | Farbe und Pegel an alle Leuchten in einem Befehl, ohne Status und ohne den gespeicherten Zustand zu ändern, z. B. für Alarm- oder Blinklicht. |
-| **Broadcast – Zurück** (neues Modul-Objekt) | Alle RGBW-Gruppen und RGBW-Kanäle ohne Gruppe bekommen ihren gespeicherten Zustand zurück. |
+| **Broadcast – Zurück** (neues Modul-Objekt) | Alle RGBW-Gruppen und RGBW-Kanäle ohne Gruppe bekommen ihren gespeicherten Zustand zurück (Ablauf in Abschnitt 5). |
 | **Sperre bei RGBW** mit **„Bei Entsperren vorherigen Zustand wiederherstellen“** (Parameter) | Korrigiertes Sperrverhalten; mit „Ja“ werden Befehle während der Sperre gespeichert und beim Entsperren als ein Befehl ausgeführt. |
 | **Konsolenbefehle** | `getCol`, `aastat`, `aaon`, `aawin` (Abschnitt 9). |
 
@@ -117,6 +117,14 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 | *Broadcast – Zurück* | gespeicherter Zustand je RGBW-Gruppe und RGBW-Kanal ohne Gruppe | – |
 
 **Blinklicht mit Rückkehr:** z. B. *Broadcast – Farbe RGBW* im Wechsel Rot 100 % und „alles 0“, am Ende *Broadcast – Zurück*. Jede RGBW-Gruppe kehrt in ihren Zustand von vorher zurück.
+
+***Broadcast – Zurück* im Einzelnen:**
+1. **Wer:** jede konfigurierte RGBW-Gruppe und jeder RGBW-Kanal, der in **keiner** RGBW-Gruppe liegt. Ein Kanal in einer RGBW-Gruppe bekommt den Zustand seiner Gruppe, nicht seinen eigenen. Übersprungen werden gesperrte Kanäle und Gruppen sowie Treppenhauslicht.
+2. **Was:** je Gruppe bzw. Kanal **ein** Befehl mit dem gespeicherten Zustand. Bei „an“ sind das gespeicherte Farbe und gespeicherter Pegel in einem Fade. Bei „aus“ sind es die gespeicherte Farbe und `DAPC 0`, die Farbe geht dabei unsichtbar mit.
+3. **Reihenfolge:** zuerst alle, deren Farbe das Gateway noch nicht kennt (nach einem Neustart ohne Farbtelegramm), nur mit dem Pegel. Danach alle mit bekannter Farbe, mit Farbe und Pegel. So bricht ein Pegel ohne Farbe keinen gerade gestarteten Farb-Fade eines Treibers ab, der auch in einer anderen Gruppe liegt. Innerhalb dieser zwei Durchgänge gilt die Reihenfolge G0 → G15, danach die Kanäle.
+4. **Überlappende Gruppen:** Der zuletzt gesendete Befehl gilt, also die höchste Gruppennummer innerhalb des Durchgangs. Wer eine andere Rangfolge braucht, vergibt die Gruppennummern entsprechend.
+5. **Dauer:** etwa 0,3 s je Gruppe bzw. Kanal.
+6. **Sinnvoll** nach *Broadcast – Farbe RGBW*. Nach *Broadcast Schalten* oder *Dimmen* bringt *Zurück* den Zustand, den diese Befehle gesetzt haben, nicht den von vorher.
 
 ## 6. Einschränkungen und Hinweise
 

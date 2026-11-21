@@ -61,7 +61,7 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 | **Groups set the whole state** | Every group command to a lit group carries colour **and** level; members that were changed individually return to the group state. |
 | **Colour after relative dimming** | If a push button dimmed right after a colour change, the colour is sent once more after dimming. |
 | **Broadcast – colour RGBW** (new module object) | Colour and level to all luminaires in one command, without status and without changing the stored state, e.g. for an alarm or flashing light. |
-| **Broadcast – back** (new module object) | All RGBW groups and all RGBW channels without a group get their stored state back. |
+| **Broadcast – back** (new module object) | All RGBW groups and all RGBW channels without a group get their stored state back (sequence in section 5). |
 | **Lock with RGBW** with **"restore previous state on unlock"** (parameter) | Corrected lock behaviour; with "yes", commands during the lock are stored and executed as one command on unlock. |
 | **Console commands** | `getCol`, `aastat`, `aaon`, `aawin` (section 9). |
 
@@ -117,6 +117,14 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 | *Broadcast – Zurück* | stored state per RGBW group and RGBW channel without a group | – |
 
 **Flashing light with return:** e.g. *Broadcast – Farbe RGBW* alternating red 100 % and "all 0", finally *Broadcast – Zurück*. Every RGBW group returns to its previous state.
+
+***Broadcast – Zurück* in detail:**
+1. **Who:** every configured RGBW group and every RGBW channel that is in **no** RGBW group. A channel in an RGBW group gets the state of its group, not its own. Locked channels and groups and staircase light are skipped.
+2. **What:** **one** command per group or channel with the stored state. For "on": stored colour and stored level in one fade. For "off": stored colour and `DAPC 0`, the colour is set unseen.
+3. **Order:** first all whose colour the gateway does not know yet (after a restart without a colour telegram), level only. Then all with a known colour, with colour and level. This way a level without colour does not abort a colour fade that has just started in a driver that is also in another group. Within these two passes the order is G0 → G15, then the channels.
+4. **Overlapping groups:** the last command wins, i.e. the highest group number within the pass. If you need a different priority, assign the group numbers accordingly.
+5. **Duration:** about 0.3 s per group or channel.
+6. **Useful** after *Broadcast – Farbe RGBW*. After *broadcast switch* or *dim*, *Zurück* brings the state set by these commands, not the one before.
 
 ## 6. Limitations and notes
 
