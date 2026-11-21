@@ -22,9 +22,9 @@
 // ---------------------------------------------------------------------------------------------------------
 #define RGBW_DIAG
 #ifdef RGBW_DIAG
-#define RGBW_BUILD_TAG "v14-diag"
+#define RGBW_BUILD_TAG "v14b-diag"
 #else
-#define RGBW_BUILD_TAG "v14"
+#define RGBW_BUILD_TAG "v14b"
 #endif
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 // apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
@@ -54,6 +54,8 @@ class DaliChannel : public OpenKNX::Channel
 		void rgbwCancel();
 		// "Broadcast zurueck": sends the stored state of this RGBW channel or group again (not when locked)
 		void rgbwRestore();
+		// the gateway knows a colour for this channel or group (it got one since the start)
+		bool rgbwColourKnown();
 		// single channel: member of at least one configured RGBW group
 		bool isInRgbwGroup(DaliChannel *groups);
 

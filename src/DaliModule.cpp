@@ -1006,12 +1006,21 @@ void DaliModule::koHandleBroadcastBack(GroupObject &ko)
     if (!ko.value(DPT_Switch))
         return;
     logDebugP("Broadcast zurueck: RGBW groups and RGBW channels without group get their stored state");
-    for (int i = 0; i < GroupCount; i++)
-        if (groups[i].isConfigured() && groups[i].isRgbw())
-            groups[i].rgbwRestore();
-    for (int i = 0; i < ChannelCount; i++)
-        if (channels[i].isConfigured() && channels[i].isRgbw() && !channels[i].isInRgbwGroup(groups))
-            channels[i].rgbwRestore();
+    // Two passes (B28): first the groups and channels without a known colour (level only), then those with a colour.
+    // A level without colour aborts a running colour fade in a driver that is also in another group (B26), so the
+    // commands with colour come last. Within a pass the order is G0..G15, then the channels; with overlapping groups
+    // the last command wins.
+    for (int pass = 0; pass < 2; pass++)
+    {
+        const bool withColour = pass == 1;
+        for (int i = 0; i < GroupCount; i++)
+            if (groups[i].isConfigured() && groups[i].isRgbw() && groups[i].rgbwColourKnown() == withColour)
+                groups[i].rgbwRestore();
+        for (int i = 0; i < ChannelCount; i++)
+            if (channels[i].isConfigured() && channels[i].isRgbw() && !channels[i].isInRgbwGroup(groups) &&
+                channels[i].rgbwColourKnown() == withColour)
+                channels[i].rgbwRestore();
+    }
 }
 
 // A DALI scene changes levels (and colours) in the drivers: RGBW channels and groups drop a pending collection window

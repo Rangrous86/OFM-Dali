@@ -353,6 +353,11 @@ void DaliChannel::rgbwRestore()
     rgbwSendState();
 }
 
+bool DaliChannel::rgbwColourKnown()
+{
+    return !RgbwHelper::isOff(currentColor);
+}
+
 // Single channel: member of at least one configured RGBW group (gets its state from the group on "Broadcast zurueck")
 bool DaliChannel::isInRgbwGroup(DaliChannel *groups)
 {
@@ -915,9 +920,17 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
     if (_dimmStep == 0)
     {
         logDebugP("Dimm Stop");
+        const bool alreadyEnded = _dimmDirection == DimmDirection::None;
         _dimmDirection = DimmDirection::None;
         _dimmLast = 0;
         updateCurrentDimmValue();
+        if (alreadyEnded && isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness)
+        {
+            // RGBW: the dimming already ended at the maximum or minimum (loopDimming); the colour and the level query
+            // were sent (or are pending) from there. A stop telegram that comes later sends nothing again (B27).
+            logDebugP("RGBW: dimming already ended, stop ignored");
+            return;
+        }
         // the last UP/DOWN is still running in the driver: ask for the final level shortly after
         _stopQueryAt = (millis() + 300) | 1; // never 0 (= none)
         return;
