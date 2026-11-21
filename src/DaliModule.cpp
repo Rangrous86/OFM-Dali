@@ -117,29 +117,8 @@ void DaliModule::handleFunc(uint8_t setting)
 void DaliModule::setup1(bool conf) {
     pinMode(REG1_APP_PIN7, INPUT);
     daliMaster.init(REG1_APP_PIN6, REG1_APP_PIN7);
-#ifdef RGBW_DIAG
-    daliMaster.registerMonitor([this](Dali::Frame frame) {
-        uint8_t next = (_diagHead + 1) % DiagRingSize;
-        if (next == _diagTail)
-            return; // ring full: drop
-        _diagRing[_diagHead] = {millis(), frame.data, frame.size, frame.flags};
-        _diagHead = next;
-    });
-#endif
 }
 
-#ifdef RGBW_DIAG
-void DaliModule::loopDiagFrames()
-{
-    uint8_t n = 0;
-    while (_diagTail != _diagHead && n++ < 8)
-    {
-        const DiagFrame &f = _diagRing[_diagTail];
-        logDebugP("DALI %lu ms: 0x%lX (%u bit, flags 0x%02X)", f.ms, f.data, f.size, f.flags);
-        _diagTail = (_diagTail + 1) % DiagRingSize;
-    }
-}
-#endif
 
 #ifdef DALI_NO_TIMER
 bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
@@ -151,9 +130,6 @@ bool __isr __time_critical_func(daliTimerInterruptCallback)(repeating_timer *t)
 
 void DaliModule::loop(bool configured)
 {
-#ifdef RGBW_DIAG
-    loopDiagFrames();
-#endif
     OpenKNX::DateTime currentTime = openknx.time.getLocalTime();
     if (currentTime.minute != _lastTimeMinute)
     {
@@ -378,9 +354,6 @@ void DaliModule::showHelp()
     openknx.console.printHelpLine("getCol", "getCol yy [sel] => DT8 colour query of evg y (diagnosis); sel = DTR0 selector, without: R/G/B/W report (233-236), actual (9-12), temporary (201-204)");
     openknx.console.printHelpLine("aastat", "aastat => RGBW: read the DT8 automatic activation (gear features/status) of all configured RGBW channels");
     openknx.console.printHelpLine("aaon", "aaon [yy] => RGBW: switch DT8 automatic activation on permanently (stored in the driver); without yy all configured RGBW channels");
-#ifdef RGBW_DIAG
-    openknx.console.printHelpLine("diagq", "diagq 0|1 => RGBW test diagnosis: level/status probes after each command off/on (frame log stays on)");
-#endif
     openknx.console.printHelpLine("aawin", "aawin nnn => RGBW collection window in ms, telegrams within it go out as one command (default 80, 0 = at once)");
 }
 
@@ -430,15 +403,6 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
         return true;
     }
 
-#ifdef RGBW_DIAG
-    if (command == "diagq")
-    {
-        if (hasArg && (arg == "0" || arg == "1"))
-            DaliChannel::rgbwDiagProbes = arg == "1";
-        logInfoP("RGBW diagnosis level/status probes after each command: %s (diagq 0|1; the frame log stays on)", DaliChannel::rgbwDiagProbes ? "on" : "off");
-        return true;
-    }
-#endif
 
     if (command == "aawin")
     {

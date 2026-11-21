@@ -8,24 +8,8 @@
 #include "DaliConstants.h"
 
 #define DimmInterval 200
-// ---------------------------------------------------------------------------------------------------------
-// TEMPORARY DIAGNOSIS - ENABLED FOR THE v14 TEST, MUST BE REMOVED IN THE FINAL VERSION / BEFORE A PR
-// Purpose: check the automatic activation mechanism on the bus. The log shows every DALI frame (incl. our own
-// echo, DaliModule::loopDiagFrames), so it can be seen objectively that the temporary colour goes out WITHOUT
-// ACTIVATE and the DAPC follows right behind it. In addition, QUERY_STATUS /
-// QUERY_ACTUAL_LEVEL probes at fixed times after every RGBW command from the collection window
-// (DaliChannel::loopDiag); the probes can be switched off at runtime with the console command "diagq 0"
-// (the frame log stays on).
-// Side effects (test only): extra frames on the bus; the level probes update the "Dimmen Status" object, the
-// RGBW status (slider mode) and the "last value" with intermediate levels of the running fade. For tests of
-// status objects, "switch on with last value" or bus load, comment the define out again.
-// ---------------------------------------------------------------------------------------------------------
-#define RGBW_DIAG
-#ifdef RGBW_DIAG
-#define RGBW_BUILD_TAG "v14b-diag"
-#else
+// Version tag of the RGBW extension, shown in the log line "Color absolute [...]" (test aid, remove before a PR)
 #define RGBW_BUILD_TAG "v14b"
-#endif
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 // apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
 // window, also a colour to a switched-off channel. 0 = send at once. Changeable at runtime: console command "aawin".
@@ -37,9 +21,6 @@ class DaliChannel : public OpenKNX::Channel
 	public:
 		// RGBW: collection window (console "aawin")
 		static uint16_t rgbwWindowMs;
-#ifdef RGBW_DIAG
-		static bool rgbwDiagProbes;
-#endif
         static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
 
         DaliChannel(Dali::Master &master);
@@ -190,15 +171,6 @@ class DaliChannel : public OpenKNX::Channel
 		unsigned long _stopQueryAt = 0;
 		void loopStopQuery();
 
-#ifdef RGBW_DIAG
-		unsigned long _diagStart = 0;
-		uint8_t _diagStep = 0;
-		bool _diagActive = false;
-		uint8_t _diagStatusStep = 0;
-		uint32_t _diagStatusId = 0;
-		void loopDiag();
-		void diagStart();
-#endif
 
 		//Turn-on with last value
 		// DALI arc values (not percent): 100 % and 10 % until the first level is known

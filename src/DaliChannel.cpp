@@ -112,76 +112,9 @@ void DaliChannel::loop1()
     loopQueryLevel();
     loopRgbwWindow();
     loopStopQuery();
-#ifdef RGBW_DIAG
-    loopDiag();
-#endif
 }
-
-#ifdef RGBW_DIAG
-// Asks the driver for its real level at fixed times after an RGBW colour switch-on and logs the answers
-// (the answer is logged in loopQueryLevel and also updates the "Dimmen Status" object).
-void DaliChannel::loopDiag()
-{
-    static const uint16_t times[] = {300, 700, 1100, 1500, 2000, 3000, 5000};
-    static const uint16_t statusTimes[] = {150, 500, 900, 1300, 1700, 2300, 3300};
-    const uint8_t count = sizeof(times) / sizeof(times[0]);
-
-    // answer of a QUERY_STATUS probe: bit 4 = "fade running"
-    if (_diagStatusId != 0)
-    {
-        Dali::Response response = daliMaster.getResponse(_diagStatusId);
-        if (response.state == Dali::ResponseState::NOT_REGISTERED || response.state == Dali::ResponseState::NO_ANSWER)
-        {
-            logDebugP("DIAG status: no answer");
-            _diagStatusId = 0;
-        }
-        else if (response.state != Dali::ResponseState::SENT && response.state != Dali::ResponseState::WAITING)
-        {
-            uint8_t st = response.frame.data & 0xFF;
-            logDebugP("DIAG status 0x%02X fadeRunning=%i (t+%lu ms)", st, (st >> 4) & 1, millis() - _diagStart);
-            _diagStatusId = 0;
-        }
-    }
-
-    if (!_diagActive)
-        return;
-    if (_diagStep >= count && _diagStatusStep >= count)
-    {
-        _diagActive = false;
-        return;
-    }
-
-    unsigned long t = millis() - _diagStart;
-    if (_diagStatusStep < count && _diagStatusId == 0 && _queryId == 0 && t >= statusTimes[_diagStatusStep])
-    {
-        _diagStatusStep++;
-        if (!_isGroup)
-            _diagStatusId = daliMaster.sendCommand(_channelIndex, Dali::Command::QUERY_STATUS, false, true);
-        return;
-    }
-    if (_diagStep < count && _queryId == 0 && _diagStatusId == 0 && t >= times[_diagStep])
-    {
-        logDebugP("DIAG t+%lu ms: query actual level", t);
-        queryActualLevel();
-        _diagStep++;
-    }
-}
-
-void DaliChannel::diagStart()
-{
-    if (!rgbwDiagProbes)
-        return;
-    _diagStart = millis();
-    _diagStep = 0;
-    _diagStatusStep = 0;
-    _diagActive = true;
-}
-#endif
 
 uint16_t DaliChannel::rgbwWindowMs = RgbwWindowMs;
-#ifdef RGBW_DIAG
-bool DaliChannel::rgbwDiagProbes = true;
-#endif
 
 // ---------------------------------------------------------------------------------------------------------
 // RGBW control (v14, see README sections 1.5 and 5.1, plan after phase 3):
@@ -296,9 +229,6 @@ void DaliChannel::rgbwFlush()
     _winLevel = 0;
     _winColour = false;
     _winFromOff = false;
-#ifdef RGBW_DIAG
-    diagStart();
-#endif
 }
 
 // Drops a pending window (scene, lock, group or broadcast command)
@@ -339,9 +269,6 @@ void DaliChannel::rgbwSendState()
         sendColor(false);
     daliMaster.sendArc(_channelIndex, level, _isGroup);
     logDebugP("RGBW: stored state sent again: %s, level %i", currentState ? "on" : "off", level);
-#ifdef RGBW_DIAG
-    diagStart();
-#endif
 }
 
 // "Broadcast zurueck": this channel or group gets its own stored state again (locked ones keep their lock state)
@@ -584,11 +511,7 @@ void DaliChannel::loopQueryLevel()
                 return;
             } else {
                 uint8_t data = response.frame.data & 0xFF;
-#ifdef RGBW_DIAG
-                logDebugP("Got new actual level %i%%-%i (t+%lu ms)", DaliHelper::arcToPercent(data), data, millis() - _diagStart);
-#else
                 logDebugP("Got new actual level %i%%-%i", DaliHelper::arcToPercent(data), data);
-#endif
                 setDimmState(data, false, true);
 
                 if(currentDimmType == DimmType::Brigthness)
