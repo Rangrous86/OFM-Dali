@@ -1065,12 +1065,7 @@ uint8_t DaliChannel::rgbwLockArc(uint8_t behave, uint8_t percentValue)
     switch (behave)
     {
     case PT_lock_on:
-    {
-        uint8_t onValue = isNight ? _onNight : _onDay;
-        if (onValue == 0)
-            onValue = isNight ? _lastNightValue : _lastDayValue;
-        return onValue;
-    }
+        return rgbwOnValue(); // switch-on value: HCL before day/night
     case PT_lock_value:
         return DaliHelper::percentToArc(percentValue);
     default: // PT_lock_off
@@ -1383,6 +1378,14 @@ void DaliChannel::setBrightness(uint8_t value)
     {
         // like Dimmen absolut: collection window, then (temporary colour +) DAPC; status and last level follow
         const uint8_t arc = DaliHelper::percentToArc(value);
+        if (currentIsLocked)
+        {
+            // locked: nothing to the lamp; with "restore on unlock" the stored level follows the curve
+            if (rgbwRestoreOnUnlock() && arc > 0)
+                currentStep = arc;
+            logDebugP("RGBW: locked, HCL level %s", rgbwRestoreOnUnlock() ? "stored for the unlock" : "ignored");
+            return;
+        }
         if (arc == 0)
             rgbwOff();
         else

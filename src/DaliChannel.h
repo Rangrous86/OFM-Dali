@@ -9,7 +9,7 @@
 
 #define DimmInterval 200
 // Version tag of the RGBW extension, shown in the log line "Color absolute [...]" (test aid, remove before a PR)
-#define RGBW_BUILD_TAG "v15"
+#define RGBW_BUILD_TAG "v15b"
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 // apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
 // window, also a colour to a switched-off channel. 0 = send at once. Changeable at runtime: console command "aawin".
