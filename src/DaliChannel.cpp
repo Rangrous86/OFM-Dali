@@ -254,6 +254,18 @@ uint8_t DaliChannel::rgbwStoredLevel()
 {
     if (currentStep > 0)
         return currentStep;
+    return rgbwOnValue();
+}
+
+// Switch-on value: the HCL brightness (HCL active, auto mode) before the day/night value (0 = last value)
+uint8_t DaliChannel::rgbwOnValue()
+{
+    if (_hclCurve != HclDisabled && _hclIsAutoMode)
+    {
+        uint8_t _channelIndex = _hclCurve; // ParamDGWH_* reads the parameters of the HCL curve
+        if (ParamDGWH_checkBrightness)
+            return DaliHelper::percentToArc(_hclCurrentBri);
+    }
     uint8_t onValue = isNight ? _onNight : _onDay;
     if (onValue == 0)
         onValue = isNight ? _lastNightValue : _lastDayValue;
@@ -702,12 +714,7 @@ void DaliChannel::koHandleSwitch(GroupObject &ko)
             // RGBW, restore on unlock: store only, it goes out at the unlock
             currentState = ko.value(DPT_Switch);
             if (currentState)
-            {
-                uint8_t onValue = isNight ? _onNight : _onDay;
-                if (onValue == 0)
-                    onValue = isNight ? _lastNightValue : _lastDayValue;
-                currentStep = onValue;
-            }
+                currentStep = rgbwOnValue();
             logDebugP("RGBW: locked, stored for the unlock: %s", currentState ? "on" : "off");
             return;
         }
@@ -1354,6 +1361,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
 
 void DaliChannel::setTemperature(uint16_t value)
 {
+    if (isRgbw())
+    {
+        logDebugP("RGBW: colour temperature skipped (%i K)", value);
+        return;
+    }
     logDebugP("Set Kelvin: %i K", value);
     uint16_t mirek = 1000000.0 / value;
     //TODO check the colorType and then set RGB or TW or do nothing if it is no color Device
@@ -1367,8 +1379,17 @@ void DaliChannel::setTemperature(uint16_t value)
 void DaliChannel::setBrightness(uint8_t value)
 {
     logDebugP("Set Brightness: %i %%", value);
-    if (isRgbw())
-        rgbwCancel(); // HCL changes the level: a pending window is dropped
+    if (isRgbw() && !_isStaircase)
+    {
+        // like Dimmen absolut: collection window, then (temporary colour +) DAPC; status and last level follow
+        const uint8_t arc = DaliHelper::percentToArc(value);
+        if (arc == 0)
+            rgbwOff();
+        else
+            rgbwRequestLevel(arc);
+        setDimmState(arc, true);
+        return;
+    }
     daliMaster.sendArc(_channelIndex, DaliHelper::percentToArc(value), _isGroup);
     sendKoStateOnChange(DGW_Kodimm_state, value, Dpt(5, 1));
 }

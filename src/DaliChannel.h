@@ -9,7 +9,7 @@
 
 #define DimmInterval 200
 // Version tag of the RGBW extension, shown in the log line "Color absolute [...]" (test aid, remove before a PR)
-#define RGBW_BUILD_TAG "v14b"
+#define RGBW_BUILD_TAG "v15"
 // RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 // apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
 // window, also a colour to a switched-off channel. 0 = send at once. Changeable at runtime: console command "aawin".
@@ -149,6 +149,7 @@ class DaliChannel : public OpenKNX::Channel
 		// colour + DAPC 0 (the colour fades in unseen while the lamp goes out)
 		void rgbwSendState();
 		uint8_t rgbwStoredLevel();
+		uint8_t rgbwOnValue();
 		// Lock of an RGBW channel or group (S1-S4 corrected, README 5.1 plan point 8) and "restore on unlock"
 		bool rgbwRestoreOnUnlock();
 		void rgbwLock();
