@@ -17,7 +17,7 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 1. [What is it?](#1-what-is-it)
 2. [What is new?](#2-what-is-new)
 3. [What has changed?](#3-what-has-changed)
-4. [ETS setup](#4-ets-setup)
+4. [Setting up RGBW in the ETS](#4-setting-up-rgbw-in-the-ets)
 5. [Behaviour in operation](#5-behaviour-in-operation)
 6. [Limitations and notes](#6-limitations-and-notes)
 7. [Installation](#7-installation)
@@ -83,19 +83,84 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 
 **ETS and memory:** the parameter *Farbe ansteuern per* (colour control) now has 3 bits and therefore moved within the parameter memory (single address byte 21, group byte 17); the new parameters use the freed bits. The block size is unchanged. KNX memory: 63 bytes free. The complete list of all replaced places in the original code, including changes without visible effect (e.g. `currentColor` is initialised with 0), is in the [comparison (German)](doc/RGBW-Gegenueberstellung.md), section 2.
 
-## 4. ETS setup
+## 4. Setting up RGBW in the ETS
 
-**Channel or group:**
+Requirement: the ETS application 0.13 is imported and the device inserted or updated (section 7).
 
-1. *Gerätetyp* (device type) "DT8 – Farbe" (single address) or "Farbig" (group).
-2. *Farbe ansteuern per*: **RGBW**. The objects *Farbe RGBW* (input) and *Farbe RGBW Status* (output) appear, for A0 e.g. objects 306/307.
-3. *Helligkeit bei RGBW* (brightness with RGBW): **via object "Dimmen absolut"** for visualisations with their own brightness address (e.g. Home Assistant with `brightness_address`), otherwise **from the RGBW value**.
-4. Optional *Sperrobjekt anzeigen* (show lock object) = yes, then *behaviour on lock/unlock* and **Bei Entsperren vorherigen Zustand wiederherstellen** (restore previous state on unlock).
-5. *Farbe übertragen per* (RGB/xy) does not apply to RGBW.
+### 4.1 Address the drivers and assign groups
 
-**General (module):** objects *Dali: Broadcast – Farbe RGBW* (module object 6, e.g. no. 26 in the ETS) and *Dali: Broadcast – Zurück* (object 7, e.g. no. 27).
+1. *Dali-GW → Adressierung* (addressing): scan the drivers and assign short addresses. Short address n belongs to channel An.
+2. Open the tab *DALI Einstellungen* (DALI settings) of the channel.
+   - Tick the DALI groups under *Gruppen* (e.g. A0 in groups 0 and 1).
+   - **Recommendation for RGBW:** set *Power On Level* and *Failure On Level* to **"Inaktiv"** (inactive). The driver then comes back after a loss of its supply with the last level and the last colour (with the factory value 100 %: full white) and stays unchanged on a loss of the DALI bus.
+   - Set *Fade Time* as desired (1 s in the test).
+3. *Auf Gerät übertragen* (write to device). The values are then stored in the driver. Only set them when needed and do not change them constantly: the driver memory only tolerates a limited number of write cycles.
 
-**Recommendation for the driver** (tab *DALI Einstellungen* of the channel): set *Power On Level* and *Failure On Level* to **"Inaktiv"** (inactive) and press "Auf Gerät übertragen" (write to device). The driver then comes back after a loss of its supply with the **last level and the last colour** (with the factory value: full white) and stays unchanged on a loss of the DALI bus. The setting is stored in the driver, so it is written once.
+### 4.2 Single address (channel An)
+
+*Dali-GW → Einzeladresse → An*
+
+| Parameter | Setting for RGBW |
+|---|---|
+| *Gerätetyp* (device type) | **DT8 – Farbe** (can be checked with *Typ auslesen*) |
+| *Farbe ansteuern per* (colour control) | **RGBW** |
+| *Helligkeit bei RGBW* (brightness with RGBW) | **Via object "Dimmen absolut"** (default): the colour is the mix only, the brightness comes from *Dimmen absolut*, *Schalten* and *Dimmen relativ*. Right for visualisations with their own brightness address (e.g. Home Assistant with `brightness_address`).<br>**From the RGBW value:** the largest channel is the brightness. For clients that only have one colour object. |
+| *Einschaltwert Tag / Nacht* (switch-on value day/night) | brightness when switching on; 0 = last value |
+| *Sperrobjekt anzeigen* (show lock object) | optional; then *Sperren bei*, *Verhalten bei Sperren* (no change / switch on = switch-on value / switch off / fixed value in %) and *Verhalten bei Entsperren* |
+| *Bei Entsperren vorherigen Zustand wiederherstellen* (restore previous state on unlock) | RGBW with lock object only. **No:** commands during the lock are discarded, *Verhalten bei Entsperren* applies on unlock. **Yes:** *Schalten*, *Dimmen absolut* and *Farbe* during the lock are stored and executed as one command on unlock; *Verhalten bei Entsperren* does not apply then. |
+| *HCL aktivieren* | brightness possible; do not activate the colour temperature on RGBW channels (section 6) |
+| *Farbe übertragen per* | not relevant for RGBW (hidden) |
+
+Objects, example A0 (20 numbers further per channel, A1 = 320–327):
+
+| No. | Object | DPT | Direction |
+|---|---|---|---|
+| 300 | Schalten (switch) | 1.001 | input |
+| 301 | Schalten Status | 1.001 | output |
+| 302 | Dimmen relativ | 3.007 | input |
+| 303 | Dimmen absolut | 5.001 | input |
+| 304 | Dimmen Status | 5.001 | output |
+| 305 | Sperren (lock, if shown) | 1.001 | input |
+| 306 | **Farbe RGBW** | **251.600**, 6 bytes | input |
+| 307 | **Farbe RGBW Status** | **251.600**, 6 bytes | output |
+
+### 4.3 Group (Gn)
+
+*Dali-GW → Gruppen → Gn*
+
+- *Gerätetyp* **Farbig**, *Farbe ansteuern per* **RGBW**. The other parameters are the same as for the single address (4.2), including *Helligkeit bei RGBW* and *restore*.
+- Which drivers belong to the group is defined in the tab *DALI Einstellungen* of the drivers (4.1), not in the group.
+- Objects as for the single address, e.g. G0 = 1800–1807, G1 = 1819–1826, G2 = 1838–1845.
+- A group always gets the complete colour: channels without a valid bit become 0 (section 6).
+
+### 4.4 Broadcast (module)
+
+*Dali-GW → Allgemein*
+
+| No. | Object | DPT |
+|---|---|---|
+| 21 | Dali: Broadcast – Schalten | 1.001 |
+| 22 | Dali: Broadcast – Dimmen absolut | 5.001 |
+| 26 | **Dali: Broadcast – Farbe RGBW** | 251.600, 6 bytes |
+| 27 | **Dali: Broadcast – Zurück** | 1.015 (1 = trigger) |
+
+### 4.5 Example Home Assistant (optional)
+
+KNX light with its own brightness address, matching *Helligkeit bei RGBW* = *via object "Dimmen absolut"*:
+
+```yaml
+knx:
+  light:
+    - name: "DALI RGBW A0"
+      address: "20/0/0"
+      state_address: "20/0/4"
+      brightness_address: "20/0/1"
+      brightness_state_address: "20/0/5"
+      rgbw_address: "20/0/2"
+      rgbw_state_address: "20/0/3"
+```
+
+Without `brightness_address` Home Assistant only sends the colour object; then set *Helligkeit bei RGBW* = *from the RGBW value*.
 
 ## 5. Behaviour in operation
 
