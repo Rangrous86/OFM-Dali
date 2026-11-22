@@ -277,7 +277,7 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 **Offen:**
 - Szenenfarbe per Konfigurationstransfer enthält kein Weiß; keine getrennten 8-Bit-Objekte R/G/B/W.
 - Weiß über `SET TEMPORARY WAF DIMLEVEL` (236); nur mit dem DA4-M (RGBW-Modus) getestet.
-- HCL mit RGBW: in `v15` angepasst (Farbtemperatur übersprungen, Helligkeit über das Sammelfenster, Rangfolge 4.2), H1–H5 bestanden (22.11.). In `v15b` HCL-Vorrang auch für *Anschalten* bei Sperre/Entsperren und keine HCL-Nachführung während einer Sperre; Test H6 steht aus.
+- HCL mit RGBW: in `v15` angepasst (Farbtemperatur übersprungen, Helligkeit über das Sammelfenster, Rangfolge 4.2), H1–H5 bestanden (22.11.). In `v15b` HCL-Vorrang auch für *Anschalten* bei Sperre/Entsperren und keine HCL-Nachführung während einer Sperre; H6a/H6b bestanden (22.11.).
 - Treppenhauslicht mit RGBW: **mit Absicht nicht angepasst**, läuft wie im Ausgangscode (nur Pegel). Bei Bedarf in einer späteren Version.
 - Szenen: unverändert (der Treiber fährt Pegel und Farbe selbst an), mit RGBW nicht getestet.
 - Regression der anderen Farb- und Kanaltypen auf Hardware.

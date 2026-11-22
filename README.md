@@ -9,7 +9,7 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 | **Stand** | `v15b` (Branch `v1dev` dieses Forks) |
 | **Basis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` |
 | **ETS-Applikation** | 0.13 (eine Version über dem offiziellen Release 0.12; ein Gerät mit 0.12 lässt sich direkt aktualisieren) |
-| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Noch **nicht getestet**: HCL zusammen mit der Sperre (H6, `v15b`) (8.2) |
+| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Mit `v15b`: HCL zusammen mit der Sperre (H6a, H6b) bestanden (8.2) |
 | **Unverändert** | die Farbtypen HSV, RGB, TW und xyY sowie alle anderen Kanaltypen (bis auf drei kleine Korrekturen, siehe 3) |
 
 ## Inhalt
@@ -63,7 +63,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 | **Broadcast – Farbe RGBW** (neues Modul-Objekt) | Farbe und Pegel an alle Leuchten in einem Befehl, ohne Status und ohne den gespeicherten Zustand zu ändern, z. B. für Alarm- oder Blinklicht. |
 | **Broadcast – Zurück** (neues Modul-Objekt) | Alle RGBW-Gruppen und RGBW-Kanäle ohne Gruppe bekommen ihren gespeicherten Zustand zurück (Ablauf in Abschnitt 5). |
 | **Sperre bei RGBW** mit **„Bei Entsperren vorherigen Zustand wiederherstellen“** (Parameter) | Korrigiertes Sperrverhalten; mit „Ja“ werden Befehle während der Sperre gespeichert und beim Entsperren als ein Befehl ausgeführt. |
-| **HCL bei RGBW** | HCL-Helligkeit beim Einschalten und bei brennender Lampe über das Sammelfenster (ein Fade mit der Farbe, Status nachgeführt); die HCL-Farbtemperatur wird bei RGBW übersprungen. Während einer Sperre keine HCL-Nachführung. Rangfolge der Werte in Abschnitt 5. Getestet (H1–H5); HCL mit Sperre noch nicht getestet (H6). |
+| **HCL bei RGBW** | HCL-Helligkeit beim Einschalten und bei brennender Lampe über das Sammelfenster (ein Fade mit der Farbe, Status nachgeführt); die HCL-Farbtemperatur wird bei RGBW übersprungen. Während einer Sperre keine HCL-Nachführung. Rangfolge der Werte in Abschnitt 5. Getestet (H1–H6). |
 | **Konsolenbefehle** | `getCol`, `aastat`, `aaon`, `aawin` (Abschnitt 9). |
 
 ## 3. Was ist geändert?
@@ -111,7 +111,7 @@ Voraussetzung: Die ETS-Applikation 0.13 ist importiert und das Gerät eingefügt
 | *Einschaltwert Tag / Nacht* | Helligkeit beim Einschalten, wenn keine HCL-Helligkeit aktiv ist; **0 = letzter Dimmwert**. Wer beim Einschalten den letzten Dimmwert will, muss hier 0 einstellen, sonst gilt der eingestellte Wert (Rangfolge in Abschnitt 5) |
 | *Sperrobjekt anzeigen* | optional; dann *Sperren bei*, *Verhalten bei Sperren* (Keine Änderung / Anschalten = Einschaltwert / Ausschalten / Fester Wert in %) und *Verhalten bei Entsperren*. *Anschalten* nimmt bei RGBW den Einschaltwert nach der Rangfolge in Abschnitt 5 (HCL vor Tag/Nacht) |
 | *Bei Entsperren vorherigen Zustand wiederherstellen* | nur bei RGBW mit Sperrobjekt. **Nein:** Befehle während der Sperre werden verworfen, beim Entsperren gilt *Verhalten bei Entsperren*. **Ja:** *Schalten*, *Dimmen absolut* und *Farbe* während der Sperre werden gespeichert und beim Entsperren als ein Befehl ausgeführt; *Verhalten bei Entsperren* gilt dann nicht. |
-| *HCL aktivieren* | Helligkeit möglich, hat beim Einschalten Vorrang vor Tag/Nacht; eine aktivierte Farbtemperatur wird bei RGBW übersprungen. Getestet mit `v15` (H1–H5), mit Sperre noch nicht (Abschnitt 6) |
+| *HCL aktivieren* | Helligkeit möglich, hat beim Einschalten Vorrang vor Tag/Nacht; eine aktivierte Farbtemperatur wird bei RGBW übersprungen. Getestet mit `v15`/`v15b` (H1–H6) (Abschnitt 6) |
 | *Farbe übertragen per* | ohne Bedeutung bei RGBW (ausgeblendet) |
 
 Objekte, am Beispiel A0 (je Kanal 20 Nummern weiter, A1 = 320–327):
@@ -212,7 +212,7 @@ Ohne `brightness_address` schickt Home Assistant nur das Farbobjekt; dafür *Hel
 - **Nach einem Neustart des Gateways** ist die Farbe bis zum ersten Farbtelegramm unbekannt (Ein/Aus und Pegel werden aus dem Treiber gelesen). Bis dahin geht beim Einschalten nur der Pegel.
 - **Broadcast bei gemischten Anlagen:** Der Pegel von *Broadcast – Farbe RGBW* wirkt auch auf normale Dimm- und Schalttreiber; *Broadcast – Zurück* stellt nur RGBW zurück. *Broadcast Schalten/Dimmen* überschreiben den gespeicherten Zustand aller Kanäle; danach bringt *Zurück* diesen Zustand.
 - **Szenen:** unverändert gegenüber dem Ausgangscode, der Treiber fährt Pegel und Farbe selbst an; mit RGBW nicht getestet. Szenenfarbe per Konfigurationstransfer ohne Weiß; Szenen im Treiber mit Pegel **und** Farbe speichern.
-- **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht) und getestet (H1–H5). HCL mit Sperre (`v15b`) noch nicht getestet. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung. Die HCL braucht eine gültige Uhrzeit und den Standort, sonst meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`. Ausgangscode, alle Kanaltypen: Nach *Manu* → *Auto* gilt beim ersten *Ein* bis zur nächsten vollen Minute noch der HCL-Wert vom Wechsel auf *Manu* (G23).
+- **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht) und getestet (H1–H5, mit Sperre H6a/H6b in `v15b`). Nicht getestet: Kurve „Zeittabelle“. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung. Die HCL braucht eine gültige Uhrzeit und den Standort, sonst meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`. Ausgangscode, alle Kanaltypen: Nach *Manu* → *Auto* gilt beim ersten *Ein* bis zur nächsten vollen Minute noch der HCL-Wert vom Wechsel auf *Manu* (G23).
 - **Treppenhauslicht:** mit Absicht **ohne** RGBW-Behandlung. Ein Treppenhauskanal mit RGBW schaltet wie im Ausgangscode nur den Pegel; die Farbe kommt aus dem Treiber. Eine Anpassung kommt bei Bedarf in einer späteren Version (Abschnitt 10, Ideen).
 - **Treiber:** getestet nur mit dem DA4-M (RGBW-Modus). Der Treiber muss die automatische Aktivierung können (DT8, ab Werk an; prüfen mit `aastat`).
 - **Taster am Gerät** (`RECALL MAX`/`OFF`) ohne RGBW-Behandlung, wie im Ausgangscode.
@@ -333,7 +333,7 @@ Jeder Test: vorher beschreiben, was gesendet wird und was als bestanden gilt; da
 | N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade. N2 entsprechend mit Tag |
 | H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Farbtemperatur aktiviert | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
 
-**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`):** N1, N2, H1–H5 bestanden; H6 folgt mit `v15b`. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
+**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b bestanden. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
 
 **Host-Test ohne Hardware:**
 
@@ -358,7 +358,6 @@ Wichtige Logzeilen: `Color absolute` (in Testständen folgt die Versionskennung,
 
 **Offen:**
 - Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
-- Test H6 (HCL mit Sperre, `v15b`).
 - Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen.
 - Andere Treiber als der DA4-M.
 - Versionskennung im Log (`[v15b]`) vor dem Pull Request entfernen oder behalten.
