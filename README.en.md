@@ -6,10 +6,10 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 
 | | |
 |---|---|
-| **Version** | `v14b` (branch `v1dev` of this fork) |
+| **Version** | `v15` (branch `v1dev` of this fork) |
 | **Base** | `OpenKNX/OFM-Dali`, branch `v1dev`, commit `a120578` |
 | **ETS application** | 0.13 (one version above the official release 0.12; a device on 0.12 can be updated directly) |
-| **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)) |
+| **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)). The `v15` changes (HCL, order of the switch-on values) and the night value are **not tested yet** (8.2) |
 | **Unchanged** | the colour types HSV, RGB, TW and xyY and all other channel types (except three small fixes, see 3) |
 
 ## Contents
@@ -63,6 +63,7 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 | **Broadcast – colour RGBW** (new module object) | Colour and level to all luminaires in one command, without status and without changing the stored state, e.g. for an alarm or flashing light. |
 | **Broadcast – back** (new module object) | All RGBW groups and all RGBW channels without a group get their stored state back (sequence in section 5). |
 | **Lock with RGBW** with **"restore previous state on unlock"** (parameter) | Corrected lock behaviour; with "yes", commands during the lock are stored and executed as one command on unlock. |
+| **HCL with RGBW** | HCL brightness at switch-on and with the lamp on goes through the collection window (one fade with the colour, status updated); the HCL colour temperature is skipped for RGBW. Order of the values in section 5. **Not tested yet.** |
 | **Console commands** | `getCol`, `aastat`, `aaon`, `aawin` (section 9). |
 
 ## 3. What has changed?
@@ -80,6 +81,8 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 - *Darker* down to the minimum switches off and ends dimming.
 - Lock: own branch with corrected behaviour (see 5).
 - Broadcast *switch* sends the level only, no colour.
+- HCL: the colour temperature is skipped (before: a DT8 colour temperature command to the RGBW driver); the HCL brightness with the lamp on goes through the collection window.
+- Staircase light: deliberately **no** RGBW handling, unchanged as in the original code (section 6).
 
 **ETS and memory:** the parameter *Farbe ansteuern per* (colour control) now has 3 bits and therefore moved within the parameter memory (single address byte 21, group byte 17); the new parameters use the freed bits. The block size is unchanged. KNX memory: 63 bytes free. The complete list of all replaced places in the original code, including changes without visible effect (e.g. `currentColor` is initialised with 0), is in the [comparison (German)](doc/RGBW-Gegenueberstellung.md), section 2.
 
@@ -105,10 +108,10 @@ Requirement: the ETS application 0.13 is imported and the device inserted or upd
 | *Gerätetyp* (device type) | **DT8 – Farbe** (can be checked with *Typ auslesen*) |
 | *Farbe ansteuern per* (colour control) | **RGBW** |
 | *Helligkeit bei RGBW* (brightness with RGBW) | **Via object "Dimmen absolut"** (default): the colour is the mix only, the brightness comes from *Dimmen absolut*, *Schalten* and *Dimmen relativ*. Right for visualisations with their own brightness address (e.g. Home Assistant with `brightness_address`).<br>**From the RGBW value:** the largest channel is the brightness. For clients that only have one colour object. |
-| *Einschaltwert Tag / Nacht* (switch-on value day/night) | brightness when switching on; 0 = last value |
+| *Einschaltwert Tag / Nacht* (switch-on value day/night) | brightness when switching on if no HCL brightness is active; **0 = last dim value**. To get the last dim value at switch-on, set 0 here, otherwise the set value applies (order in section 5) |
 | *Sperrobjekt anzeigen* (show lock object) | optional; then *Sperren bei*, *Verhalten bei Sperren* (no change / switch on = switch-on value / switch off / fixed value in %) and *Verhalten bei Entsperren* |
 | *Bei Entsperren vorherigen Zustand wiederherstellen* (restore previous state on unlock) | RGBW with lock object only. **No:** commands during the lock are discarded, *Verhalten bei Entsperren* applies on unlock. **Yes:** *Schalten*, *Dimmen absolut* and *Farbe* during the lock are stored and executed as one command on unlock; *Verhalten bei Entsperren* does not apply then. |
-| *HCL aktivieren* | brightness possible; do not activate the colour temperature on RGBW channels (section 6) |
+| *HCL aktivieren* | brightness possible, takes priority over day/night at switch-on; an activated colour temperature is skipped for RGBW. Adapted in `v15`, **not tested yet** (section 6) |
 | *Farbe übertragen per* | not relevant for RGBW (hidden) |
 
 Objects, example A0 (20 numbers further per channel, A1 = 320–327):
@@ -166,7 +169,7 @@ Without `brightness_address` Home Assistant only sends the colour object; then s
 
 | Telegram | At the driver | Status |
 |---|---|---|
-| *Schalten* on / *Dimmen absolut* > 0 | stored colour + level in **one** fade (day/night switch-on value or last value) | switch on, dim % |
+| *Schalten* on / *Dimmen absolut* > 0 | stored colour + level in **one** fade (*on*: switch-on value by the order below) | switch on, dim % |
 | *Schalten* off / *Dimmen absolut* 0 / colour all 0 | `DAPC 0`; the colour stays stored in the driver and in the gateway | off, 0 % |
 | Colour to a channel that is off | the colour is set in the driver, the lamp **stays off**; if *on* or a brightness also arrives within the window, one combined command | only *Farbe RGBW Status* |
 | Colour only, lamp on | single gear: colour, the level stays. Group: colour + group level | colour |
@@ -174,12 +177,21 @@ Without `brightness_address` Home Assistant only sends the colour object; then s
 | Colour + brightness within 80 ms | one command, one fade | both |
 | *Dimmen relativ* | as before (`UP`/`DOWN`); afterwards the colour once more and a level query. *Brighter* from "off" starts at the minimum | switch on immediately, dim % at the end |
 | Scene | unchanged: the driver recalls its stored scene | not updated |
+| HCL (active, auto mode) | *on*: HCL level with the stored colour in one fade. Tracking with the lamp on (*HCL anwenden* = "also when switched on") like *Dimmen absolut*. Colour temperature skipped | dim %, like *Dimmen absolut* |
+| Staircase light | no RGBW handling, as in the original code: level only, the colour comes from the driver | as in the original code |
 | Lock | level only: *Anschalten* (switch on) = switch-on value, *Ausschalten* (switch off) = off, *Fester Wert* (fixed value) as a percentage; groups use their own parameters | follows |
 | During the lock | *switch*, *dim*, *colour* are discarded; with "restore" = yes they are stored | – |
 | Unlock | *behaviour on unlock*; with "restore" = yes the stored state as one command | follows |
 | Broadcast *switch* | level only to all (100 % or off), each RGBW luminaire in the colour stored in its driver | switch status of all channels and groups |
 | *Broadcast – Farbe RGBW* | colour to all RGBW drivers, level (largest channel) to **all** drivers; all 0 = off | no status |
 | *Broadcast – Zurück* | stored state per RGBW group and RGBW channel without a group | – |
+
+**Which level applies?**
+1. **Level sent:** *Dimmen absolut*, *Dimmen relativ*, after a restart the level read from the driver, in auto mode also the HCL tracking. It is the last level and applies to *Broadcast – Zurück*, unlocking with "restore" and *Dimmen absolut* during the lock. A level sent by hand switches HCL to *manual* if set so in the ETS; after the next *off* it runs automatically again.
+2. **HCL brightness**, if HCL is active and in auto mode: applies at switch-on (*on*) and, if no last level is known, to *Zurück* and unlocking.
+3. **Switch-on value day/night**, if no HCL brightness is active. If it is **0**, the last dim value is used.
+
+So *on* always takes the switch-on value (HCL, otherwise day/night), as for all other channel types. The last dim value at switch-on is only available with switch-on value 0. *Min/Max* are limits and apply to all values.
 
 **Flashing light with return:** e.g. *Broadcast – Farbe RGBW* alternating red 100 % and "all 0", finally *Broadcast – Zurück*. Every RGBW group returns to its previous state.
 
@@ -199,8 +211,9 @@ Without `brightness_address` Home Assistant only sends the colour object; then s
 - **Switching on with a new colour from "off":** the colour fades from the colour stored in the driver; at a low level a mixed colour is briefly visible (as specified by the standard). Without a mixed colour: send the new colour first while the lamp is off, then switch on.
 - **After a restart of the gateway** the colour is unknown until the first colour telegram (on/off and level are read from the driver). Until then, switching on sends the level only.
 - **Broadcast in mixed installations:** the level of *Broadcast – Farbe RGBW* also affects normal dimming and switching drivers; *Broadcast – Zurück* restores RGBW only. *Broadcast switch/dim* overwrite the stored state of all channels; afterwards *Zurück* brings that state.
-- **Scenes:** scene colour via configuration transfer has no white; store scenes in the driver with level **and** colour.
-- **HCL:** do not activate the HCL colour temperature on an RGBW channel (it is not skipped yet); brightness works.
+- **Scenes:** unchanged from the original code, the driver recalls level and colour itself; not tested with RGBW. Scene colour via configuration transfer has no white; store scenes in the driver with level **and** colour.
+- **HCL:** adapted in `v15` (colour temperature skipped for RGBW, brightness through the collection window, priority over day/night), **not tested yet**. An earlier state (`v12`) was tested with brightness. The HCL colour temperature has no effect on RGBW.
+- **Staircase light:** deliberately **without** RGBW handling. A staircase channel with RGBW switches the level only, as in the original code; the colour comes from the driver. An adaptation may follow in a later version if needed (section 10, ideas).
 - **Drivers:** tested with the DA4-M (RGBW mode) only. The driver must support automatic activation (DT8, on by default; check with `aastat`).
 - **Push button on the device** (`RECALL MAX`/`OFF`) without RGBW handling, as in the original code.
 
@@ -317,8 +330,10 @@ For every test: first describe what is sent and what counts as passed, then send
 | S3 | group lock with its own values | the group uses its own parameters |
 | A1 | power on / failure "Inaktiv"; briefly disconnect the supply or the DALI bus of the driver | lamp comes back with last level and last colour, or stays unchanged |
 | R1 | restart the gateway (`restart`) with the lamp on, then colour | lamp unchanged; on/off and level reported; first colour with `ACTIVATE`, level stays |
+| N1 | *Tag/Nacht* to night, then *on* | `Turning on night value`, lamp with night value and stored colour in one fade (**pending**, `v15`; procedure in the test log) |
+| H1–H6 | HCL (brightness and colour temperature active, auto): *on*, tracking with the lamp on, colour (→ manual), *off* (→ auto); colour temperature activated | HCL level instead of day value; tracking as `RGBW: level N`; colour temperature only `RGBW: colour temperature skipped` (**pending**, `v15`; procedure in the test log) |
 
-**Result 21 Nov 2026:** all tests passed, including the final test with the firmware without diagnostics. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
+**Result 21 Nov 2026 (`v14b`):** all tests up to R1 passed, including the final test with the firmware without diagnostics. N1 and H1–H6 follow with `v15`. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
 
 **Host test without hardware:**
 
@@ -337,15 +352,19 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 **If RGBW does not work as described** (e.g. colour and brightness do not come in one fade): first `aastat`, if *OFF* then `aaon`.
 
-Important log lines: `Color absolute [v14b]`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`.
+Important log lines: `Color absolute` (test builds append the version tag, e.g. `Color absolute [v15]`), `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`.
 
 ## 10. Open points and questions
 
 **Open:**
 - Regression test of the other colour types (HSV, RGB, TW, xyY) and channel types on hardware.
-- Scenes with colour, day/night switch-on values, staircase light and HCL with RGBW.
+- Test of the `v15` changes: HCL with RGBW (H1–H6) and night value (N1, N2).
+- Test scenes with colour (KNX scenes and scenes stored in the driver) with RGBW.
 - Drivers other than the DA4-M.
-- Version tag in the log (`[v14b]`): remove or keep before the pull request.
+- Version tag in the log (`[v15]`): remove or keep before the pull request.
+
+**Ideas, deliberately postponed:**
+- Staircase light with RGBW (colour at switch-on, collection window). Deliberately not in this version; may follow in a later version if needed.
 
 **Questions to the maintainer:** about the RGBW extension in the [comparison](doc/RGBW-Gegenueberstellung.md), section 7; about places in the original code and in the DALI library in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) (German).
 
