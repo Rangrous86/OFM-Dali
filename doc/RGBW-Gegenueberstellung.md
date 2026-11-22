@@ -1,11 +1,11 @@
-# RGBW-Gegenüberstellung: Ausgangscode ↔ RGBW-Erweiterung (Stand `v15`)
+# RGBW-Gegenüberstellung: Ausgangscode ↔ RGBW-Erweiterung (Stand `v15b`)
 
 Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien neu sind, welche Stellen des Ausgangscodes ersetzt wurden, was neu hinzugekommen ist und was im Laufe der Entwicklung wieder weggefallen ist. Funktion und Bedienung beschreibt die [README](../README.md), den Verlauf und die Tests das [Testprotokoll](RGBW-Testprotokoll.md), Befunde im Ausgangscode die Datei [RGBW-Befunde-Ausgangscode.md](RGBW-Befunde-Ausgangscode.md).
 
 | | |
 |---|---|
 | **Vergleichsbasis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` (letzter Merge in diesen Fork, enthält Fix #7). Upstream ist seitdem nur um `3badb1e` („updated: lib version“, eine Zeile in `library.json`) weiter; das berührt die RGBW-Änderung nicht. |
-| **Neuer Stand** | Fork `Rangrous86/OFM-Dali`, Branch `v1dev`, Code-Stand Commit `85436d3` (`v15`, ohne Testdiagnose) |
+| **Neuer Stand** | Fork `Rangrous86/OFM-Dali`, Branch `v1dev`, Code-Stand Commit `535913c` (`v15b`, ohne Testdiagnose) |
 | **Firmware / ETS** | `GW-REG1-Dali` mit `ApplicationVersion="0.13.0"`, `ReplacesVersions="0.0 0.10 0.11 0.12"` |
 | **Bibliothek** | `OpenKNX/dali` **unverändert** |
 
@@ -34,16 +34,16 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | `src/DaliModule.group.templ.xml` | geändert | Gruppe: wie Einzeladresse |
 
 ```
- src/DaliChannel.cpp             | 649 +++++++++++++++++++++++++++++++++++++++-
+ src/DaliChannel.cpp             | 652 +++++++++++++++++++++++++++++++++++++++-
  src/DaliChannel.h               |  72 ++++-
- src/DaliModule.cpp              | 283 +++++++++++++++++-
+ src/DaliModule.cpp              | 283 ++++++++++++++++-
  src/DaliModule.group.templ.xml  |  32 +-
  src/DaliModule.h                |   9 +
  src/DaliModule.share.xml        |  15 +-
  src/DaliModule.single.templ.xml |  66 ++--
  src/RgbwHelper.h                | 148 +++++++++
  test/test_rgbw_helper.cpp       | 136 +++++++++
- 9 files changed, 1371 insertions(+), 39 deletions(-)
+ 9 files changed, 1374 insertions(+), 39 deletions(-)
 ```
 
 **Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert).
@@ -62,7 +62,7 @@ Alle Zeilen, die im Ausgangscode entfernt oder ersetzt wurden. Alles andere im D
 | `DaliChannel::koHandleDimmAbs` | `daliMaster.sendArc(arc)` | RGBW: `rgbwOff()` bzw. `rgbwRequestLevel(arc)`. **Zusätzlich für alle:** `currentState = arc > 0` (außer Treppenhaus) | RGBW; **alle** (Merker) |
 | `DaliChannel::koHandleColor` | Log `Color absolute`; nach dem `switch` immer `if(!currentState) setDimmState(_onDay, …) // TODO get real` | Log mit Versionskennung; neuer `case PT_colorType_RGBW` → `handleColorRGBW()` und `return` vor dem `TODO`-Teil; gesperrt mit „wiederherstellen“: nur speichern | RGBW (andere Farbtypen unverändert, inkl. `TODO`) |
 | `DaliChannel::setTemperature` (HCL-Farbtemperatur, Farbtyp TW) | DT8 `SET TEMPORARY COLOUR TEMPERATURE` + `ACTIVATE`, Status als DPT 7 in *Farbe Status* | RGBW: übersprungen, nur Log `RGBW: colour temperature skipped` (`v15`). Sonst unverändert | RGBW |
-| `DaliChannel::setBrightness` (HCL-Helligkeit bei brennender Lampe) | `sendArc(percentToArc(value))`, *Dimmen Status* | RGBW: wie *Dimmen absolut* `rgbwRequestLevel(arc)` (bei 0 `rgbwOff()`) + `setDimmState(arc, true)`: Sammelfenster, ein Fade mit Farbe, Status und letzter Pegel nachgeführt (`v15`). Sonst und bei Treppenhaus unverändert | RGBW |
+| `DaliChannel::setBrightness` (HCL-Helligkeit bei brennender Lampe) | `sendArc(percentToArc(value))`, *Dimmen Status* | RGBW: wie *Dimmen absolut* `rgbwRequestLevel(arc)` (bei 0 `rgbwOff()`) + `setDimmState(arc, true)`: Sammelfenster, ein Fade mit Farbe, Status und letzter Pegel nachgeführt (`v15`). Während einer Sperre nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve (`v15b`, G24). Sonst und bei Treppenhaus unverändert | RGBW |
 | `DaliChannel::sendColor()` | ohne Parameter | `sendColor(bool activate = true)`; RGBW-Zweig vorab (`sendColorAsRGBW`, mit oder ohne `ACTIVATE`) | RGBW |
 | `DaliChannel::setSwitchState` | `ko.value(value, DPT_Switch)` (sendet jedes Mal) | RGBW: nur bei Änderung senden (`valueNoSendCompare` + `objectWritten`) | RGBW |
 | `DaliChannel::setGroupState(group, uint8_t)` | `setDimmState(value, true, true)` | gesperrt mit „wiederherstellen“: nur der Status folgt, der gespeicherte Zustand bleibt; RGBW: Merker und Fenster nachgeführt | RGBW |
@@ -84,11 +84,11 @@ Alle Zeilen, die im Ausgangscode entfernt oder ersetzt wurden. Alles andere im D
 | `rgbwRequestLevel`, `rgbwRequestColour`, `rgbwStartWindow`, `loopRgbwWindow`, `rgbwFlush`, `rgbwCancel` | **Sammelfenster** (`_win…`, Standard 80 ms): Farbe und Pegel innerhalb des Fensters gehen als **ein** Befehl raus. `rgbwFlush` entscheidet: temporäre Farbe + `DAPC`, `ACTIVATE` oder nur `DAPC` (Gruppe / Einzel-EVG / aus) |
 | `rgbwOff()` | `DAPC 0`, Fenster verwerfen |
 | `rgbwStoredLevel()`, `rgbwSendState()` | gespeicherten Zustand als ein Befehl senden (an = temporäre Farbe + `DAPC`, aus = temporäre Farbe + `DAPC 0`). Pegel: der letzte Pegel, sonst `rgbwOnValue()` |
-| `rgbwOnValue()` | Einschaltwert für den RGBW-Code (`v15`): HCL-Helligkeit (HCL aktiv, Modus Auto, Helligkeit aktiv) vor Tag-/Nachtwert, bei 0 der letzte Tag-/Nachtwert. Gleiche Rangfolge wie `handleSwitchNormal` im Ausgangscode, das selbst unverändert bleibt. Benutzt bei *Ein* während der Sperre mit „wiederherstellen“ und in `rgbwStoredLevel()` |
+| `rgbwOnValue()` | Einschaltwert für den RGBW-Code (`v15`): HCL-Helligkeit (HCL aktiv, Modus Auto, Helligkeit aktiv) vor Tag-/Nachtwert, bei 0 der letzte Tag-/Nachtwert. Gleiche Rangfolge wie `handleSwitchNormal` im Ausgangscode, das selbst unverändert bleibt. Benutzt bei *Ein* während der Sperre mit „wiederherstellen“, in `rgbwStoredLevel()` und für *Anschalten* beim Sperren/Entsperren (`rgbwLockArc`, `v15b`) |
 | `rgbwRestore()`, `rgbwColourKnown()`, `isInRgbwGroup()` | *Broadcast – Zurück*: Zustand erneut senden, Reihenfolge nach bekannter Farbe (B28), Einzelkanäle in RGBW-Gruppen überspringen |
 | `loopStopQuery()`, `_stopQueryAt` | nach dem relativen Dimmen: Pegelabfrage (alle) und bei RGBW die Farbe erneut mit `ACTIVATE` (B25); später Stopp nach Max/Min ohne Wirkung (B27) |
 | `rgbwSliderMode()`, `rgbwArcFromColour()`, `rgbwSliderStatus()`, `_mix`, `_lastLevelArc` | *Helligkeit bei RGBW = aus dem RGBW-Wert*: größter Kanal = Helligkeit, Mischung als Farbe, Status = Mischung × Pegel |
-| `rgbwRestoreOnUnlock()`, `rgbwLockArc()`, `rgbwLock()`, `rgbwUnlock()` | Sperre bei RGBW mit korrigiertem Verhalten (S1–S4, Befunde G4) und Parameter „Bei Entsperren vorherigen Zustand wiederherstellen“ |
+| `rgbwRestoreOnUnlock()`, `rgbwLockArc()`, `rgbwLock()`, `rgbwUnlock()` | Sperre bei RGBW mit korrigiertem Verhalten (S1–S4, Befunde G4) und Parameter „Bei Entsperren vorherigen Zustand wiederherstellen“. *Anschalten = Einschaltwert* beim Sperren und Entsperren nimmt `rgbwOnValue()`, also HCL vor Tag/Nacht (`v15b`) |
 | `sendRgbwState()` | 6-Byte-Status `[R,G,B,W,0x00,0x0F]` direkt in den Objektspeicher (nur bei Änderung), weil `sendKoStateOnChange` keinen 6-Byte-DPT kann |
 | `sendColorAsRGBW(r, g, b, w, activate)` | DALI: DTR0–2 + `SET TEMPORARY RGB DIMLEVEL` (235), DTR0–2 + `SET TEMPORARY WAF DIMLEVEL` (236, Amber/Freecolour = MASK), optional `ACTIVATE` (226) |
 | Stellen mit Speichern während der Sperre | `koHandleSwitch`, `koHandleDimmAbs`, `koHandleColor`: bei „wiederherstellen“ wird gespeichert statt verworfen |
@@ -169,9 +169,9 @@ Nachher:
         currentState = arc > 0;   // gilt für alle Kanaltypen
 ```
 
-**Rangfolge des Pegels bei RGBW** (`v15`):
+**Rangfolge des Pegels bei RGBW** (`v15`, `v15b`):
 1. Zugeschickter Pegel (*Dimmen absolut*, *Dimmen relativ*, nach einem Neustart der aus dem Treiber gelesene Pegel, im Modus Auto auch die HCL-Nachführung bei brennender Lampe) als letzter Pegel (`currentStep`). Ihn nehmen *Broadcast – Zurück*, Entsperren mit „wiederherstellen“ und *Dimmen absolut* während der Sperre.
-2. Ist kein letzter Pegel bekannt, oder kommt ein reines *Ein*: HCL-Helligkeit, wenn HCL aktiv ist und im Modus Auto steht.
+2. Ist kein letzter Pegel bekannt, oder kommt ein reines *Ein* bzw. *Anschalten* beim Sperren/Entsperren (`v15b`): HCL-Helligkeit, wenn HCL aktiv ist und im Modus Auto steht.
 3. Sonst der Tag- bzw. Nachtwert; steht er auf 0, der letzte Tag- bzw. Nachtwert („letzter Wert“).
 
 *Ein* nimmt damit immer den Einschaltwert (HCL, sonst Tag/Nacht), wie bei allen anderen Kanaltypen. Wer beim Einschalten den letzten Dimmwert will, stellt den Einschaltwert Tag/Nacht auf 0. Min/Max gelten als Grenzen für alle Werte.
@@ -277,11 +277,11 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 **Offen:**
 - Szenenfarbe per Konfigurationstransfer enthält kein Weiß; keine getrennten 8-Bit-Objekte R/G/B/W.
 - Weiß über `SET TEMPORARY WAF DIMLEVEL` (236); nur mit dem DA4-M (RGBW-Modus) getestet.
-- HCL mit RGBW: in `v15` angepasst (Farbtemperatur übersprungen, Helligkeit über das Sammelfenster, Rangfolge 4.2), Test steht aus.
+- HCL mit RGBW: in `v15` angepasst (Farbtemperatur übersprungen, Helligkeit über das Sammelfenster, Rangfolge 4.2), H1–H5 bestanden (22.11.). In `v15b` HCL-Vorrang auch für *Anschalten* bei Sperre/Entsperren und keine HCL-Nachführung während einer Sperre; Test H6 steht aus.
 - Treppenhauslicht mit RGBW: **mit Absicht nicht angepasst**, läuft wie im Ausgangscode (nur Pegel). Bei Bedarf in einer späteren Version.
 - Szenen: unverändert (der Treiber fährt Pegel und Farbe selbst an), mit RGBW nicht getestet.
 - Regression der anderen Farb- und Kanaltypen auf Hardware.
-- Versionskennung im Log (`Color absolute [v15]`, `RGBW_BUILD_TAG`): vor dem PR entfernen oder behalten.
+- Versionskennung im Log (`Color absolute [v15b]`, `RGBW_BUILD_TAG`): vor dem PR entfernen oder behalten.
 - `RgbwHelper::fromDaliLevel` / `colourFromDriver` werden nur noch vom Host-Test benutzt: entfernen oder für später behalten.
 
 **Fragen an den Maintainer:**
@@ -447,11 +447,11 @@ namespace RgbwHelper
 
 ## Anhang B: vollständiges Diff
 
-Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand `85436d3`).
+Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand `535913c`).
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..e2b3123 100644
+index dffeaaf..4312672 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -939,7 +939,7 @@ index dffeaaf..e2b3123 100644
      uint8_t behave;
      uint8_t behavevalue;
      if (currentIsLocked)
-@@ -701,15 +1046,98 @@ void DaliChannel::koHandleLock(GroupObject &ko)
+@@ -701,15 +1046,93 @@ void DaliChannel::koHandleLock(GroupObject &ko)
      }
      }
      logDebugP("%i - %i", behavevalue, DaliHelper::percentToArc(behavevalue));
@@ -962,12 +962,7 @@ index dffeaaf..e2b3123 100644
 +    switch (behave)
 +    {
 +    case PT_lock_on:
-+    {
-+        uint8_t onValue = isNight ? _onNight : _onDay;
-+        if (onValue == 0)
-+            onValue = isNight ? _lastNightValue : _lastDayValue;
-+        return onValue;
-+    }
++        return rgbwOnValue(); // switch-on value: HCL before day/night
 +    case PT_lock_value:
 +        return DaliHelper::percentToArc(percentValue);
 +    default: // PT_lock_off
@@ -1039,7 +1034,7 @@ index dffeaaf..e2b3123 100644
          logErrorP("is locked");
          return;
      }
-@@ -738,11 +1166,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -738,11 +1161,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -1056,7 +1051,7 @@ index dffeaaf..e2b3123 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +1212,106 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +1207,106 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -1163,7 +1158,7 @@ index dffeaaf..e2b3123 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -829,6 +1361,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
+@@ -829,6 +1356,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
  
  void DaliChannel::setTemperature(uint16_t value)
  {
@@ -1175,7 +1170,7 @@ index dffeaaf..e2b3123 100644
      logDebugP("Set Kelvin: %i K", value);
      uint16_t mirek = 1000000.0 / value;
      //TODO check the colorType and then set RGB or TW or do nothing if it is no color Device
-@@ -842,6 +1379,17 @@ void DaliChannel::setTemperature(uint16_t value)
+@@ -842,6 +1374,25 @@ void DaliChannel::setTemperature(uint16_t value)
  void DaliChannel::setBrightness(uint8_t value)
  {
      logDebugP("Set Brightness: %i %%", value);
@@ -1183,6 +1178,14 @@ index dffeaaf..e2b3123 100644
 +    {
 +        // like Dimmen absolut: collection window, then (temporary colour +) DAPC; status and last level follow
 +        const uint8_t arc = DaliHelper::percentToArc(value);
++        if (currentIsLocked)
++        {
++            // locked: nothing to the lamp; with "restore on unlock" the stored level follows the curve
++            if (rgbwRestoreOnUnlock() && arc > 0)
++                currentStep = arc;
++            logDebugP("RGBW: locked, HCL level %s", rgbwRestoreOnUnlock() ? "stored for the unlock" : "ignored");
++            return;
++        }
 +        if (arc == 0)
 +            rgbwOff();
 +        else
@@ -1193,7 +1196,7 @@ index dffeaaf..e2b3123 100644
      daliMaster.sendArc(_channelIndex, DaliHelper::percentToArc(value), _isGroup);
      sendKoStateOnChange(DGW_Kodimm_state, value, Dpt(5, 1));
  }
-@@ -867,11 +1415,21 @@ void DaliChannel::queryActualLevel()
+@@ -867,11 +1418,21 @@ void DaliChannel::queryActualLevel()
      _queryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_ACTUAL_LEVEL, false, true);
  }
  
@@ -1216,7 +1219,7 @@ index dffeaaf..e2b3123 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1463,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1466,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -1248,7 +1251,7 @@ index dffeaaf..e2b3123 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -957,7 +1540,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
+@@ -957,7 +1543,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
      // bool currentState = knx.getGroupObject(calcKoNumber(_isGroup ? DGWG_Koswitch_state : DGW_Koswitch_state)).value(DPT_Switch);
      // if (value == currentState)
      //     return;
@@ -1266,7 +1269,7 @@ index dffeaaf..e2b3123 100644
  }
  
  void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCommand)
-@@ -976,6 +1568,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
+@@ -976,6 +1571,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
          currentStep = value;
      }
  
@@ -1276,7 +1279,7 @@ index dffeaaf..e2b3123 100644
      float perc = DaliHelper::arcToPercentFloat(value);
  
      GroupObject& ko = knx.getGroupObject(calcKoNumber(DGW_Kodimm_state));
-@@ -1002,6 +1597,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1600,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {
@@ -1289,7 +1292,7 @@ index dffeaaf..e2b3123 100644
              uint32_t value = currentColor[2];
              value |= currentColor[1] << 8;
              value |= currentColor[0] << 16;
-@@ -1060,13 +1661,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
+@@ -1060,13 +1664,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
  void DaliChannel::setGroupState(uint16_t group, bool state)
  {
      if (group == AllGroups || _groups & 1 << group)
@@ -1327,7 +1330,7 @@ index dffeaaf..e2b3123 100644
  
  void DaliChannel::setMinArc(uint8_t min)
 diff --git a/src/DaliChannel.h b/src/DaliChannel.h
-index 19b49c9..6dbabd9 100644
+index 19b49c9..98221e2 100644
 --- a/src/DaliChannel.h
 +++ b/src/DaliChannel.h
 @@ -8,11 +8,19 @@
@@ -1335,7 +1338,7 @@ index 19b49c9..6dbabd9 100644
  
  #define DimmInterval 200
 +// Version tag of the RGBW extension, shown in the log line "Color absolute [...]" (test aid, remove before a PR)
-+#define RGBW_BUILD_TAG "v15"
++#define RGBW_BUILD_TAG "v15b"
 +// RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 +// apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
 +// window, also a colour to a switched-off channel. 0 = send at once. Changeable at runtime: console command "aawin".

@@ -6,10 +6,10 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 
 | | |
 |---|---|
-| **Stand** | `v15` (Branch `v1dev` dieses Forks) |
+| **Stand** | `v15b` (Branch `v1dev` dieses Forks) |
 | **Basis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` |
 | **ETS-Applikation** | 0.13 (eine Version über dem offiziellen Release 0.12; ein Gerät mit 0.12 lässt sich direkt aktualisieren) |
-| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Die Änderungen von `v15` (HCL, Rangfolge der Einschaltwerte) und der Nachtwert sind noch **nicht getestet** (8.2) |
+| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Noch **nicht getestet**: HCL zusammen mit der Sperre (H6, `v15b`) (8.2) |
 | **Unverändert** | die Farbtypen HSV, RGB, TW und xyY sowie alle anderen Kanaltypen (bis auf drei kleine Korrekturen, siehe 3) |
 
 ## Inhalt
@@ -63,7 +63,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 | **Broadcast – Farbe RGBW** (neues Modul-Objekt) | Farbe und Pegel an alle Leuchten in einem Befehl, ohne Status und ohne den gespeicherten Zustand zu ändern, z. B. für Alarm- oder Blinklicht. |
 | **Broadcast – Zurück** (neues Modul-Objekt) | Alle RGBW-Gruppen und RGBW-Kanäle ohne Gruppe bekommen ihren gespeicherten Zustand zurück (Ablauf in Abschnitt 5). |
 | **Sperre bei RGBW** mit **„Bei Entsperren vorherigen Zustand wiederherstellen“** (Parameter) | Korrigiertes Sperrverhalten; mit „Ja“ werden Befehle während der Sperre gespeichert und beim Entsperren als ein Befehl ausgeführt. |
-| **HCL bei RGBW** | HCL-Helligkeit beim Einschalten und bei brennender Lampe über das Sammelfenster (ein Fade mit der Farbe, Status nachgeführt); die HCL-Farbtemperatur wird bei RGBW übersprungen. Rangfolge der Werte in Abschnitt 5. **Noch nicht getestet.** |
+| **HCL bei RGBW** | HCL-Helligkeit beim Einschalten und bei brennender Lampe über das Sammelfenster (ein Fade mit der Farbe, Status nachgeführt); die HCL-Farbtemperatur wird bei RGBW übersprungen. Während einer Sperre keine HCL-Nachführung. Rangfolge der Werte in Abschnitt 5. Getestet (H1–H5); HCL mit Sperre noch nicht getestet (H6). |
 | **Konsolenbefehle** | `getCol`, `aastat`, `aaon`, `aawin` (Abschnitt 9). |
 
 ## 3. Was ist geändert?
@@ -81,7 +81,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 - *Dunkler* bis zum Minimum schaltet aus und beendet das Dimmen.
 - Sperre: eigener Zweig mit korrigiertem Verhalten (siehe 5).
 - Broadcast *Schalten* sendet nur den Pegel, keine Farbe.
-- HCL: Die Farbtemperatur wird übersprungen (vorher ein DT8-Farbtemperaturbefehl an den RGBW-Treiber); die HCL-Helligkeit bei brennender Lampe läuft über das Sammelfenster.
+- HCL: Die Farbtemperatur wird übersprungen (vorher ein DT8-Farbtemperaturbefehl an den RGBW-Treiber); die HCL-Helligkeit bei brennender Lampe läuft über das Sammelfenster und wird während einer Sperre nicht an die Lampe gesendet (vorher hätte sie die gesperrte Lampe wieder eingeschaltet).
 - Treppenhauslicht: mit Absicht **keine** RGBW-Behandlung, unverändert wie im Ausgangscode (Abschnitt 6).
 
 **ETS und Speicher:** Der Parameter *Farbe ansteuern per* hat jetzt 3 Bit und liegt deshalb an anderer Stelle im Parameterspeicher (Einzeladresse Byte 21, Gruppe Byte 17); die neuen Parameter nutzen frei gewordene Bits. Die Blockgröße ist unverändert. KNX-Speicher: 63 Byte frei. Die vollständige Liste aller ersetzten Stellen im Ausgangscode, einschließlich der Änderungen ohne sichtbare Wirkung (z. B. `currentColor` wird mit 0 initialisiert), steht in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 2.
@@ -109,9 +109,9 @@ Voraussetzung: Die ETS-Applikation 0.13 ist importiert und das Gerät eingefügt
 | *Farbe ansteuern per* | **RGBW** |
 | *Helligkeit bei RGBW* | **Über Objekt „Dimmen absolut“** (Standard): Die Farbe ist nur die Mischung, die Helligkeit kommt über *Dimmen absolut*, *Schalten* und *Dimmen relativ*. Richtig für Visualisierungen mit eigener Helligkeitsadresse (z. B. Home Assistant mit `brightness_address`).<br>**Aus dem RGBW-Wert:** Der größte Kanal ist die Helligkeit. Für Clients, die nur ein Farbobjekt haben. |
 | *Einschaltwert Tag / Nacht* | Helligkeit beim Einschalten, wenn keine HCL-Helligkeit aktiv ist; **0 = letzter Dimmwert**. Wer beim Einschalten den letzten Dimmwert will, muss hier 0 einstellen, sonst gilt der eingestellte Wert (Rangfolge in Abschnitt 5) |
-| *Sperrobjekt anzeigen* | optional; dann *Sperren bei*, *Verhalten bei Sperren* (Keine Änderung / Anschalten = Einschaltwert / Ausschalten / Fester Wert in %) und *Verhalten bei Entsperren* |
+| *Sperrobjekt anzeigen* | optional; dann *Sperren bei*, *Verhalten bei Sperren* (Keine Änderung / Anschalten = Einschaltwert / Ausschalten / Fester Wert in %) und *Verhalten bei Entsperren*. *Anschalten* nimmt bei RGBW den Einschaltwert nach der Rangfolge in Abschnitt 5 (HCL vor Tag/Nacht) |
 | *Bei Entsperren vorherigen Zustand wiederherstellen* | nur bei RGBW mit Sperrobjekt. **Nein:** Befehle während der Sperre werden verworfen, beim Entsperren gilt *Verhalten bei Entsperren*. **Ja:** *Schalten*, *Dimmen absolut* und *Farbe* während der Sperre werden gespeichert und beim Entsperren als ein Befehl ausgeführt; *Verhalten bei Entsperren* gilt dann nicht. |
-| *HCL aktivieren* | Helligkeit möglich, hat beim Einschalten Vorrang vor Tag/Nacht; eine aktivierte Farbtemperatur wird bei RGBW übersprungen. Mit `v15` angepasst, **noch nicht getestet** (Abschnitt 6) |
+| *HCL aktivieren* | Helligkeit möglich, hat beim Einschalten Vorrang vor Tag/Nacht; eine aktivierte Farbtemperatur wird bei RGBW übersprungen. Getestet mit `v15` (H1–H5), mit Sperre noch nicht (Abschnitt 6) |
 | *Farbe übertragen per* | ohne Bedeutung bei RGBW (ausgeblendet) |
 
 Objekte, am Beispiel A0 (je Kanal 20 Nummern weiter, A1 = 320–327):
@@ -177,9 +177,9 @@ Ohne `brightness_address` schickt Home Assistant nur das Farbobjekt; dafür *Hel
 | Farbe + Helligkeit innerhalb von 80 ms | ein Befehl, ein Fade | beide |
 | *Dimmen relativ* | wie bisher (`UP`/`DOWN`); danach die Farbe noch einmal und Pegelabfrage. *Heller* aus „aus“ startet beim Minimum | Schalten Ein sofort, Dimmen % am Ende |
 | Szene | unverändert: der Treiber fährt seine gespeicherte Szene an | nicht nachgeführt |
-| HCL (aktiv, Modus Auto) | *Ein*: HCL-Pegel mit der gespeicherten Farbe in einem Fade. Nachführung bei brennender Lampe (*HCL anwenden* = „Auch wenn eingeschaltet ist“) wie *Dimmen absolut*. Farbtemperatur übersprungen | Dimmen %, wie *Dimmen absolut* |
+| HCL (aktiv, Modus Auto) | *Ein*: HCL-Pegel mit der gespeicherten Farbe in einem Fade. Nachführung bei brennender Lampe (*HCL anwenden* = „Auch wenn eingeschaltet ist“) wie *Dimmen absolut*. Farbtemperatur übersprungen. Während einer Sperre nichts an die Lampe; mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve | Dimmen %, wie *Dimmen absolut* |
 | Treppenhauslicht | ohne RGBW-Behandlung, wie im Ausgangscode: nur der Pegel, die Farbe kommt aus dem Treiber | wie im Ausgangscode |
-| Sperren | nur Pegel: *Anschalten* = Einschaltwert, *Ausschalten* = aus, *Fester Wert* in Prozent; Gruppen nutzen ihre eigenen Parameter | folgt |
+| Sperren | nur Pegel: *Anschalten* = Einschaltwert (HCL vor Tag/Nacht), *Ausschalten* = aus, *Fester Wert* in Prozent; Gruppen nutzen ihre eigenen Parameter | folgt |
 | Während der Sperre | *Schalten*, *Dimmen*, *Farbe* werden verworfen, mit „wiederherstellen“ = Ja gespeichert | – |
 | Entsperren | *Verhalten bei Entsperren*; mit „wiederherstellen“ = Ja der gespeicherte Zustand als ein Befehl | folgt |
 | Broadcast *Schalten* | nur Pegel an alle (100 % bzw. aus), jede RGBW-Leuchte in der Farbe aus ihrem Treiber | Schalten aller Kanäle und Gruppen |
@@ -187,8 +187,8 @@ Ohne `brightness_address` schickt Home Assistant nur das Farbobjekt; dafür *Hel
 | *Broadcast – Zurück* | gespeicherter Zustand je RGBW-Gruppe und RGBW-Kanal ohne Gruppe | – |
 
 **Welcher Pegel gilt?**
-1. **Zugeschickter Pegel:** *Dimmen absolut*, *Dimmen relativ*, nach einem Neustart der aus dem Treiber gelesene Pegel, im Modus Auto auch die HCL-Nachführung. Er ist der letzte Pegel und gilt für *Broadcast – Zurück*, Entsperren mit „wiederherstellen“ und *Dimmen absolut* während der Sperre. Ein von Hand gesendeter Pegel schaltet die HCL auf *Manu*, wenn das in der ETS so eingestellt ist; nach dem nächsten *Aus* läuft sie wieder automatisch.
-2. **HCL-Helligkeit**, wenn HCL aktiv ist und im Modus Auto steht: gilt beim Einschalten (*Ein*) und, wenn kein letzter Pegel bekannt ist, für *Zurück* und Entsperren.
+1. **Zugeschickter Pegel:** *Dimmen absolut*, *Dimmen relativ*, nach einem Neustart der aus dem Treiber gelesene Pegel, im Modus Auto auch die HCL-Nachführung. Er ist der letzte Pegel und gilt für *Broadcast – Zurück*, Entsperren mit „wiederherstellen“ und *Dimmen absolut* während der Sperre. Ein von Hand gesendeter Pegel schaltet die HCL nur auf *Manu*, wenn *Helligkeit geändert wird* angehakt ist (ab Werk **nicht**); eine Farbe schaltet ab Werk auf *Manu* (*Farbe/Temperatur geändert wird*). Nach dem nächsten *Aus* läuft die HCL wieder automatisch.
+2. **HCL-Helligkeit**, wenn HCL aktiv ist und im Modus Auto steht: gilt beim Einschalten (*Ein*), für *Anschalten* beim Sperren/Entsperren und, wenn kein letzter Pegel bekannt ist, für *Zurück* und Entsperren.
 3. **Einschaltwert Tag/Nacht**, wenn keine HCL-Helligkeit aktiv ist. Steht er auf **0**, kommt der letzte Dimmwert.
 
 *Ein* nimmt also immer den Einschaltwert (HCL, sonst Tag/Nacht), wie bei allen anderen Kanaltypen. Den letzten Dimmwert beim Einschalten gibt es nur mit Einschaltwert 0. *Min/Max* sind Grenzen und gelten für alle Werte.
@@ -212,7 +212,7 @@ Ohne `brightness_address` schickt Home Assistant nur das Farbobjekt; dafür *Hel
 - **Nach einem Neustart des Gateways** ist die Farbe bis zum ersten Farbtelegramm unbekannt (Ein/Aus und Pegel werden aus dem Treiber gelesen). Bis dahin geht beim Einschalten nur der Pegel.
 - **Broadcast bei gemischten Anlagen:** Der Pegel von *Broadcast – Farbe RGBW* wirkt auch auf normale Dimm- und Schalttreiber; *Broadcast – Zurück* stellt nur RGBW zurück. *Broadcast Schalten/Dimmen* überschreiben den gespeicherten Zustand aller Kanäle; danach bringt *Zurück* diesen Zustand.
 - **Szenen:** unverändert gegenüber dem Ausgangscode, der Treiber fährt Pegel und Farbe selbst an; mit RGBW nicht getestet. Szenenfarbe per Konfigurationstransfer ohne Weiß; Szenen im Treiber mit Pegel **und** Farbe speichern.
-- **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht), **noch nicht getestet**. Ein früherer Stand (`v12`) war mit Helligkeit getestet. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung.
+- **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht) und getestet (H1–H5). HCL mit Sperre (`v15b`) noch nicht getestet. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung. Die HCL braucht eine gültige Uhrzeit und den Standort, sonst meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`. Ausgangscode, alle Kanaltypen: Nach *Manu* → *Auto* gilt beim ersten *Ein* bis zur nächsten vollen Minute noch der HCL-Wert vom Wechsel auf *Manu* (G23).
 - **Treppenhauslicht:** mit Absicht **ohne** RGBW-Behandlung. Ein Treppenhauskanal mit RGBW schaltet wie im Ausgangscode nur den Pegel; die Farbe kommt aus dem Treiber. Eine Anpassung kommt bei Bedarf in einer späteren Version (Abschnitt 10, Ideen).
 - **Treiber:** getestet nur mit dem DA4-M (RGBW-Modus). Der Treiber muss die automatische Aktivierung können (DT8, ab Werk an; prüfen mit `aastat`).
 - **Taster am Gerät** (`RECALL MAX`/`OFF`) ohne RGBW-Behandlung, wie im Ausgangscode.
@@ -330,10 +330,10 @@ Jeder Test: vorher beschreiben, was gesendet wird und was als bestanden gilt; da
 | S3 | Gruppensperre mit eigenen Werten | die Gruppe nutzt ihre eigenen Parameter |
 | A1 | Power On / Failure „Inaktiv“; Versorgung bzw. DALI-Bus des Treibers kurz trennen | Lampe kommt mit letztem Pegel und letzter Farbe zurück bzw. bleibt unverändert |
 | R1 | Gateway neu starten (`restart`) bei brennender Lampe, danach Farbe | Lampe unverändert; Ein/Aus und Pegel gemeldet; erste Farbe mit `ACTIVATE`, Pegel bleibt |
-| N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade (**ausstehend**, `v15`; Ablauf im Testprotokoll) |
-| H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Farbtemperatur aktiviert | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped` (**ausstehend**, `v15`; Ablauf im Testprotokoll) |
+| N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade. N2 entsprechend mit Tag |
+| H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Farbtemperatur aktiviert | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
 
-**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. N1 und H1–H6 folgen mit `v15`. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
+**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`):** N1, N2, H1–H5 bestanden; H6 folgt mit `v15b`. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
 
 **Host-Test ohne Hardware:**
 
@@ -352,16 +352,16 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 **Funktioniert RGBW nicht wie beschrieben** (z. B. Farbe und Helligkeit kommen nicht in einem Fade): zuerst `aastat`, bei *OFF* `aaon`.
 
-Wichtige Logzeilen: `Color absolute` (in Testständen folgt die Versionskennung, z. B. `Color absolute [v15]`), `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`.
+Wichtige Logzeilen: `Color absolute` (in Testständen folgt die Versionskennung, z. B. `Color absolute [v15b]`), `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` bzw. `… ignored`.
 
 ## 10. Offen und Fragen
 
 **Offen:**
 - Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
-- Test der `v15`-Änderungen: HCL mit RGBW (H1–H6) und Nachtwert (N1, N2).
+- Test H6 (HCL mit Sperre, `v15b`).
 - Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen.
 - Andere Treiber als der DA4-M.
-- Versionskennung im Log (`[v15]`) vor dem Pull Request entfernen oder behalten.
+- Versionskennung im Log (`[v15b]`) vor dem Pull Request entfernen oder behalten.
 
 **Ideen, bewusst zurückgestellt:**
 - Treppenhauslicht mit RGBW (Farbe beim Einschalten, Sammelfenster). Mit Absicht nicht in dieser Version; bei Bedarf in einer späteren Version.

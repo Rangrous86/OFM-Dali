@@ -4,7 +4,7 @@
 
 - Diese Stellen werden im RGBW-PR **nicht** verändert, außer wo „bei RGBW behoben“ steht: Dort ist der Fehler nur im neuen RGBW-Zweig korrigiert, für die anderen Kanaltypen ist er unverändert.
 - Gefunden durch Code-Durchsicht (Prüfbericht vom 18.11.2026, G1–G15) und durch Hardware-Tests mit zwei DA4-M (RGBW) am `GW-REG1-Dali` (19.–21.11.2026). Andere Treibertypen waren nicht vorhanden.
-- Die Nummern G1–G22 und F1–F3 sind dieselben wie im [Testprotokoll](RGBW-Testprotokoll.md); dort stehen auch die Testdetails (B…-Nummern).
+- Die Nummern G1–G24 und F1–F3 sind dieselben wie im [Testprotokoll](RGBW-Testprotokoll.md); dort stehen auch die Testdetails (B…-Nummern).
 - Fragen zur RGBW-Erweiterung selbst (Speicherlayout, WAF-Befehl, Szenen mit Weiß usw.) stehen in Abschnitt 6 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
 
 ## Übersicht
@@ -12,8 +12,8 @@
 | Gruppe | Nummern |
 |---|---|
 | Bibliothek `OpenKNX/dali` | G1, G2 |
-| Fehler im Ausgangscode, bei RGBW behoben | G4, G16 |
-| Fehler im Ausgangscode, offen | G3, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G21, G22 |
+| Fehler im Ausgangscode, bei RGBW behoben | G4, G16, G24 |
+| Fehler im Ausgangscode, offen | G3, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G21, G22, G23 |
 | Nur Log, Warnungen, Hinweise | G15, G17, G18, G19 |
 | Ideen und Fragen | G20, F1, F2, F3 |
 
@@ -32,6 +32,7 @@ Diese Punkte gehören an das Repository der Bibliothek.
 |---|---|---|---|
 | G4 | Sperre `koHandleLock` | **S1** „Anschalten“/„Ausschalten“ vertauscht; **S2** „Fester Wert in %“ als DALI-Pegel gesendet (50 % → ≈ 0,1 %); **S3** Gruppen lesen die Kanal-Parameter (`ParamDGW_` statt `ParamDGWG_`); **S4** `currentState` wird nicht nachgeführt | **bei RGBW behoben** (RGBW-Zweig `rgbwLock`/`rgbwUnlock`); andere Kanaltypen offen |
 | G16 | `koHandleDimmRel` | *Schalten Status* Ein bei *Heller* aus Aus erst beim Stopp, nicht beim Einschalten  | **bei RGBW behoben** (RGBW: `koHandleDimmRel`); andere Kanaltypen offen |
+| G24 | `setHcl` / `setBrightness` (HCL) | Die HCL prüft keine Sperre: Steht *HCL anwenden* auf „Auch wenn eingeschaltet ist“ und gilt der Kanal als eingeschaltet, sendet die Kurve auch während einer Sperre jede Minute einen Pegel an die Lampe. Bei RGBW mit „Bei Entsperren vorherigen Zustand wiederherstellen“ bleibt der gespeicherte Zustand beim Sperren „an“, die Lampe wäre also eine Minute nach dem Sperren mit *Ausschalten* wieder angegangen | **bei RGBW behoben** (`v15b`, `setBrightness`: während der Sperre nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve); andere Kanaltypen offen (gefunden 22.11. beim Vorbereiten von Test H6) |
 
 ## 3. Fehler im Ausgangscode, offen
 
@@ -50,6 +51,7 @@ Diese Punkte gehören an das Repository der Bibliothek.
 | G14 | `percentToArc` / `arcToPercent` | Randwerte (< 0,1 % negativ; 255 → 103 %) | offen, derzeit nicht erreichbar |
 | G21 | `DaliChannel`, `currentDimmValue` | Zeiger wird erst beim ersten relativen Dimmen gesetzt; eine Pegelabfrage davor (Abfrageintervall, Diagnose) schreibt in `loopQueryLevel` über einen nicht gesetzten Zeiger (`*currentDimmValue = data`). Auf dem RP2040 bisher ohne sichtbare Folge | offen (gefunden beim `v14`-Umbau, nicht geändert) |
 | G22 | Broadcast *Schalten* | `broadcastGroupState(bool)` setzt bei allen Kanälen und Gruppen nur *Schalten Status*, **nicht** *Dimmen Status*: nach *Broadcast Ein* (100 %) bzw. *Aus* (0 %) zeigt *Dimmen Status* weiter den alten Wert. Pegel und (bei RGBW) Farbe im Gateway bleiben stehen; nach *Broadcast Ein* bringt *Broadcast zurück* deshalb alle RGBW-Gruppen in ihrer gespeicherten Farbe und ihrem gespeicherten Pegel **eingeschaltet** zurück, nach *Broadcast Aus* alle ausgeschaltet | offen (gefunden `v14` Test B1, 21.11., nicht geändert) |
+| G23 | `setHcl` (HCL im Modus *Manu*) | Im Modus *Manu* bricht `setHcl` ab, **bevor** der neue Kurvenwert gespeichert wird (`_hclCurrentTemp`, `_hclCurrentBri`). Die gespeicherten Werte veralten, solange der Kanal auf *Manu* steht. Nach dem Zurückschalten auf *Auto* (z. B. durch *Aus*) nimmt das nächste *Ein* den Wert vom Zeitpunkt des Wechsels auf *Manu*, bis zur nächsten vollen Minute. Betrifft alle Kanaltypen | offen (gefunden `v15` Test H5, 22.11.: *Ein* um 15:51:07 mit 3313 K / 41 % vom Stand 15:48, die Kurve stand bei 3273 K / 39 %; korrigiert sich zur nächsten Minute). Vorschlag: Wert vor der Abfrage auf *Manu* speichern |
 
 ## 4. Nur Log, Warnungen, Hinweise
 

@@ -26,7 +26,8 @@ Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026
 | `v13` | 19./20.11.2026 | Temporäre Farbe + `DAPC` (automatische Aktivierung, ein Fade), Sammelfenster, Modi A/B/C für einen Pegel bei laufendem Farb-Fade, keine Farbabfrage beim Start, Testdiagnose `RGBW_DIAG` | erste Runde Phase 0–4 (Abschnitt 4) |
 | `v14` | 20./21.11.2026 | Entscheidungen nach der ersten Runde umgesetzt: Modus 0 fest (Modi, Zeitmarken, Fade-Zeit- und Versionsabfrage entfallen), jeder Befehl durchs Sammelfenster (C1), Gruppe = immer Farbe + Pegel, Einzel-EVG einzeln, Farbe erneut nach relativem Dimmen (B25), Broadcast Schalten nur Pegel, neu *Broadcast – Farbe RGBW* und *Broadcast – Zurück*, Sperre bei RGBW korrigiert mit „wiederherstellen“, *Schalten Status* sofort bei *Heller* aus Aus (C5); ETS-Testversion 1.0 | Schnelldurchlauf E, G, B (Abschnitt 4) |
 | `v14b` | 21.11.2026 | B27 (kein zweites Nachsenden der Farbe nach einem Stopp am Maximum), B28 (*Broadcast – Zurück* in zwei Durchgängen), Testdiagnose entfernt; ETS 0.13 (eine über Release 0.12), Testversionen 0.13–0.15 und 1.0 verworfen | K1, K2, S1–S4b, A1, R1; Schlusstest ohne Diagnose T1/T2 (Abschnitt 4) |
-| `v15` | 22.11.2026 | HCL bei RGBW: Farbtemperatur übersprungen (`setTemperature`), HCL-Helligkeit bei brennender Lampe über Sammelfenster und `setDimmState` (`setBrightness`), neue Funktion `rgbwOnValue()` (HCL vor Tag/Nacht) für *Ein* während der Sperre mit „wiederherstellen“ und `rgbwStoredLevel()`; Treppenhaus mit Absicht ohne RGBW (Entscheidung 22.11.). ETS unverändert 0.13 | N1–N2, H1–H6 **ausstehend** (Abschnitt 4, Testablauf `v15`) |
+| `v15` | 22.11.2026 | HCL bei RGBW: Farbtemperatur übersprungen (`setTemperature`), HCL-Helligkeit bei brennender Lampe über Sammelfenster und `setDimmState` (`setBrightness`), neue Funktion `rgbwOnValue()` (HCL vor Tag/Nacht) für *Ein* während der Sperre mit „wiederherstellen“ und `rgbwStoredLevel()`; Treppenhaus mit Absicht ohne RGBW (Entscheidung 22.11.). ETS unverändert 0.13 | N1, N2, H1–H5 **bestanden** (22.11.); H6 mit `v15b` (Abschnitt 4) |
+| `v15b` | 22.11.2026 | Sperre und HCL: „Anschalten = Einschaltwert“ beim Sperren/Entsperren nimmt `rgbwOnValue()` (HCL vor Tag/Nacht, `rgbwLockArc`); HCL-Nachführung während einer Sperre sendet nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve (`setBrightness`, G24). Gefunden beim Vorbereiten von H6 | H6 **ausstehend** |
 
 ## 2. Befunde zum Treiber DA4-M (B1–B29)
 
@@ -406,15 +407,15 @@ Ohne Diagnose verhält sich der Code wie im Test mit Diagnose; der Dimmstatus ko
 - **C4** (**entschieden** 20.11.: **keine Prüfung beim Start**; in der Anleitung: funktioniert RGBW nicht wie beschrieben, mit `aastat` prüfen, bei *OFF* mit `aaon` dauerhaft im Treiber einschalten)**:** Das Gateway liest die Einstellung *automatische Aktivierung* bisher nie selbst. Ist sie aus, bleibt in Modus A eine Farbe allein ganz ohne Wirkung, und bei Farbe + Helligkeit bleibt die alte Farbe. Möglich: beim Start einmal am ersten RGBW-Kanal den Gear-Status abfragen (wie die DALI-Version), bei *aus* eine Warnung ins Log schreiben und auf Modus C schalten. Ergebnis Phase 1: am DA4-M ab Werk an (B18); für andere Treiber weiter offen.
 - **C5** (**entschieden** 20.11.: **für RGBW korrigieren**, Plan Punkt 10; für die anderen Kanaltypen in 5.8, G16)**:** *Schalten Status* Ein bei *Heller* aus Aus erst beim Stopp (B23).
 
-### Testablauf `v15` (HCL und Tag/Nacht, geplant 22.11.2026)
+### Testablauf `v15` (HCL und Tag/Nacht, 22.11.2026)
 
 **Entscheidungen 22.11.:** HCL wird für RGBW auf den neuen Code gebracht und bis zum Test als „nicht getestet“ geführt. Rangfolge des Pegels: zugeschickter Pegel (letzter Pegel) vor HCL-Helligkeit vor Tag-/Nachtwert; *Ein* nimmt wie bei allen Kanaltypen den Einschaltwert (HCL, sonst Tag/Nacht), den letzten Dimmwert nur mit Einschaltwert 0. Tag/Nacht braucht keine Codeänderung (Auswahl unverändert im Ausgangscode). Treppenhauslicht bleibt mit Absicht ohne RGBW-Behandlung (Idee, bei Bedarf später). Szenen bleiben unverändert.
 
 **Vorbereitung:**
 1. Firmware: im Ordner `OFM-Dali` `git pull rgbw v1dev`, dann im Ordner `GW-REG1-Dali` bauen und flashen (README 7.3). Der Producer ist nicht nötig, die ETS-Applikation bleibt 0.13 (keine XML-Änderung). Im Log steht danach `Color absolute [v15]`.
-2. ETS, Modul: Objekt 3 *Tag/Nacht* (Parameter *Tag/Nacht Objekt* = „0=Tag / 1=Nacht“) auf eine neue GA, Vorschlag **20/0/45**. Uhrzeit (KO 4, DPT 19.001) auf 0/0/4 und Standort gesetzt.
+2. ETS, *Dali-GW → Allgemein*: Objekt 23 *Tag/Nacht* (Parameter *Tag/Nacht Objekt* = „0=Tag / 1=Nacht“) auf eine neue GA, Vorschlag **20/0/45**. Uhrzeit (KO 4, DPT 19.001) auf 0/0/4 und Standort gesetzt.
 3. ETS, *HCL Kurven*, Kurve 1: „Sonnen Auf-/Untergang“, *Helligkeit* aktiv (Min 20 %, Max 100 %), **Farbtemperatur aktiv** (diesmal mit Absicht, um das Überspringen zu prüfen).
-4. ETS, A0: *HCL aktivieren* = Ja, Kurve 1, *HCL anwenden* = „Auch wenn eingeschaltet ist“; manuelle Helligkeit bzw. Farbe schalten auf *Manu* (Standard). Einschaltwert Tag 100 %, Nacht 10 %.
+4. ETS, A0: *HCL aktivieren* = Ja, Kurve 1, *HCL anwenden* = „Auch wenn eingeschaltet ist“; „Der automatische Modus wird verlassen, wenn …“: *Farbe/Temperatur geändert wird* angehakt (Standard), *Helligkeit geändert wird* **nicht** angehakt (Standard; ein von Hand gesendeter Pegel schaltet also ab Werk **nicht** auf *Manu*); „Der manuelle Modus wird verlassen, wenn …“: *das EVG ausgeschaltet wird* angehakt. Einschaltwert Tag 100 %, Nacht 10 %.
 5. ETS, A1: ohne HCL, Einschaltwert Tag 100 %, Nacht 10 % (für N1/N2, damit keine HCL dazwischenkommt).
 6. Download (nur Parameter). Danach `i` (Firmware 0.13.0, Configured) und `aastat`.
 
@@ -427,9 +428,26 @@ Ohne Diagnose verhält sich der Code wie im Test mit Diagnose; der Dimmstatus ko
 | H3 | warten bis zur nächsten Minute (Lampe an) | `Setting HCL` → `Set Brightness: … %` → bei RGBW über das Fenster (`RGBW: level N`, Farbe bleibt) und `RGBW: colour temperature skipped`; *Dimmen Status* folgt |
 | H4 | A0 Farbe senden (Lampe an) | `HCL Mode: Manu`; bei der nächsten Minute `Ignored because mode is manu` |
 | H5 | A0 *Aus*, dann *Ein* | `HCL Mode: Auto`; beim *Ein* wieder `Turning on HCL` mit dem HCL-Pegel |
-| H6 | optional, Sperre A0 mit „wiederherstellen“ = Ja: sperren, *Ein*, entsperren | während der Sperre `locked, stored for the unlock: on`; beim Entsperren der HCL-Pegel (nicht der Tagwert) |
+| H6 | mit `v15b`; A0: *Verhalten bei Sperren* = Ausschalten, *Bei Entsperren vorherigen Zustand wiederherstellen* = Ja (Parameter-Download). A0 an mit Farbe; sperren, *Ein*, eine volle Minute abwarten, entsperren | beim Sperren Lampe aus; *Ein* während der Sperre: `locked, stored for the unlock: on`; zur vollen Minute `RGBW: locked, HCL level stored for the unlock`, **Lampe bleibt aus**; beim Entsperren **ein** Befehl mit Farbe und dem aktuellen HCL-Pegel (nicht Tagwert, nicht Nachtwert) |
 
 Jeder Test wird vorher angekündigt und erst nach „Go“ gesendet.
+
+### Ergebnisse `v15` (Stand 22.11.2026, 15:52)
+
+`v15` geflasht (Firmware 0.13.0, Configured, `aastat` A0/A1 ON), ETS-Parameter wie oben, Download. Gesendet über Home Assistant (`knx.send`). Im Log heißt A0 `StandardChannel_A<1>`, A1 `StandardChannel_A<2>`.
+
+| # | Ergebnis | Log / Gruppenmonitor |
+|---|---|---|
+| N1 | **bestanden** | `Broadcast Day/Night 1`, `Turning on night value`, `SetDimmState 10.1/170`, `RGBW: level 170` (ohne temporäre Farbe, weil nach dem Neustart noch keine Farbe bekannt); *A1 Dimmen Status* 10,2 % |
+| N2 | **bestanden** | `Broadcast Day/Night 0`, `Turning on day value`, `SetDimmState 100.0/254`, `RGBW: level 254`; A1 100 % |
+| H1 | **bestanden** (nach Behebung der Zeitübergabe, siehe unten) | `Time: Set: 2026-11-22 15:40:45 (ST)`; Kurve: Sonnenaufgang 7:49, Sonnenuntergang 16:33, `response: 3418 K` / `44` %; A0 aus (`state 0`) |
+| H2 | **bestanden** | Nacht aktiv; `Turning on HCL`, `Setting temperature to 3352K` → `RGBW: colour temperature skipped (3352 K)`, kein `Set Kelvin`; `SetDimmState 41.7/222`, `RGBW: level 222` (= Kurve 42 %); *A0 Dimmen Status* 41,6 %, **kein** Telegramm auf *A0 Farbe RGBW Status* |
+| H3 | **bestanden** | 15:46 `Setting HCL` → `colour temperature skipped (3339 K)`, `Set Brightness: 42 %` → `RGBW: level 222` (Pegel gleich, kein Status); 15:47 `Set Brightness: 41 %` → `SetDimmState 40.6/221` → `RGBW: level 221`, *A0 Dimmen Status* 40,8 %; kein Telegramm auf 20/0/3. Hinweis: Die HCL sendet jede Minute einen Pegelbefehl, auch wenn er gleich bleibt (wie im Ausgangscode) |
+| H4 | **bestanden** | Blau an A0: `Color absolute [v15]`, `AutoConf 0 1 0`, `Got RGBW: 0 0 255 0 (valid F)`, `HCL Mode: Manu`, `RGBW: colour (ACTIVATE)`; *A0 Farbe RGBW Status* `#0000FF`; 15:49/15:50 `Ignored because mode is manu` (Temp und Bri) |
+| H5 | **bestanden** | *Aus*: `RGBW: off`, `HCL Mode: Auto`; *Ein*: `Turning on HCL`, `colour temperature skipped (3313 K)`, `SetDimmState 40.6/221`, `RGBW: level 221 with temporary colour (one fade)`; 15:52 Nachführung wieder aktiv (`Set Brightness: 39 %` → `RGBW: level 220`). Nebenbefund G23: beim *Ein* galten noch 3313 K / 41 % vom Stand 15:48 (Kurve 3273 K / 39 %) |
+| H6 | **ausstehend** | beim Vorbereiten zwei Lücken gefunden, in `v15b` behoben: „Anschalten“ beim Sperren/Entsperren ohne HCL-Vorrang; HCL-Nachführung während der Sperre (G24). Test mit `v15b` |
+
+**Testumgebung: Zeitübergabe (nicht RGBW).** Zunächst kam keine Uhrzeit im Gateway an (`Ungueltige Sonnenstandsdaten` jede Minute, das Gateway liest 0/0/4 alle ≈ 32 s). Ursachen: Der IP-Router (Zeitgeber) beantwortet keine Leseanfragen, und Home Assistant hatte einen veralteten Keyring, in dem 0/0/4 noch als sichere Gruppenadresse stand (gesendet mit „E“, `SAI=A+C`; unverschlüsselte Leseanfragen wurden verworfen). Behoben durch einen neuen Keyring in Home Assistant und die Automation „KNX Uhrzeit und Datum senden“ (EG 0/0/2–0/0/4, OG 10/0/0–10/0/2; beim Start, stündlich und als Antwort auf Leseanfragen). Hinweis: Der IP-Router sendete auf 0/0/4 ein falsches Datum (15.11.2026).
 
 ## 5. Grundtest (Testfälle seit v6)
 
@@ -462,9 +480,9 @@ Die Tabelle ist der Grundtest aus `v6` mit den Erwartungen für `v13`. Für `v13
 
 ### 5.3 HCL mit RGBW
 
-**Status (22.11.): in `v15` umgesetzt, Test ausstehend** (Abschnitt 4, Testablauf `v15`). Früher (bis 21.11.) zurückgestellt; am 22.11. entschieden, HCL auf den neuen Code zu bringen. Mit `v12` getestet und bestanden sind H1–H4 (Abschnitt 3). Aufbau des Tests: Einzelkanal A0 (RGBW, Slider-Modus), HCL-Kurve „Sonnen Auf-/Untergang“, nur *Helligkeit* aktiv (Min 20 %, Max 100 %), *Farbtemperatur nicht aktiv*, KO *HCL Kurve* 20/0/7 verknüpft. Die Kurve braucht eine gültige Uhrzeit (KO 4, DPT 19.001, hier GA 0/0/4) und den Standort, sonst meldet das Log `Ungueltige Sonnenstandsdaten`; mit Uhrzeit läuft sie einmal pro Minute, vor Sonnenaufgang und nach Sonnenuntergang gilt der Min-Wert.
+**Status (22.11.): in `v15` umgesetzt, H1–H5 bestanden, H6 mit `v15b` ausstehend** (Abschnitt 4, Testablauf und Ergebnisse `v15`). Früher (bis 21.11.) zurückgestellt; am 22.11. entschieden, HCL auf den neuen Code zu bringen. Mit `v12` getestet und bestanden sind H1–H4 (Abschnitt 3). Aufbau des Tests: Einzelkanal A0 (RGBW, Slider-Modus), HCL-Kurve „Sonnen Auf-/Untergang“, nur *Helligkeit* aktiv (Min 20 %, Max 100 %), *Farbtemperatur nicht aktiv*, KO *HCL Kurve* 20/0/7 verknüpft. Die Kurve braucht eine gültige Uhrzeit (KO 4, DPT 19.001, hier GA 0/0/4) und den Standort, sonst meldet das Log `Ungueltige Sonnenstandsdaten`; mit Uhrzeit läuft sie einmal pro Minute, vor Sonnenaufgang und nach Sonnenuntergang gilt der Min-Wert.
 
-**Bekannte Lücken bis `v14b`** (in `v15` behoben, Test ausstehend):
+**Bekannte Lücken bis `v14b`** (in `v15` behoben, getestet H2/H3):
 
 - Eine HCL-**Farbtemperatur** auf einem RGBW-Kanal ist nicht sicher: `setTemperature` sendet den DT8-Befehl `SET_TEMP_COLOUR_TEMPERATURE` und schreibt einen DPT-7-Wert in das 6-Byte-Objekt *Farbe Status*. Bei RGBW soll die Farbtemperatur übersprungen werden; in der ETS bleibt „Farbtemperatur aktivieren“ bis dahin ausgeschaltet.
 - Die HCL-Helligkeit **auf einer brennenden Lampe** (`setBrightness`, nur mit *HCL anwenden* = „Auch wenn eingeschaltet ist“) läuft nicht über das Sammelfenster und `setDimmState`; *Farbe Status* und der letzte Pegel werden dort nicht nachgezogen. Seit `v13` verwirft sie nur den gemerkten Zielpegel (1.5). Beim Einschalten (H2) ist das nicht der Fall.
@@ -490,8 +508,8 @@ Die Tabelle ist der Grundtest aus `v6` mit den Erwartungen für `v13`. Für `v13
 
 1. ~~Zweiter RGBW-Kanal~~ (erledigt 21.11.); mehrere Kanäle zugleich unter Last (Auslastung der DALI-Warteschlange, Farbsequenz ≈ 310 ms pro Kanal, Reihenfolge) offen
 2. ~~Gruppen~~ (erledigt 21.11., G1–G4; Modus A entfällt)
-3. ~~Broadcast, Sperre~~ (erledigt 21.11., B1–B4, S1–S4b); Tagwert in allen Tests benutzt; Nachtwert mit `v15` (N1/N2, geplant); KNX-Szenen mit Farbe, im Treiber gespeicherte Szenen (Abschnitt 4) offen
-4. HCL mit RGBW (5.3): mit `v15` (H1–H6, geplant). Treppenhauslicht: mit Absicht nicht angepasst (5.4b)
+3. ~~Broadcast, Sperre~~ (erledigt 21.11., B1–B4, S1–S4b); Tagwert in allen Tests benutzt; Nachtwert mit `v15` (N1/N2, bestanden 22.11.); KNX-Szenen mit Farbe, im Treiber gespeicherte Szenen (Abschnitt 4) offen
+4. HCL mit RGBW (5.3): mit `v15` H1–H5 bestanden (22.11.), H6 mit `v15b` ausstehend. Treppenhauslicht: mit Absicht nicht angepasst (5.4b)
 5. Regression der anderen Farbtypen (RGB, HSV, TW, xyY) und anderer Kanaltypen (Testfall 14); dabei auch der Stand **ohne** Diagnose (`v14b`)
 6. Weitere Mischungen mit Weiß bei brennender Lampe
    Dazu (aus der ersten Runde): Wirkung von B21 (temporäre Werte bleiben stehen) nach einer Szene bzw. Gruppenfarbe und anschließendem Pegelbefehl ohne Farbe
@@ -531,5 +549,7 @@ Einzige Sammelstelle für alles, was nicht aus der RGBW-Erweiterung stammt. Dies
 | F2 | Frage | Soll der normale Broadcast (*Schalten*, *Dimmen*) den gespeicherten Zustand der Kanäle stehen lassen, damit *Broadcast zurück* auch nach „Alarm alles an“ wirkt? Ändert Ausgangsverhalten aller Typen (Status würde nicht mehr nachgeführt) | Frage an den Maintainer |
 | G22 | Broadcast *Schalten* | `broadcastGroupState(bool)` setzt bei allen Kanälen und Gruppen nur *Schalten Status*, **nicht** *Dimmen Status*: nach *Broadcast Ein* (100 %) bzw. *Aus* (0 %) zeigt *Dimmen Status* weiter den alten Wert. Pegel und (bei RGBW) Farbe im Gateway bleiben stehen; nach *Broadcast Ein* bringt *Broadcast zurück* deshalb alle RGBW-Gruppen in ihrer gespeicherten Farbe und ihrem gespeicherten Pegel **eingeschaltet** zurück, nach *Broadcast Aus* alle ausgeschaltet | offen (gefunden `v14` Test B1, 21.11., nicht geändert) |
 | F3 | Frage | **Broadcast insgesamt überarbeiten** und an das RGBW-Verfahren angleichen? Heute verhalten sich die Broadcast-Objekte unterschiedlich: *Schalten* setzt Ein/Aus aller Kanäle und Gruppen (G22), *Dimmen* setzt Pegel und Status aller Kanäle und Gruppen (eigene Umrechnung, G5), *Farbe RGBW* setzt **nichts** und sendet keinen Status, *Zurück* gilt nur für RGBW (F1). Bei gemischten Anlagen (RGBW mit normalen Dimm- oder Schalttreibern) wirkt der Pegel von *Broadcast – Farbe RGBW* auf **alle** Treiber, *Zurück* stellt aber nur RGBW wieder her; die anderen Leuchten bleiben auf dem Broadcast-Pegel, ihr Status zeigt den alten Wert. **Anwendungsfall:** Alarm- oder Blinklicht mit Rückkehr in den vorherigen Zustand, heute nur mit *Broadcast – Farbe RGBW* (z. B. Rot 100 % und „alles 0“ im Wechsel, danach *Zurück*). Mit *Broadcast Dimmen* (hoch/runter) wäre derselbe Alarm auch für normale Dimmtreiber möglich, wenn es wie *Farbe RGBW* arbeitet. **Umsetzungsidee (wie in `v14` für RGBW):** Broadcast-Befehle als vorübergehenden Zustand behandeln, also kein Status und kein Überschreiben des gespeicherten Zustands; *Zurück* sendet für alle Kanaltypen den gespeicherten Zustand der Gruppen und der Kanäle ohne Gruppe erneut (`rgbwRestore`/`rgbwSendState` als Vorlage). Reine Schalttreiber können nur Ein/Aus. Nicht getestet (keine anderen Treibertypen vorhanden); Grundlage sind die RGBW-Tests in `v14` (B2/B3). Zusammen mit F1, F2, G5 und G22 entscheiden | Frage an den Maintainer (Entscheidung 21.11.: RGBW bleibt bis dahin getrennt behandelt) |
+| G23 | `setHcl` (HCL im Modus *Manu*) | Im Modus *Manu* bricht `setHcl` ab, bevor der neue Kurvenwert gespeichert wird; nach dem Zurückschalten auf *Auto* nimmt das nächste *Ein* den veralteten Wert, bis zur nächsten vollen Minute. Alle Kanaltypen | offen (`v15` Test H5, 22.11.) |
+| G24 | `setHcl` / `setBrightness` (HCL) | Die HCL prüft keine Sperre und sendet auch während einer Sperre jede Minute einen Pegel, wenn der Kanal als eingeschaltet gilt | **bei RGBW behoben** (`v15b`); andere Kanaltypen offen (22.11., Vorbereitung H6) |
 
 Fragen zur RGBW-Erweiterung selbst (Speicherlayout, WAF-Befehl, Szenen mit Weiß usw.) stehen in Abschnitt 6 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
