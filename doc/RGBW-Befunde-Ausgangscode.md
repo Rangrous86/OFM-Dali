@@ -29,7 +29,7 @@ Kurzliste:
 | G5 | Broadcast *Dimmen absolut* rechnet falsch | alle |
 | G6 | Fehlerobjekt wird nie gesetzt | alle Einzel-EVGs |
 | G7 | Treppenhaus: falscher *Dimmen Status* beim Einschalten | Treppenhaus |
-| G8 | Farbe an Gruppe liest Kanal-Parameter | Gruppen mit HCL |
+| G8 | Gruppe: R/G/B-Wert liest für „HCL auf Manu“ den Haken des Einzel-EVGs | Gruppen mit HCL, Objekte R/G/B absolut |
 | G9 | Relatives Farbdimmen ändert die Farbe nicht | Farbtypen RGB/HSV |
 | G10 | HSV schreibt V in *Dimmen Status* | Farbtyp HSV |
 | G11 | Start: toter Code, Gruppen ohne Zustand | alle |
@@ -130,13 +130,15 @@ Hier ist der Fehler im neuen RGBW-Zweig korrigiert; für die anderen Kanaltypen 
 - **Betrifft:** Kanäle und Gruppen mit *Betriebsart* = Treppenhauslicht.
 - **Stand:** offen. Hinweis: Die Treppenhaus-Funktion prüft bei HCL außerdem nicht, ob in der Kurve *Helligkeit* aktiv ist (der normale Einschaltzweig tut das).
 
-### G8 – Farbe an eine Gruppe liest den Kanal-Parameter
+### G8 – Gruppe: Umschalten von HCL auf *Manu* bei einzelnen R/G/B-Werten liest den Parameter des falschen Kanals
 
-- **Wo:** `DaliChannel::koHandleColorAbs` (Farbe absolut je Kanal R/G/B).
-- **Was passiert:** `if(_isGroup ? ParamDGW_hcl_manu_col : ParamDGW_hcl_manu_col)`: Beide Zweige lesen den Parameter des **Einzelkanals** (`ParamDGW_`), die Gruppe also den Kanal mit derselben Nummer statt `ParamDGWG_hcl_manu_col`.
-- **Folge:** Ob eine Farbe an eine Gruppe deren HCL auf *Manu* schaltet, hängt von der Einstellung eines fremden Einzelkanals ab.
-- **Betrifft:** Gruppen mit HCL und Farbe über einzelne R/G/B-Objekte.
+- **Hintergrund:** Läuft HCL im Modus *Auto*, stellt die Kurve Helligkeit und Farbtemperatur selbst nach. Schickt man von Hand eine Farbe, soll HCL auf *Manu* wechseln, damit die Kurve die Farbe nicht gleich wieder überschreibt. Ob das passiert, legt man je Einzel-EVG und je Gruppe in der ETS fest: HCL Einstellungen → *Der automatische Modus wird verlassen, wenn ...* → *Farbe/Temperatur geändert wird* (ab Werk angehakt).
+- **Wo:** `DaliChannel::koHandleColorAbs`. Diese Funktion verarbeitet die drei einzelnen Objekte *Rot/Grün/Blau absolut*.
+- **Was passiert:** Die Abfrage lautet `if(_isGroup ? ParamDGW_hcl_manu_col : ParamDGW_hcl_manu_col)`. Beide Zweige lesen `ParamDGW_`, also den Parameter eines **Einzel-EVGs**. Bei einer Gruppe müsste `ParamDGWG_hcl_manu_col` stehen. So liest Gruppe 3 den Haken von Einzel-EVG A3.
+- **Folge:** Ob ein R/G/B-Wert an eine Gruppe deren HCL auf *Manu* schaltet, hängt nicht vom Haken der Gruppe ab, sondern vom Haken des Einzel-EVGs mit derselben Nummer. Ab Werk sind beide angehakt, daher fällt es nur auf, wenn man die beiden unterschiedlich einstellt.
+- **Betrifft:** nur Gruppen mit HCL, und nur die einzelnen Objekte *Rot/Grün/Blau absolut*. Das gemeinsame Farbobjekt (`koHandleColor`) und das relative Farbdimmen lesen den Parameter richtig.
 - **Stand:** offen.
+- **Vorschlag:** `ParamDGW_hcl_manu_col` im ersten Zweig durch `ParamDGWG_hcl_manu_col` ersetzen. Nebenbei: In `koHandleColor` sind in der zweiten Logzeile `AutoConf` die beiden Parameter vertauscht (betrifft nur die Ausgabe im Log).
 
 ### G9 – Relatives Farbdimmen ändert die Farbe nicht
 
