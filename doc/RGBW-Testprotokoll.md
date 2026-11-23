@@ -4,7 +4,7 @@ Dieses Dokument sammelt den **Verlauf** der RGBW-Erweiterung: Versionen, Befunde
 
 Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026](README-Arbeitsfassung-2026-11-21.md); die Texte sind übernommen, nur Überschriften und Verweise sind angepasst. Verweise wie „5.1“, „1.5“ oder „Abschnitt 4“ in den übernommenen Texten beziehen sich auf die Gliederung der Arbeitsfassung. Noch ältere Messprotokolle stehen ungekürzt in der [Rohfassung vom 16.11.2026](README-Rohfassung-2026-11-16.md).
 
-**Testkürzel** (am 23.11. eindeutig umbenannt, damit sie nicht mit den Befunden B1–B29, G1–G24, den Sperrfehlern S1–S4 oder den Adressen A0…/G0… verwechselt werden): GR = Gruppen, BC = Broadcast, SP = Sperre, AU = Ausfall des Treibers, KR = Korrekturen B27/B28 (21.11.), KT = Kurztest PR-Stand (23.11.), SL/SH = Slider-Modus direkt bzw. über Home Assistant (`v11`/`v12`), HC = HCL-Test mit `v12`. Unverändert: E (Einzel-EVG), R (Neustart), N (Tag/Nacht), H (HCL ab `v15`). In der Arbeitsfassung und der Rohfassung stehen noch die alten Kürzel (G, B, S, A, K bzw. A, B, H).
+**Testkürzel:** am 23.11. eindeutig umbenannt (GR, BC, SP, AU, KR, KT, SL, SH, HC); Bedeutung aller Kürzel in der [README, Abschnitt 12](../README.md#12-begriffe-und-kürzel). In der Arbeitsfassung und der Rohfassung stehen noch die alten Kürzel (G, B, S, A, K bzw. A, B, H).
 
 ## Inhalt
 

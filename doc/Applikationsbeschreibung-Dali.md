@@ -37,9 +37,9 @@ Ist diese Option aktiviert, werden alle EVGs ohne eine Kurzadresse, eine freie K
 Diese Funktion füllt lücken von unten nach oben auf.  
 # RGBW
 
-Für DT8-Treiber mit vier Kanälen (Rot, Grün, Blau, Weiß) gibt es bei Einzeladressen und Gruppen den Farbtyp **RGBW**. Die Farbe kommt über ein 6-Byte-Objekt (DPT 251.600), die Helligkeit wie gewohnt über *Schalten*, *Dimmen absolut* und *Dimmen relativ*. Farbe und Helligkeit, die kurz nacheinander eintreffen, gehen als **ein** DALI-Befehl an den Treiber und blenden gemeinsam in einem Fade.
+Für DT8-Treiber mit vier Kanälen (Rot, Grün, Blau, Weiß) gibt es bei Einzeladressen und Gruppen den Farbtyp **RGBW**. Die Farbe kommt über ein 6-Byte-Objekt (DPT 251.600), die Helligkeit wie gewohnt über *Schalten*, *Dimmen absolut* und *Dimmen relativ*. Farbe und Helligkeit, die kurz nacheinander eintreffen, gehen als **ein** DALI-Befehl an den Treiber und blenden gemeinsam in einem Fade (einem weichen Übergang, dessen Dauer die Fade-Zeit des Treibers bestimmt).
 
-Voraussetzung ist, dass der Treiber die DT8-Funktion „automatische Aktivierung“ beherrscht und sie eingeschaltet ist (ab Werk üblich). Getestet wurde mit dem DA4-M im RGBW-Modus.
+Voraussetzung ist, dass der Treiber die DT8-Funktion „automatische Aktivierung“ beherrscht und sie eingeschaltet ist (ab Werk üblich). Dabei merkt sich der Treiber eine gesendete Farbe zunächst nur vor und übernimmt sie mit dem nächsten Helligkeitsbefehl, sodass Farbe und Helligkeit gemeinsam überblenden. Getestet wurde mit dem DA4-M im RGBW-Modus.
 
 ## **Treiber einrichten**
 
@@ -90,7 +90,7 @@ Nur bei RGBW und eingeblendetem Sperrobjekt.
 * **Farbe an einen ausgeschalteten Kanal:** Die Farbe wird im Treiber gesetzt, die Lampe bleibt aus. Beim nächsten Einschalten kommt sie in dieser Farbe.
 * **Farbe allein bei brennender Lampe:** Einzeladresse: nur die Farbe, die Helligkeit bleibt. Gruppe: Farbe mit der gespeicherten Gruppenhelligkeit, damit alle Treiber der Gruppe denselben Zustand haben.
 * **Helligkeit allein bei brennender Lampe:** Einzeladresse: nur die Helligkeit, die Farbe bleibt. Gruppe: Helligkeit mit der gespeicherten Gruppenfarbe.
-* **Farbe und Helligkeit innerhalb von 80 ms:** ein Befehl, ein Fade. Zwei Befehle mit größerem Abstand können sich gegenseitig den Fade abbrechen, weil der Treiber nur einen Fade gleichzeitig ausführt.
+* **Farbe und Helligkeit innerhalb von 80 ms:** ein Befehl, ein Fade. Das Gateway wartet nach dem ersten Telegramm diese Zeit (Sammelfenster, einstellbar mit `aawin`) auf das zweite. Zwei Befehle mit größerem Abstand können sich gegenseitig den Fade abbrechen, weil der Treiber nur einen Fade gleichzeitig ausführt.
 * **Dimmen relativ:** wie bei den anderen Kanaltypen; nach dem Ende wird die Farbe noch einmal gesendet und die erreichte Helligkeit abgefragt.
 * **Broadcast Schalten / Dimmen:** nur Helligkeit an alle Treiber, jede RGBW-Leuchte in der Farbe aus ihrem Treiber.
 * **HCL:** Beim Einschalten und, wenn *HCL anwenden* = „Auch wenn eingeschaltet ist“, bei brennender Lampe kommt die HCL-Helligkeit zusammen mit der Farbe. Während einer Sperre sendet die HCL nichts an die Lampe.

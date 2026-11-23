@@ -25,6 +25,7 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 9. [Console](#9-console)
 10. [Open points and questions](#10-open-points-and-questions)
 11. [Further documents](#11-further-documents)
+12. [Terms and abbreviations](#12-terms-and-abbreviations)
 
 ## 1. What is it?
 
@@ -384,3 +385,55 @@ All in German:
 | [doc/Applikationsbeschreibung-Dali.md](doc/Applikationsbeschreibung-Dali.md) | application description of the gateway, with new RGBW section |
 
 **Pull request** against `OpenKNX/OFM-Dali` (base `v1dev`) only after explicit approval.
+
+## 12. Terms and abbreviations
+
+**DALI and drivers**
+
+| Term | Meaning |
+|---|---|
+| EVG, driver | Electronic control gear on the DALI bus; here the LED driver. *Einzel-EVG* (single EVG) = one driver with its own short address. |
+| Short address A0–A63 | Individual address of a driver on the DALI bus (A0 = short address 0). |
+| Group G0–G15 | DALI group; a command to the group is executed by all drivers of the group at the same time. |
+| Broadcast | Command to all drivers on the DALI bus. |
+| DT8 | DALI device type 8: drivers with colour control (colour temperature, RGB, RGBW etc.). |
+| DA4-M | The RGBW driver tested (four channels, RGBW mode). |
+| Level | DALI brightness value 0–254 (logarithmic); 0 = off, 254 = 100 %. |
+| DAPC | *Direct Arc Power Control*: the direct command "level N". |
+| Fade, fade time | Smooth transition to a new level or colour; the duration is set in the driver. The DA4-M runs only **one** fade at a time, a new command aborts a running one. |
+| Temporary colour | Colour values the driver only stores at first (DT8 commands 235 for R/G/B and 236 for W) and applies with `ACTIVATE` or the next level command. |
+| `ACTIVATE` | DT8 command: applies the temporary colour without changing the level. |
+| Automatic activation | DT8 setting in the driver: the next level command also applies the temporary colour, colour and brightness change in **one** fade. Required for RGBW in this gateway (`aastat`, `aaon`). |
+| MASK | Value 255 = "no value / unchanged". |
+| Power On Level, Failure On Level | Level the driver takes after its supply is switched on or when the DALI bus fails; "Inaktiv" (inactive) = MASK = last state. |
+
+**Gateway and RGBW extension**
+
+| Term | Meaning |
+|---|---|
+| Original code | State of `OpenKNX/OFM-Dali`, branch `v1dev`, commit `a120578`, on which this extension is based. |
+| DPT 251.600 | KNX datapoint type "RGBW": four values (R, G, B, W) with one validity bit each, 6 bytes. |
+| Validity bits | Say which of the four colour values in the telegram apply (byte 5, section 1). |
+| Collection window | Time (default 80 ms, `aawin`) the gateway waits after a colour or brightness telegram for the second one, to send both as **one** command. |
+| Helligkeit bei RGBW (brightness with RGBW) | Parameter: *via object "Dimmen absolut"* (colour = mix only) or *from the RGBW value* (largest channel = brightness, called "slider mode" in the test log). |
+| Stored state | On/off, level and colour the gateway keeps per channel and group; basis for *Broadcast – back* and for unlocking with "restore". |
+| HCL, auto/manual | Human Centric Lighting: brightness (and colour temperature) following a daily curve. *Auto* = the curve adjusts, *Manu* (manual) = overridden by hand. |
+| Switch-on value day/night | Level at switch-on, depending on the *Tag/Nacht* (day/night) object; 0 = last dim value. |
+| `v6` … `v15b` | Development states of the firmware (test log, section 1). |
+
+**Abbreviations in the documents** (documents in German)
+
+| Abbreviation | Meaning | Where |
+|---|---|---|
+| B1–B29 | findings about the DA4-M driver | [test log](doc/RGBW-Testprotokoll.md), section 2 |
+| C1–C5 | possible code changes after the first test round (decided 20 Nov) | test log, section 4 |
+| G1–G24 | findings in the original code and in the DALI library | [findings](doc/RGBW-Befunde-Ausgangscode.md) |
+| F1–F4 | proposals for the original code | findings, section 5 |
+| S1–S4 | lock errors in the original code (part of G4) | findings, G4 |
+| Plan Punkt 1–12 (plan item) | rework after the first test round (`v14`) | test log, section 4 |
+| Phase 1–8 (e.g. 3.9) | steps of the `v13` test sequence | test log, section 4 |
+| Testfall 1–14 (test case) | basic test since `v6` | test log, section 5 |
+| E, GR, BC, SP, AU, R | tests single EVG, groups, broadcast, lock, driver failure, restart | section 8.2, test log |
+| N, H | tests day/night and HCL (from `v15`) | section 8.2, test log |
+| KR, KT | corrections B27/B28 (21 Nov), short test of the PR state (23 Nov) | test log, section 4 |
+| SL, SH, HC | older tests: slider mode direct or via Home Assistant, HCL (`v11`/`v12`) | test log, section 3 |

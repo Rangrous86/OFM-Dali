@@ -25,6 +25,7 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 9. [Konsole](#9-konsole)
 10. [Offen und Fragen](#10-offen-und-fragen)
 11. [Weitere Dokumente](#11-weitere-dokumente)
+12. [Begriffe und Kürzel](#12-begriffe-und-kürzel)
 
 ## 1. Was ist das?
 
@@ -382,3 +383,55 @@ Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one 
 | [doc/Applikationsbeschreibung-Dali.md](doc/Applikationsbeschreibung-Dali.md) | Applikationsbeschreibung des Gateways, mit neuem Abschnitt RGBW |
 
 **Pull Request** gegen `OpenKNX/OFM-Dali` (Basis `v1dev`) erst nach ausdrücklicher Freigabe.
+
+## 12. Begriffe und Kürzel
+
+**DALI und Treiber**
+
+| Begriff | Bedeutung |
+|---|---|
+| EVG, Treiber | Elektronisches Vorschaltgerät am DALI-Bus; hier der LED-Treiber. *Einzel-EVG* = ein Treiber mit eigener Kurzadresse. |
+| Kurzadresse A0–A63 | Einzeladresse eines Treibers am DALI-Bus (A0 = Kurzadresse 0). |
+| Gruppe G0–G15 | DALI-Gruppe; ein Befehl an die Gruppe wird von allen Treibern der Gruppe gleichzeitig ausgeführt. |
+| Broadcast | Befehl an alle Treiber am DALI-Bus. |
+| DT8 | DALI-Gerätetyp 8: Treiber mit Farbsteuerung (Farbtemperatur, RGB, RGBW usw.). |
+| DA4-M | Der getestete RGBW-Treiber (vier Kanäle, Modus RGBW). |
+| Pegel | DALI-Helligkeitswert 0–254 (logarithmisch); 0 = aus, 254 = 100 %. |
+| DAPC | *Direct Arc Power Control*: der direkte Befehl „Pegel N“. |
+| Fade, Fade-Zeit | Weicher Übergang auf einen neuen Pegel bzw. eine neue Farbe; die Dauer stellt man im Treiber ein. Der DA4-M führt nur **einen** Fade gleichzeitig aus, ein neuer Befehl bricht einen laufenden ab. |
+| Temporäre Farbe | Farbwerte, die der Treiber zunächst nur vormerkt (DT8-Befehle 235 für R/G/B und 236 für W) und erst mit `ACTIVATE` oder dem nächsten Pegelbefehl übernimmt. |
+| `ACTIVATE` | DT8-Befehl: übernimmt die temporäre Farbe, ohne den Pegel zu ändern. |
+| Automatische Aktivierung | DT8-Einstellung im Treiber: Der nächste Pegelbefehl übernimmt die temporäre Farbe mit, Farbe und Helligkeit blenden in **einem** Fade. Voraussetzung für RGBW in diesem Gateway (`aastat`, `aaon`). |
+| MASK | Wert 255 = „kein Wert / unverändert“. |
+| Power On Level, Failure On Level | Pegel, den der Treiber nach dem Einschalten seiner Versorgung bzw. bei einem Ausfall des DALI-Busses annimmt; „Inaktiv“ = MASK = letzter Zustand. |
+
+**Gateway und RGBW-Erweiterung**
+
+| Begriff | Bedeutung |
+|---|---|
+| Ausgangscode | Stand von `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578`, auf dem diese Erweiterung aufbaut. |
+| DPT 251.600 | KNX-Datentyp „RGBW“: vier Werte (R, G, B, W) mit je einem Gültigkeitsbit, 6 Byte. |
+| Gültigkeitsbits | Geben an, welche der vier Farbwerte im Telegramm gelten (Byte 5, Abschnitt 1). |
+| Sammelfenster | Zeit (Standard 80 ms, `aawin`), die das Gateway nach einem Farb- oder Helligkeitstelegramm auf das zweite wartet, um beides als **einen** Befehl zu senden. |
+| Helligkeit bei RGBW | Parameter: *Über Objekt „Dimmen absolut“* (Farbe = nur Mischung) oder *Aus dem RGBW-Wert* (größter Kanal = Helligkeit, im Testprotokoll „Slider-Modus“). |
+| Gespeicherter Zustand | Ein/Aus, Pegel und Farbe, die das Gateway je Kanal und Gruppe führt; Grundlage für *Broadcast – Zurück* und das Entsperren mit „wiederherstellen“. |
+| HCL, Auto/Manu | Human Centric Lighting: Helligkeit (und Farbtemperatur) nach einer Tageskurve. *Auto* = die Kurve stellt nach, *Manu* = von Hand übersteuert. |
+| Einschaltwert Tag/Nacht | Pegel beim Einschalten, abhängig vom Objekt *Tag/Nacht*; 0 = letzter Dimmwert. |
+| `v6` … `v15b` | Entwicklungsstände der Firmware (Testprotokoll, Abschnitt 1). |
+
+**Kürzel in den Dokumenten**
+
+| Kürzel | Bedeutung | Wo |
+|---|---|---|
+| B1–B29 | Befunde zum Treiber DA4-M | [Testprotokoll](doc/RGBW-Testprotokoll.md), Abschnitt 2 |
+| C1–C5 | mögliche Code-Änderungen nach der ersten Testrunde (entschieden 20.11.) | Testprotokoll, Abschnitt 4 |
+| G1–G24 | Befunde im Ausgangscode und in der DALI-Bibliothek | [Befunde](doc/RGBW-Befunde-Ausgangscode.md) |
+| F1–F4 | Vorschläge zum Ausgangscode | Befunde, Abschnitt 5 |
+| S1–S4 | Fehler der Sperre im Ausgangscode (Teil von G4) | Befunde, G4 |
+| Plan Punkt 1–12 | Umbau nach der ersten Testrunde (`v14`) | Testprotokoll, Abschnitt 4 |
+| Phase 1–8 (z. B. 3.9) | Schritte des Testablaufs `v13` | Testprotokoll, Abschnitt 4 |
+| Testfall 1–14 | Grundtest seit `v6` | Testprotokoll, Abschnitt 5 |
+| E, GR, BC, SP, AU, R | Tests Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart | Abschnitt 8.2, Testprotokoll |
+| N, H | Tests Tag/Nacht und HCL (ab `v15`) | Abschnitt 8.2, Testprotokoll |
+| KR, KT | Korrekturen B27/B28 (21.11.), Kurztest PR-Stand (23.11.) | Testprotokoll, Abschnitt 4 |
+| SL, SH, HC | ältere Tests: Slider-Modus direkt bzw. über Home Assistant, HCL (`v11`/`v12`) | Testprotokoll, Abschnitt 3 |

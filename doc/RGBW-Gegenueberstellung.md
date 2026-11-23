@@ -1,6 +1,6 @@
 # RGBW-Gegenüberstellung: Ausgangscode ↔ RGBW-Erweiterung (Stand `v15b`)
 
-Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien neu sind, welche Stellen des Ausgangscodes ersetzt wurden, was neu hinzugekommen ist und was im Laufe der Entwicklung wieder weggefallen ist. Funktion und Bedienung beschreibt die [README](../README.md), den Verlauf und die Tests das [Testprotokoll](RGBW-Testprotokoll.md), Befunde im Ausgangscode die Datei [RGBW-Befunde-Ausgangscode.md](RGBW-Befunde-Ausgangscode.md).
+Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien neu sind, welche Stellen des Ausgangscodes ersetzt wurden, was neu hinzugekommen ist und was im Laufe der Entwicklung wieder weggefallen ist. Funktion und Bedienung beschreibt die [README](../README.md), den Verlauf und die Tests das [Testprotokoll](RGBW-Testprotokoll.md), Befunde im Ausgangscode die Datei [RGBW-Befunde-Ausgangscode.md](RGBW-Befunde-Ausgangscode.md). Begriffe und Kürzel erklärt die [README, Abschnitt 12](../README.md#12-begriffe-und-kürzel).
 
 | | |
 |---|---|
