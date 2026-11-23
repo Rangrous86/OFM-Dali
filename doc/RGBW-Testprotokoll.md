@@ -13,7 +13,7 @@ Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026
 5. [Grundtest (Testfälle seit v6)](#5-grundtest-testfälle-seit-v6)
 6. [Weitere Themen, Ideen und Erledigtes](#6-weitere-themen-ideen-und-erledigtes)
 7. [Zweite Testrunde (offen)](#7-zweite-testrunde-offen)
-8. [Befunde im Ausgangscode (Kopie)](#8-befunde-im-ausgangscode-kopie)
+8. [Befunde im Ausgangscode: Belege](#8-befunde-im-ausgangscode-belege)
 
 ## 1. Versionsverlauf
 
@@ -531,41 +531,37 @@ Die Tabelle ist der Grundtest aus `v6` mit den Erwartungen für `v13`. Für `v13
 7. Test durch andere Anwender (insbesondere Befehl 237 bei anderen Treibern, B8)
 8. ~~Treiber mit unterschiedlicher Übergangszeit~~ (entfällt ab `v14`, Abschnitt 4)
 
-## 8. Befunde im Ausgangscode (Kopie)
+## 8. Befunde im Ausgangscode: Belege
 
-Gleicher Inhalt wie [RGBW-Befunde-Ausgangscode.md](RGBW-Befunde-Ausgangscode.md) (dort geordnet und für den Maintainer aufbereitet); hier die Tabelle im Wortlaut der Arbeitsfassung.
+Die Befunde selbst (Wo, Was passiert, Folge, Betrifft, Stand, Vorschlag) stehen nur in [RGBW-Befunde-Ausgangscode.md](RGBW-Befunde-Ausgangscode.md). Diese Tabelle zeigt, worauf sich jeder Befund stützt: auf einen Test in diesem Protokoll oder nur auf eine Prüfung des Codes. G1–G15 stammen aus der Codeprüfung vom 18.11. Die frühere Tabelle im Wortlaut der Arbeitsfassung steht im [Archiv](README-Arbeitsfassung-2026-11-21.md), Abschnitt 5.8.
 
-Einzige Sammelstelle für alles, was nicht aus der RGBW-Erweiterung stammt. Diese Stellen werden im RGBW-PR **nicht** verändert, außer wo unten „bei RGBW behoben“ steht. G1–G15 entsprechen dem Prüfbericht vom 18.11.
-
-| # | Stelle | Befund | Stand |
+| # | Thema | Grundlage | Beleg in diesem Protokoll |
 |---|---|---|---|
-| G1 | Bibliothek OpenKNX/dali, `Master::getResponse` | Rückgabe einer Referenz nach dem Löschen: bei zwei offenen Abfragen geht eine Antwort verloren oder Kanal A übernimmt den Pegel von Kanal B | offen; in `v13` umgangen (Versionsabfrage erst nach der Fade-Abfrage), entfällt mit Modus 0 fest |
-| G2 | Bibliothek, `Master::process` | löscht Einträge während der Schleife über denselben Vektor (Einträge werden übersprungen); Antworten, die nicht binnen 100 ms abgeholt werden, gehen verloren | offen |
-| G3 | `DaliModule::loopGroupState()` | wird nie aufgerufen: Einzelkanäle übernehmen Gruppenbefehle nicht in Zustand und Status; die Funktion dekodiert die Werte außerdem falsch | offen; wirkt auf RGBW (Grund, warum das Einzel-EVG keinen Pegel mitschickt, 5.1 Plan Punkt 4) |
-| G4 | Sperre `koHandleLock` | **S1** „Anschalten“/„Ausschalten“ vertauscht; **S2** „Fester Wert in %“ als DALI-Pegel gesendet (50 % → ≈ 0,1 %); **S3** Gruppen lesen die Kanal-Parameter (`ParamDGW_` statt `ParamDGWG_`); **S4** `currentState` wird nicht nachgeführt | **bei RGBW behoben** (5.1 Plan Punkt 8); andere Kanaltypen offen |
-| G5 | Broadcast *Dimmen absolut* | eigene Umrechnung statt `percentToArc`; bei 0 % wird `log10(0)` gerechnet | offen |
-| G6 | Fehlerobjekt `loopError` | der ermittelte Fehlerzustand wird überschrieben, das Fehlerobjekt wird nie gesetzt | offen |
-| G7 | Treppenhaus, `setSwitchState(true)` | doppelte Umrechnung Prozent → DALI-Pegel beim Dimmstatus | offen |
-| G8 | `koHandleColorAbs` | Gruppe liest den Kanal-Parameter `hcl_manu_col` | offen |
-| G9 | Relatives Farbdimmen | zählt nur einen Zähler hoch, sendet nichts an den Treiber | offen |
-| G10 | HSV | V-Wert wird in *Dimmen Status* geschrieben | offen |
-| G11 | `loopInitData` | Broadcast auf 10 % beim Start ist toter Code; Gruppen bekommen beim Start keinen Zustand | offen |
-| G12 | `RECALL MIN` | wird mit Antworterwartung gesendet, obwohl keine Antwort kommt | offen |
-| G13 | Taster am Gerät | Broadcast `RECALL MAX`/`OFF` aktualisieren weder Zustand noch Status | offen |
-| G14 | `percentToArc` / `arcToPercent` | Randwerte (< 0,1 % negativ; 255 → 103 %) | offen, derzeit nicht erreichbar |
-| G15 | allgemein | Compiler-Warnungen (size_t mit -1, Formatbreiten) | harmlos |
-| G16 | `koHandleDimmRel` | *Schalten Status* Ein bei *Heller* aus Aus erst beim Stopp, nicht beim Einschalten (B23) | **bei RGBW behoben** (5.1 Plan Punkt 10); andere Kanaltypen offen |
-| G17 | Heartbeat | Log `Dali: unhandled KO: 1` bei jedem Heartbeat | offen, nur Log |
-| G18 | Schleife | Warnung „loop took longer than usual“ (z. B. 171 ms beim Start) | offen, nur Log |
-| G19 | KNX-Speicher | nur 63 Byte Reserve (B17); vor neuen ETS-Parametern `KNX_FLASH` prüfen | Hinweis, betrifft den nächsten ETS-Schritt |
-| G20 | Idee | einstellbare Dimmkurve (5.4) | Vorschlag, nicht RGBW-spezifisch |
-| G21 | `DaliChannel`, `currentDimmValue` | Zeiger wird erst beim ersten relativen Dimmen gesetzt; eine Pegelabfrage davor (Abfrageintervall, Diagnose) schreibt in `loopQueryLevel` über einen nicht gesetzten Zeiger (`*currentDimmValue = data`). Auf dem RP2040 bisher ohne sichtbare Folge | offen (gefunden beim `v14`-Umbau, nicht geändert) |
-| F1 | Frage | *Broadcast zurück* (und *Broadcast – Farbe RGBW*) auch für die anderen Kanaltypen? In `v14` nur RGBW, weil andere Typen hier nicht testbar sind; die Erweiterung wäre klein | Frage an den Maintainer |
-| F2 | Frage | Soll der normale Broadcast (*Schalten*, *Dimmen*) den gespeicherten Zustand der Kanäle stehen lassen, damit *Broadcast zurück* auch nach „Alarm alles an“ wirkt? Ändert Ausgangsverhalten aller Typen (Status würde nicht mehr nachgeführt) | Frage an den Maintainer |
-| G22 | Broadcast *Schalten* | `broadcastGroupState(bool)` setzt bei allen Kanälen und Gruppen nur *Schalten Status*, **nicht** *Dimmen Status*: nach *Broadcast Ein* (100 %) bzw. *Aus* (0 %) zeigt *Dimmen Status* weiter den alten Wert. Pegel und (bei RGBW) Farbe im Gateway bleiben stehen; nach *Broadcast Ein* bringt *Broadcast zurück* deshalb alle RGBW-Gruppen in ihrer gespeicherten Farbe und ihrem gespeicherten Pegel **eingeschaltet** zurück, nach *Broadcast Aus* alle ausgeschaltet | offen (gefunden `v14` Test B1, 21.11., nicht geändert) |
-| F3 | Frage | **Broadcast insgesamt überarbeiten** und an das RGBW-Verfahren angleichen? Heute verhalten sich die Broadcast-Objekte unterschiedlich: *Schalten* setzt Ein/Aus aller Kanäle und Gruppen (G22), *Dimmen* setzt Pegel und Status aller Kanäle und Gruppen (eigene Umrechnung, G5), *Farbe RGBW* setzt **nichts** und sendet keinen Status, *Zurück* gilt nur für RGBW (F1). Bei gemischten Anlagen (RGBW mit normalen Dimm- oder Schalttreibern) wirkt der Pegel von *Broadcast – Farbe RGBW* auf **alle** Treiber, *Zurück* stellt aber nur RGBW wieder her; die anderen Leuchten bleiben auf dem Broadcast-Pegel, ihr Status zeigt den alten Wert. **Anwendungsfall:** Alarm- oder Blinklicht mit Rückkehr in den vorherigen Zustand, heute nur mit *Broadcast – Farbe RGBW* (z. B. Rot 100 % und „alles 0“ im Wechsel, danach *Zurück*). Mit *Broadcast Dimmen* (hoch/runter) wäre derselbe Alarm auch für normale Dimmtreiber möglich, wenn es wie *Farbe RGBW* arbeitet. **Umsetzungsidee (wie in `v14` für RGBW):** Broadcast-Befehle als vorübergehenden Zustand behandeln, also kein Status und kein Überschreiben des gespeicherten Zustands; *Zurück* sendet für alle Kanaltypen den gespeicherten Zustand der Gruppen und der Kanäle ohne Gruppe erneut (`rgbwRestore`/`rgbwSendState` als Vorlage). Reine Schalttreiber können nur Ein/Aus. Nicht getestet (keine anderen Treibertypen vorhanden); Grundlage sind die RGBW-Tests in `v14` (B2/B3). Zusammen mit F1, F2, G5 und G22 entscheiden | Frage an den Maintainer (Entscheidung 21.11.: RGBW bleibt bis dahin getrennt behandelt) |
-| F4 | Frage | **Szenen insgesamt überarbeiten?** Heute werden DALI-Szenen 1:1 durchgereicht: Die Werte stehen nur im Treiber (in der ETS über Schaltflächen hineingeschrieben, keine Projektparameter; bei einem Treibertausch verloren), die Zuordnung KNX-Szene → DALI-Szene → Adresse/Gruppe/Broadcast steht in einer getrennten Tabelle, die Farbe geht nur als RGB ohne Weiß. Vor allem: **Nach einer Szene ist das Gateway „blind“.** Es kennt die angefahrenen Werte nicht, *Schalten*, *Dimmen* und *Farbe Status* bleiben bei Einzel-EVGs, Gruppen und Broadcast auf dem alten Wert, und *Ein*, *Zurück*, Sperre und HCL arbeiten mit veralteten Werten weiter. Damit verlieren die Statusobjekte nach der ersten Szene ihren Sinn. Vorschlag: Szenen wie bei KNX-Aktoren pro Kanal und Gruppe als Parameter (Ein/Aus, Helligkeit, Farbe inklusive Weiß), ausgeführt über die normale Ansteuerung, also mit Status und bei RGBW über das Sammelfenster; Lernen per KNX speichert den aktuellen Zustand im Gateway. DALI-Szenen könnten als Option für den gleichzeitigen Abruf vieler Treiber bleiben (ein Telegramm, synchron, auch von anderen DALI-Geräten abrufbar), dann mit Statusabfrage danach. Betrifft alle Kanaltypen, deshalb nicht Teil des RGBW-PR | offen, Frage an den Maintainer (22.11./23.11.) |
-| G23 | `setHcl` (HCL im Modus *Manu*) | Im Modus *Manu* bricht `setHcl` ab, bevor der neue Kurvenwert gespeichert wird; nach dem Zurückschalten auf *Auto* nimmt das nächste *Ein* den veralteten Wert, bis zur nächsten vollen Minute. Alle Kanaltypen | offen (`v15` Test H5, 22.11.) |
-| G24 | `setHcl` / `setBrightness` (HCL) | Die HCL prüft keine Sperre und sendet auch während einer Sperre jede Minute einen Pegel, wenn der Kanal als eingeschaltet gilt | **bei RGBW behoben** (`v15b`, getestet H6b); andere Kanaltypen offen (22.11., Vorbereitung H6) |
-
-Fragen zur RGBW-Erweiterung selbst (Speicherlayout, WAF-Befehl, Szenen mit Weiß usw.) stehen in Abschnitt 6 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
+| G1 | `getResponse`: falsche Antwort nach dem Löschen | Codeprüfung | bei RGBW umgangen: Abschnitt 4, Ansteuerung `v13` |
+| G2 | `process` löscht während der Schleife | Codeprüfung | – |
+| G3 | Einzelkanäle: Zustand/Status nach Gruppenbefehl | Codeprüfung, Test | Abschnitt 4, Plan nach Phase 3; Kurztest PR-Stand K2 (23.11.) |
+| G4 | Sperre: S1–S4 | Codeprüfung, Test | Abschnitt 4, Plan Punkt 8; Ergebnisse `v14b` S1–S4b |
+| G5 | Broadcast *Dimmen*: eigene Umrechnung | Codeprüfung, Test | Ergebnisse `v14`, Gruppen und Broadcast, B1b |
+| G6 | Fehlerobjekt wird nie gesetzt | Codeprüfung | – |
+| G7 | Treppenhaus: *Dimmen Status* | Codeprüfung | – |
+| G8 | Gruppe: R/G/B liest Haken des Einzel-EVGs | Codeprüfung | – |
+| G9 | Relatives Farbdimmen | Codeprüfung | – |
+| G10 | HSV: V in *Dimmen Status* | Codeprüfung | – |
+| G11 | Start: toter Code | Codeprüfung | – |
+| G12 | `RECALL MIN` mit Antworterwartung | Codeprüfung | – |
+| G13 | Func-Taste: Zustand/Status | Codeprüfung (18.11., ergänzt 23.11.) | – |
+| G14 | Randwerte Prozent-Umrechnung | Codeprüfung | – |
+| G15 | Compiler-Warnungen | Build | – |
+| G16 | *Schalten Status* erst beim Stopp | Test | B23 (Abschnitt 2); Plan Punkt 10; C5 (Abschnitt 6) |
+| G17 | Log `unhandled KO: 1` | Log im Betrieb | – |
+| G18 | Warnung „loop took longer“ | Log im Betrieb | – |
+| G19 | KNX-Speicher fast voll | Build | B17 (Abschnitt 2) |
+| G20 | Idee Dimmkurve | – | Abschnitt 6, 5.4 |
+| G21 | Zeiger `currentDimmValue` | Codeprüfung (`v14`-Umbau) | – |
+| G22 | Broadcast *Schalten*: kein *Dimmen Status* | Test | Ergebnisse `v14`, Gruppen und Broadcast, B1 und B4 |
+| G23 | HCL-Werte veralten in *Manu* | Test | Ergebnisse `v15`/`v15b`, H5 |
+| G24 | HCL beachtet keine Sperre | Test | Ergebnisse `v15`/`v15b`, H6b; Versionsverlauf `v15b` |
+| F1 | Vorschlag: *Zurück* für alle Kanaltypen | Test (nur RGBW) | Plan Punkt 11; Ergebnisse `v14`, B2/B3 |
+| F2 | Vorschlag: Broadcast lässt Zustand stehen | Test (nur RGBW) | Plan Punkt 11; Ergebnisse `v14`, B4 |
+| F3 | Vorschlag: Broadcast überarbeiten | Test | Ergebnisse `v14`, Gruppen und Broadcast (Fazit) |
+| F4 | Vorschlag: Szenen überarbeiten | Codeprüfung | Abschnitt 7, Punkt 3 |
