@@ -2,17 +2,18 @@
 #include <stdint.h>
 
 /*
- * Hilfsfunktionen für KNX DPT 251.600 (DPT_Colour_RGBW) und die Übersetzung auf DALI DT8.
+ * Helper functions for KNX DPT 251.600 (DPT_Colour_RGBW) and the translation to DALI DT8.
  *
- * Telegramm (6 Byte). Die Feldreihenfolge entspricht der Definition in knx_master.xml (MSB zuerst):
- *   Byte 0: Rot    (0..255, die ETS zeigt 0..100 %)
- *   Byte 1: Grün
- *   Byte 2: Blau
- *   Byte 3: Weiß
- *   Byte 4: reserviert (0x00)
- *   Byte 5: Bit 7..4 reserviert, Bit 3 = mR, Bit 2 = mG, Bit 1 = mB, Bit 0 = mW  (1 = Wert gültig)
+ * Telegram (6 bytes). The field order follows the definition in knx_master.xml (MSB first):
+ *   Byte 0: red    (0..255, the ETS shows 0..100 %)
+ *   Byte 1: green
+ *   Byte 2: blue
+ *   Byte 3: white
+ *   Byte 4: reserved (0x00)
+ *   Byte 5: bits 7..4 reserved, bit 3 = mR, bit 2 = mG, bit 1 = mB, bit 0 = mW  (1 = value valid)
  *
- * Bewusst ohne Abhängigkeit zu Arduino/KNX-Stack, damit die Logik auf dem Rechner testbar ist.
+ * Deliberately without dependencies on Arduino or the KNX stack, so that the logic can be tested on a PC
+ * (test/test_rgbw_helper.cpp).
  */
 namespace RgbwHelper
 {
@@ -25,9 +26,9 @@ namespace RgbwHelper
     constexpr uint8_t ValidAll = 0x0F;
 
     /*
-     * Übernimmt nur die im Telegramm als gültig markierten Kanäle nach color[0..3] (R, G, B, W).
-     * Nicht markierte Kanäle behalten ihren bisherigen Wert.
-     * Rückgabe: Gültigkeitsmaske (untere 4 Bit). 0 = das Telegramm ändert nichts.
+     * Takes over only the channels marked as valid in the telegram into color[0..3] (R, G, B, W).
+     * Channels that are not marked keep their previous value.
+     * Returns the validity mask (lower 4 bits). 0 = the telegram changes nothing.
      */
     inline uint8_t decode(const uint8_t *data, uint8_t *color)
     {
@@ -44,7 +45,7 @@ namespace RgbwHelper
     }
 
     /*
-     * true, wenn alle vier Kanäle (R, G, B, W) 0 sind. Das gilt als "Aus".
+     * true if all four channels (R, G, B, W) are 0. This counts as "off".
      */
     inline bool isOff(const uint8_t *color)
     {
@@ -52,7 +53,7 @@ namespace RgbwHelper
     }
 
     /*
-     * Schreibt color[0..3] als 6-Byte-Telegramm (z.B. für das Statusobjekt). Alle Kanäle gelten als gültig.
+     * Writes color[0..3] as a 6-byte telegram (e.g. for the status object). All channels are marked as valid.
      */
     inline void encode(const uint8_t *color, uint8_t *data)
     {
@@ -65,7 +66,7 @@ namespace RgbwHelper
     }
 
     /*
-     * DALI-Pegel: 255 bedeutet bei DT8 "MASK" (= Kanal nicht ändern), 254 ist der Maximalwert.
+     * DALI level: for DT8, 255 means "MASK" (= do not change this channel), 254 is the maximum.
      */
     inline uint8_t daliLevel(uint8_t value)
     {
@@ -73,7 +74,7 @@ namespace RgbwHelper
     }
 
     /*
-     * Gegenrichtung zu daliLevel(): DALI-Pegel (254 = Maximum) -> KNX-Wert (255 = 100 %).
+     * Reverse of daliLevel(): DALI level (254 = maximum) -> KNX value (255 = 100 %).
      */
     inline uint8_t knxFromDaliLevel(uint8_t level)
     {
@@ -81,10 +82,11 @@ namespace RgbwHelper
     }
 
     /*
-     * Farbe aus den vier Report-Werten (R, G, B, W) des Treibers (QUERY_COLOUR_VALUE, Selektor 233-236).
-     * Nutzbar nur, wenn kein Wert 255 (MASK = unbekannt) ist und mindestens ein Kanal leuchtet: ein Treiber,
-     * der nur Nullen meldet, hat (noch) keine Farbe, und eine Farbe aus lauter Nullen wäre "aus".
-     * Gibt true zurück und schreibt color[0..3], wenn die Farbe übernommen werden kann.
+     * Colour from the four report values (R, G, B, W) of the driver (QUERY_COLOUR_VALUE, selectors 233-236).
+     * Usable only if no value is 255 (MASK = unknown) and at least one channel is lit: a driver that reports
+     * only zeros has no colour (yet), and a colour of all zeros would be "off".
+     * Returns true and writes color[0..3] if the colour can be taken over. Currently used only by the host test,
+     * kept for a later colour query of the driver.
      */
     inline bool colourFromDriver(const uint8_t *report, uint8_t *color)
     {
@@ -99,9 +101,9 @@ namespace RgbwHelper
     }
 
     /*
-     * Helligkeit aus dem RGBW-Wert ("Slider"-Modus): Der größte Kanal ist die Helligkeit (255 = 100 %), das Verhältnis
-     * der Kanäle zueinander ist die Farbmischung. Der DA4-M wertet die Amplitude der Farbwerte nicht aus (er
-     * normiert), die Helligkeit muss deshalb als eigener Pegel gesendet werden.
+     * Brightness from the RGBW value ("slider" mode): the largest channel is the brightness (255 = 100 %), the ratio
+     * of the channels to each other is the colour mix. The DA4-M ignores the amplitude of colour values (it
+     * normalises), so the brightness has to be sent as an own level.
      */
     inline uint8_t maxChannel(const uint8_t *color)
     {
@@ -113,7 +115,7 @@ namespace RgbwHelper
     }
 
     /*
-     * Farbmischung: color so skaliert, dass der größte Kanal 255 ist (alle 0 bleibt 0).
+     * Colour mix: color scaled so that the largest channel is 255 (all 0 stays 0).
      */
     inline void normalise(const uint8_t *color, uint8_t *mix)
     {
@@ -123,7 +125,7 @@ namespace RgbwHelper
     }
 
     /*
-     * Gegenrichtung: Farbmischung (größter Kanal 255) auf die Amplitude amp (= größter Kanal) skalieren.
+     * Reverse: scale the colour mix (largest channel 255) to the amplitude amp (= largest channel).
      */
     inline void scale(const uint8_t *mix, uint8_t amp, uint8_t *color)
     {
@@ -131,7 +133,7 @@ namespace RgbwHelper
             color[i] = (uint8_t)(((uint16_t)mix[i] * amp + 127) / 255);
     }
 
-    // Amplitude (0..255) <-> Helligkeit in Prozent (0..100, linear)
+    // Amplitude (0..255) <-> brightness in percent (0..100, linear)
     inline float percentFromAmplitude(uint8_t amp)
     {
         return amp * 100.0f / 255.0f;

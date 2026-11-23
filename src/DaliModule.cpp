@@ -562,7 +562,7 @@ void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
 }
 
 // DT8 "automatic activation" (gear features/status bit 0): a temporary colour is taken over by the next arc power
-// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start (README 5.1, C4):
+// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start:
 // "aastat" reads it from all configured RGBW channels, "aaon [yy]" switches it on permanently (stored in the driver).
 int16_t DaliModule::rgbwQueryGearFeatures(uint8_t addr)
 {
@@ -902,7 +902,7 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
     logDebugP("Broadcast Switch set");
 }
 
-// Broadcast on: DAPC 254 to everybody, level only, no colour (README 5.1 plan point 6): every RGBW lamp comes in
+// Broadcast on: DAPC 254 to everybody, level only, no colour: every RGBW lamp comes in
 // the colour stored in its driver. The states follow in broadcastGroupState.
 void DaliModule::broadcastOn()
 {
@@ -920,7 +920,7 @@ void DaliModule::broadcastOff()
 // Broadcast RGBW (DPT 251.600): colour and level to everybody in ONE command (temporary colour + DAPC to the
 // broadcast address). The level is the largest channel (like the slider mode), the colour the mix of the channels.
 // The colour only reaches RGBW drivers (DT8 RGBWAF), the level reaches all drivers. Channels and groups keep their
-// own stored state and no status is sent: the broadcast is a temporary state of the lamps, "Broadcast zurueck"
+// own stored state and no status is sent: the broadcast is a temporary state of the lamps, broadcast back
 // brings the stored states back. All channels 0 = DAPC 0 to everybody.
 void DaliModule::koHandleBroadcastRgbw(GroupObject &ko)
 {
@@ -961,16 +961,17 @@ void DaliModule::koHandleBroadcastRgbw(GroupObject &ko)
     daliMaster.sendArc(BroadcastAddress, arc, true); // activates the temporary colour (automatic activation)
 }
 
-// Broadcast zurueck: every RGBW group gets its stored state again, then every RGBW channel that is in no configured
-// RGBW group (members get the state of their group: the gateway does not track the members after group commands,
-// 5.8 G3). Locked channels and groups are skipped. Only RGBW (README 5.1, F1); one command each.
+// Broadcast back (ETS object "Zurueck"): every RGBW group gets its stored state again, then every RGBW channel that
+// is in no configured RGBW group (members get the state of their group: the gateway does not track the members after
+// group commands, so their own state may be outdated). Locked channels and groups are skipped. Only RGBW (the other
+// channel types could not be tested here); one command each.
 void DaliModule::koHandleBroadcastBack(GroupObject &ko)
 {
     if (!ko.value(DPT_Switch))
         return;
-    logDebugP("Broadcast zurueck: RGBW groups and RGBW channels without group get their stored state");
-    // Two passes (B28): first the groups and channels without a known colour (level only), then those with a colour.
-    // A level without colour aborts a running colour fade in a driver that is also in another group (B26), so the
+    logDebugP("Broadcast back: RGBW groups and RGBW channels without group get their stored state");
+    // Two passes: first the groups and channels without a known colour (level only), then those with a colour.
+    // A level without colour aborts a running colour fade in a driver that is also in another group, so the
     // commands with colour come last. Within a pass the order is G0..G15, then the channels; with overlapping groups
     // the last command wins.
     for (int pass = 0; pass < 2; pass++)

@@ -31,7 +31,7 @@ class DaliChannel : public OpenKNX::Channel
 		bool isRgbw();
 		void rgbwOff();
 		void rgbwCancel();
-		// "Broadcast zurueck": sends the stored state of this RGBW channel or group again (not when locked)
+		// broadcast back: sends the stored state of this RGBW channel or group again (not when locked)
 		void rgbwRestore();
 		// the gateway knows a colour for this channel or group (it got one since the start)
 		bool rgbwColourKnown();
@@ -148,7 +148,7 @@ class DaliChannel : public OpenKNX::Channel
 		void rgbwSendState();
 		uint8_t rgbwStoredLevel();
 		uint8_t rgbwOnValue();
-		// Lock of an RGBW channel or group (S1-S4 corrected, README 5.1 plan point 8) and "restore on unlock"
+		// Lock of an RGBW channel or group (lock errors of the original code corrected) and "restore on unlock"
 		bool rgbwRestoreOnUnlock();
 		void rgbwLock();
 		void rgbwUnlock();
@@ -166,7 +166,7 @@ class DaliChannel : public OpenKNX::Channel
 
 		// After the stop of a relative dimming the real level is queried once (the last UP/DOWN is still running
 		// in the driver when the stop arrives, so the level queried during dimming is one step behind). RGBW: the
-		// stored colour is sent again at the same time (an UP/DOWN right after a colour aborts the colour fade, B25).
+		// stored colour is sent again at the same time (an UP/DOWN right after a colour aborts the colour fade).
 		unsigned long _stopQueryAt = 0;
 		void loopStopQuery();
 

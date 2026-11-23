@@ -355,7 +355,7 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 **Funktioniert RGBW nicht wie beschrieben** (z. B. Farbe und Helligkeit kommen nicht in einem Fade): zuerst `aastat`, bei *OFF* `aaon`.
 
-Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` bzw. `… ignored`.
+Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast back: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` bzw. `… ignored`.
 
 ## 10. Offen und Fragen
 

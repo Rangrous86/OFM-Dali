@@ -34,16 +34,16 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | `src/DaliModule.group.templ.xml` | geändert | Gruppe: wie Einzeladresse |
 
 ```
- src/DaliChannel.cpp             | 650 +++++++++++++++++++++++++++++++++++++++-
+ src/DaliChannel.cpp             | 654 +++++++++++++++++++++++++++++++++++++++-
  src/DaliChannel.h               |  70 ++++-
- src/DaliModule.cpp              | 283 ++++++++++++++++-
+ src/DaliModule.cpp              | 284 ++++++++++++++++-
  src/DaliModule.group.templ.xml  |  32 +-
  src/DaliModule.h                |   9 +
  src/DaliModule.share.xml        |  15 +-
  src/DaliModule.single.templ.xml |  66 ++--
- src/RgbwHelper.h                | 148 +++++++++
+ src/RgbwHelper.h                | 150 +++++++++
  test/test_rgbw_helper.cpp       | 136 +++++++++
- 9 files changed, 1371 insertions(+), 38 deletions(-)
+ 9 files changed, 1378 insertions(+), 38 deletions(-)
 ```
 
 **Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert).
@@ -447,11 +447,11 @@ namespace RgbwHelper
 
 ## Anhang B: vollständiges Diff
 
-Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 23.11.2026, `v15b` ohne Versionskennung).
+Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 23.11.2026: `v15b` ohne Versionskennung, Kommentare bereinigt).
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..185959f 100644
+index dffeaaf..e32aca4 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -460,7 +460,7 @@ index dffeaaf..185959f 100644
  #include "OpenKNX.h"
  
  DaliChannel::DaliChannel(Dali::Master &_daliMaster) : daliMaster(_daliMaster) {}
-@@ -109,6 +110,224 @@ void DaliChannel::loop1()
+@@ -109,6 +110,227 @@ void DaliChannel::loop1()
      loopDimming();
      loopError();
      loopQueryLevel();
@@ -471,10 +471,10 @@ index dffeaaf..185959f 100644
 +uint16_t DaliChannel::rgbwWindowMs = RgbwWindowMs;
 +
 +// ---------------------------------------------------------------------------------------------------------
-+// RGBW control (v14, see README sections 1.5 and 5.1, plan after phase 3):
-+// The driver has ONE fade engine (DA4-M, B1): every new fade command (DAPC, ACTIVATE, UP/DOWN) aborts the running
-+// fade and the driver stays where it is. RGBW follows the RGB code (every telegram = one DALI command = one fade, no
-+// bus query, no waiting for the end of a fade, no time marks) with these deviations:
++// RGBW control (behaviour for the user: doc/Applikationsbeschreibung-Dali.md, section RGBW):
++// The driver has ONE fade engine (tested with the DA4-M): every new fade command (DAPC, ACTIVATE, UP/DOWN) aborts
++// the running fade and the driver stays where it is. RGBW follows the RGB code (every telegram = one DALI command =
++// one fade, no bus query, no waiting for the end of a fade, no time marks) with these deviations:
 +// 1. Collection window (rgbwWindowMs, default 80 ms): every RGBW command goes through it. Telegrams that arrive close
 +//    together (Home Assistant sends colour and brightness ~20 ms apart) become ONE command: the colour as temporary
 +//    value (SET TEMPORARY RGB/WAF, no ACTIVATE) and the DAPC right behind it; the DAPC activates the colour
@@ -485,13 +485,16 @@ index dffeaaf..185959f 100644
 +//    (with the stored group level) or a level alone (with the stored group colour). All members return to the
 +//    state of the group.
 +// 4. Single channel = exception: a colour alone on a lit channel goes out with ACTIVATE, a level alone as DAPC.
-+//    Sent separately (outside the window), the second command may abort the fade of the first one (B26, accepted).
++//    Sent separately (outside the window), the second command may abort the fade of the first one (accepted).
 +// 5. A colour for a switched-off channel goes out with ACTIVATE (after the window), the lamp stays off. Exception:
 +//    brightness from the RGBW value (slider mode), there a colour > 0 switches on.
-+// 6. Relative dimming: 300 ms after its end (stop or maximum) the stored colour is sent again with ACTIVATE (B25).
-+// 7. Broadcast: level only (module). Broadcast RGBW: own value, the channels keep their state; "Broadcast zurueck"
++// 6. Relative dimming: 300 ms after its end (stop or maximum) the stored colour is sent again with ACTIVATE, because
++//    an UP/DOWN right after a colour change aborts the colour fade.
++// 7. Broadcast: level only (module). Broadcast RGBW: own value, the channels keep their state; broadcast back
 +//    sends the stored state of every RGBW group and of every RGBW channel that is in no RGBW group.
-+// 8. Lock: level only, no colour (S1-S4 corrected for RGBW); optionally restore the stored state on unlock.
++// 8. Lock: level only, no colour. For RGBW the lock errors of the original code are corrected ("Anschalten" and
++//    "Ausschalten" swapped, fixed value sent as arc value, groups read the channel parameters, on/off flag not
++//    updated); optionally restore the stored state on unlock.
 +// ---------------------------------------------------------------------------------------------------------
 +bool DaliChannel::isRgbw()
 +{
@@ -637,7 +640,7 @@ index dffeaaf..185959f 100644
 +    logDebugP("RGBW: stored state sent again: %s, level %i", currentState ? "on" : "off", level);
 +}
 +
-+// "Broadcast zurueck": this channel or group gets its own stored state again (locked ones keep their lock state)
++// broadcast back: this channel or group gets its own stored state again (locked ones keep their lock state)
 +void DaliChannel::rgbwRestore()
 +{
 +    if (!_isConfigured || !isRgbw() || _isStaircase || currentIsLocked)
@@ -651,7 +654,7 @@ index dffeaaf..185959f 100644
 +    return !RgbwHelper::isOff(currentColor);
 +}
 +
-+// Single channel: member of at least one configured RGBW group (gets its state from the group on "Broadcast zurueck")
++// Single channel: member of at least one configured RGBW group (gets its state from the group on broadcast back)
 +bool DaliChannel::isInRgbwGroup(DaliChannel *groups)
 +{
 +    if (_isGroup)
@@ -676,7 +679,7 @@ index dffeaaf..185959f 100644
 +        return;
 +    if (isRgbw() && !_isStaircase && !RgbwHelper::isOff(currentColor))
 +    {
-+        // an UP/DOWN right after a colour aborts the colour fade (B25): the stored colour once more
++        // an UP/DOWN right after a colour aborts the colour fade: the stored colour once more
 +        logDebugP("RGBW: colour again after relative dimming");
 +        sendColor(true);
 +    }
@@ -685,28 +688,28 @@ index dffeaaf..185959f 100644
  }
  
  void DaliChannel::loopStaircase()
-@@ -129,6 +348,8 @@ void DaliChannel::loopDimming()
+@@ -129,6 +351,8 @@ void DaliChannel::loopDimming()
  {
      if (_dimmDirection != DimmDirection::None)
      {
 +        // RGBW: like RGB, no wait. An UP/DOWN right after a colour change aborts the colour fade: the colour is sent
-+        // again 300 ms after the end of the dimming (loopStopQuery, B25).
++        // again 300 ms after the end of the dimming (loopStopQuery).
          if(millis() - _dimmLast > DimmInterval)
          {
              if (_dimmDirection == DimmDirection::Up)
-@@ -145,16 +366,34 @@ void DaliChannel::loopDimming()
+@@ -145,16 +369,34 @@ void DaliChannel::loopDimming()
                      logDebugP("Dimm Stop at 254");
                      _dimmDirection = DimmDirection::None;
                      updateCurrentDimmValue();
 +                    if (isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness)
-+                        _stopQueryAt = (millis() + 300) | 1; // level query and colour again (B25)
++                        _stopQueryAt = (millis() + 300) | 1; // level query and colour again
                  }else if (*currentDimmValue >= _max)
                  {
                      logDebugP("Dimm Stop at max %i (%i)", _max, *currentDimmValue);
                      _dimmDirection = DimmDirection::None;
                      updateCurrentDimmValue();
 +                    if (isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness)
-+                        _stopQueryAt = (millis() + 300) | 1; // level query and colour again (B25)
++                        _stopQueryAt = (millis() + 300) | 1; // level query and colour again
                  }
              }
              else if (_dimmDirection == DimmDirection::Down)
@@ -730,7 +733,7 @@ index dffeaaf..185959f 100644
                  {
                      queryActualLevel();
                      daliMaster.sendCommand(_channelIndex, Dali::Command::DOWN, _isGroup);
-@@ -163,13 +402,26 @@ void DaliChannel::loopDimming()
+@@ -163,13 +405,26 @@ void DaliChannel::loopDimming()
                  *currentDimmValue = *currentDimmValue - 1;
                  if (*currentDimmValue <= _min || *currentDimmValue == 0) {
                      logDebugP("Dimm Stop at: %i", *currentDimmValue);
@@ -759,7 +762,7 @@ index dffeaaf..185959f 100644
                      }
                  }
              }
-@@ -303,8 +555,8 @@ void DaliChannel::processInputKo(GroupObject &ko)
+@@ -303,8 +558,8 @@ void DaliChannel::processInputKo(GroupObject &ko)
          //logDebugP("Got SHORT KO %i", chanIndex);
      }
  
@@ -770,7 +773,7 @@ index dffeaaf..185959f 100644
      switch (chanIndex)
      {
      case DGW_Koswitch:
-@@ -382,6 +634,9 @@ void DaliChannel::koHandleScene(GroupObject &ko)
+@@ -382,6 +637,9 @@ void DaliChannel::koHandleScene(GroupObject &ko)
          return;
      }
  
@@ -780,7 +783,7 @@ index dffeaaf..185959f 100644
      daliMaster.sendCommand(_channelIndex, Dali::Command::GO_TO_SCENE | number, _isGroup);
  }
  
-@@ -454,6 +709,15 @@ void DaliChannel::koHandleSwitch(GroupObject &ko)
+@@ -454,6 +712,15 @@ void DaliChannel::koHandleSwitch(GroupObject &ko)
      logDebugP("Switching");
      if (currentIsLocked)
      {
@@ -796,7 +799,7 @@ index dffeaaf..185959f 100644
          logErrorP("is locked");
          return;
      }
-@@ -487,7 +751,10 @@ void DaliChannel::handleSwitchNormal(GroupObject &ko)
+@@ -487,7 +754,10 @@ void DaliChannel::handleSwitchNormal(GroupObject &ko)
          if(!hclBriActivated) {
              logDebugP(isNight ? "Turning on night value" : "Turning on day value");
          }
@@ -808,7 +811,7 @@ index dffeaaf..185959f 100644
  
          bool hclTempActivated = false;
          if(_hclCurve != HclDisabled && _hclIsAutoMode)
-@@ -505,7 +772,10 @@ void DaliChannel::handleSwitchNormal(GroupObject &ko)
+@@ -505,7 +775,10 @@ void DaliChannel::handleSwitchNormal(GroupObject &ko)
      else
      {
          logDebugP("Turning off");
@@ -820,7 +823,7 @@ index dffeaaf..185959f 100644
          setSwitchState(false);
      }
      currentState = value;
-@@ -580,12 +850,29 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
+@@ -580,12 +853,29 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
      if (_dimmStep == 0)
      {
          logDebugP("Dimm Stop");
@@ -831,7 +834,7 @@ index dffeaaf..185959f 100644
 +        if (alreadyEnded && isRgbw() && !_isStaircase && currentDimmType == DimmType::Brigthness)
 +        {
 +            // RGBW: the dimming already ended at the maximum or minimum (loopDimming); the colour and the level query
-+            // were sent (or are pending) from there. A stop telegram that comes later sends nothing again (B27).
++            // were sent (or are pending) from there. A stop telegram that comes later sends nothing again.
 +            logDebugP("RGBW: dimming already ended, stop ignored");
 +            return;
 +        }
@@ -850,16 +853,16 @@ index dffeaaf..185959f 100644
      currentDimmValue = &currentStep;
      currentDimmType = DimmType::Brigthness;
      _dimmLastStatus = millis();
-@@ -605,6 +892,8 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
+@@ -605,6 +895,8 @@ void DaliChannel::koHandleDimmRel(GroupObject &ko)
                  daliMaster.sendCommand(_channelIndex, Dali::Command::RECALL_MIN, _isGroup, true);
                  *currentDimmValue = _min;
                  currentState = true;
 +                if (isRgbw() && !_isStaircase)
-+                    setSwitchState(true, false); // RGBW: "on" right away, not only at the stop (B23, C5)
++                    setSwitchState(true, false); // RGBW: "on" right away (the original code reports it only at the stop)
                  queryActualLevel();
                  logDebugP("starting with min %i", _min);
                  _dimmLast = millis();
-@@ -623,6 +912,16 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+@@ -623,6 +915,16 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
      logDebugP("Dimming absolute");
      if (currentIsLocked)
      {
@@ -876,7 +879,7 @@ index dffeaaf..185959f 100644
          logErrorP("is locked");
          return;
      }
-@@ -633,8 +932,45 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+@@ -633,8 +935,45 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
      uint8_t value = ko.value(Dpt(5, 1));
      logDebugP("Dimming absolute to %i%%", value);
      uint8_t arc = DaliHelper::percentToArc(value);
@@ -923,13 +926,14 @@ index dffeaaf..185959f 100644
  }
  
  void DaliChannel::koHandleLock(GroupObject &ko)
-@@ -655,6 +991,15 @@ void DaliChannel::koHandleLock(GroupObject &ko)
+@@ -655,6 +994,16 @@ void DaliChannel::koHandleLock(GroupObject &ko)
      if (currentIsLocked == value)
          return;
      currentIsLocked = value;
 +    if (isRgbw() && !_isStaircase)
 +    {
-+        // RGBW: own branch with the corrections S1-S4 (README 5.1 plan point 8; 5.8 G4 for the other types)
++        // RGBW: own branch with the lock errors of the original code corrected (see rgbwLockArc and rgbwLock; the
++        // other types are unchanged)
 +        if (currentIsLocked)
 +            rgbwLock();
 +        else
@@ -939,7 +943,7 @@ index dffeaaf..185959f 100644
      uint8_t behave;
      uint8_t behavevalue;
      if (currentIsLocked)
-@@ -701,15 +1046,93 @@ void DaliChannel::koHandleLock(GroupObject &ko)
+@@ -701,15 +1050,93 @@ void DaliChannel::koHandleLock(GroupObject &ko)
      }
      }
      logDebugP("%i - %i", behavevalue, DaliHelper::percentToArc(behavevalue));
@@ -955,8 +959,8 @@ index dffeaaf..185959f 100644
 +    return isRgbw() && !_isStaircase && (_isGroup ? ParamDGWG_unlockRestore : ParamDGW_unlockRestore);
 +}
 +
-+// DALI arc value of a lock / unlock behaviour (S1: "Anschalten" = switch-on value, "Ausschalten" = 0; S2: the fixed
-+// value is a percentage)
++// DALI arc value of a lock / unlock behaviour: "Anschalten" = switch-on value, "Ausschalten" = 0 (swapped in the
++// original code), the fixed value is a percentage (sent as arc value in the original code)
 +uint8_t DaliChannel::rgbwLockArc(uint8_t behave, uint8_t percentValue)
 +{
 +    switch (behave)
@@ -974,7 +978,7 @@ index dffeaaf..185959f 100644
 +// state (on/off, level, colour) stays as it is and only the status follows the lamp.
 +void DaliChannel::rgbwLock()
 +{
-+    // S3: groups read the group parameters
++    // groups read the group parameters (the original code reads the channel parameters)
 +    uint8_t behave = _isGroup ? ParamDGWG_lockbehave : ParamDGW_lockbehave;
 +    uint8_t percent = _isGroup ? ParamDGWG_lockvalue : ParamDGW_lockvalue;
 +    logDebugP("RGBW: locking (behaviour %i)", behave);
@@ -992,7 +996,7 @@ index dffeaaf..185959f 100644
 +    else
 +    {
 +        setDimmState(arc, true, true);
-+        currentState = arc > 0; // S4
++        currentState = arc > 0; // keep the on/off flag in sync with the lamp (missing in the original code)
 +    }
 +}
 +
@@ -1017,7 +1021,7 @@ index dffeaaf..185959f 100644
 +    uint8_t arc = rgbwLockArc(behave, percent);
 +    daliMaster.sendArc(_channelIndex, arc, _isGroup);
 +    setDimmState(arc, true, true);
-+    currentState = arc > 0; // S4
++    currentState = arc > 0; // keep the on/off flag in sync with the lamp (missing in the original code)
 +}
 +
  void DaliChannel::koHandleColor(GroupObject &ko)
@@ -1033,7 +1037,7 @@ index dffeaaf..185959f 100644
          logErrorP("is locked");
          return;
      }
-@@ -738,11 +1161,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -738,11 +1165,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -1050,7 +1054,7 @@ index dffeaaf..185959f 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +1207,106 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +1211,106 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -1157,7 +1161,7 @@ index dffeaaf..185959f 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -829,6 +1356,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
+@@ -829,6 +1360,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
  
  void DaliChannel::setTemperature(uint16_t value)
  {
@@ -1169,7 +1173,7 @@ index dffeaaf..185959f 100644
      logDebugP("Set Kelvin: %i K", value);
      uint16_t mirek = 1000000.0 / value;
      //TODO check the colorType and then set RGB or TW or do nothing if it is no color Device
-@@ -842,6 +1374,25 @@ void DaliChannel::setTemperature(uint16_t value)
+@@ -842,6 +1378,25 @@ void DaliChannel::setTemperature(uint16_t value)
  void DaliChannel::setBrightness(uint8_t value)
  {
      logDebugP("Set Brightness: %i %%", value);
@@ -1195,7 +1199,7 @@ index dffeaaf..185959f 100644
      daliMaster.sendArc(_channelIndex, DaliHelper::percentToArc(value), _isGroup);
      sendKoStateOnChange(DGW_Kodimm_state, value, Dpt(5, 1));
  }
-@@ -867,11 +1418,21 @@ void DaliChannel::queryActualLevel()
+@@ -867,11 +1422,21 @@ void DaliChannel::queryActualLevel()
      _queryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_ACTUAL_LEVEL, false, true);
  }
  
@@ -1218,7 +1222,7 @@ index dffeaaf..185959f 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1466,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1470,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -1250,7 +1254,7 @@ index dffeaaf..185959f 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -957,7 +1543,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
+@@ -957,7 +1547,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
      // bool currentState = knx.getGroupObject(calcKoNumber(_isGroup ? DGWG_Koswitch_state : DGW_Koswitch_state)).value(DPT_Switch);
      // if (value == currentState)
      //     return;
@@ -1268,7 +1272,7 @@ index dffeaaf..185959f 100644
  }
  
  void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCommand)
-@@ -976,6 +1571,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
+@@ -976,6 +1575,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
          currentStep = value;
      }
  
@@ -1278,7 +1282,7 @@ index dffeaaf..185959f 100644
      float perc = DaliHelper::arcToPercentFloat(value);
  
      GroupObject& ko = knx.getGroupObject(calcKoNumber(DGW_Kodimm_state));
-@@ -1002,6 +1600,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1604,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {
@@ -1291,7 +1295,7 @@ index dffeaaf..185959f 100644
              uint32_t value = currentColor[2];
              value |= currentColor[1] << 8;
              value |= currentColor[0] << 16;
-@@ -1060,13 +1664,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
+@@ -1060,13 +1668,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
  void DaliChannel::setGroupState(uint16_t group, bool state)
  {
      if (group == AllGroups || _groups & 1 << group)
@@ -1329,7 +1333,7 @@ index dffeaaf..185959f 100644
  
  void DaliChannel::setMinArc(uint8_t min)
 diff --git a/src/DaliChannel.h b/src/DaliChannel.h
-index 19b49c9..179df63 100644
+index 19b49c9..3b70f6c 100644
 --- a/src/DaliChannel.h
 +++ b/src/DaliChannel.h
 @@ -8,11 +8,17 @@
@@ -1359,7 +1363,7 @@ index 19b49c9..179df63 100644
 +		bool isRgbw();
 +		void rgbwOff();
 +		void rgbwCancel();
-+		// "Broadcast zurueck": sends the stored state of this RGBW channel or group again (not when locked)
++		// broadcast back: sends the stored state of this RGBW channel or group again (not when locked)
 +		void rgbwRestore();
 +		// the gateway knows a colour for this channel or group (it got one since the start)
 +		bool rgbwColourKnown();
@@ -1399,7 +1403,7 @@ index 19b49c9..179df63 100644
 +		void rgbwSendState();
 +		uint8_t rgbwStoredLevel();
 +		uint8_t rgbwOnValue();
-+		// Lock of an RGBW channel or group (S1-S4 corrected, README 5.1 plan point 8) and "restore on unlock"
++		// Lock of an RGBW channel or group (lock errors of the original code corrected) and "restore on unlock"
 +		bool rgbwRestoreOnUnlock();
 +		void rgbwLock();
 +		void rgbwUnlock();
@@ -1417,7 +1421,7 @@ index 19b49c9..179df63 100644
 +
 +		// After the stop of a relative dimming the real level is queried once (the last UP/DOWN is still running
 +		// in the driver when the stop arrives, so the level queried during dimming is one step behind). RGBW: the
-+		// stored colour is sent again at the same time (an UP/DOWN right after a colour aborts the colour fade, B25).
++		// stored colour is sent again at the same time (an UP/DOWN right after a colour aborts the colour fade).
 +		unsigned long _stopQueryAt = 0;
 +		void loopStopQuery();
 +
@@ -1451,7 +1455,7 @@ index 19b49c9..179df63 100644
  		void koHandleColorAbs(GroupObject &ko, ColorChannel channel);
  		void koHandleHclCurve(GroupObject &ko);
 diff --git a/src/DaliModule.cpp b/src/DaliModule.cpp
-index 47a905c..acd1c17 100644
+index 47a905c..51ed921 100644
 --- a/src/DaliModule.cpp
 +++ b/src/DaliModule.cpp
 @@ -1,4 +1,6 @@
@@ -1578,7 +1582,7 @@ index 47a905c..acd1c17 100644
 +}
 +
 +// DT8 "automatic activation" (gear features/status bit 0): a temporary colour is taken over by the next arc power
-+// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start (README 5.1, C4):
++// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start:
 +// "aastat" reads it from all configured RGBW channels, "aaon [yy]" switches it on permanently (stored in the driver).
 +int16_t DaliModule::rgbwQueryGearFeatures(uint8_t addr)
 +{
@@ -1674,7 +1678,7 @@ index 47a905c..acd1c17 100644
          // Tag/Nacht Objekt
          case DGW_Kodaynight:
              koHandleDayNight(ko);
-@@ -712,12 +893,111 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
+@@ -712,12 +893,112 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
  {
      bool value = ko.value(DPT_Switch);
      logDebugP("Broadcast Switch %i", value);
@@ -1688,7 +1692,7 @@ index 47a905c..acd1c17 100644
      logDebugP("Broadcast Switch set");
  }
  
-+// Broadcast on: DAPC 254 to everybody, level only, no colour (README 5.1 plan point 6): every RGBW lamp comes in
++// Broadcast on: DAPC 254 to everybody, level only, no colour: every RGBW lamp comes in
 +// the colour stored in its driver. The states follow in broadcastGroupState.
 +void DaliModule::broadcastOn()
 +{
@@ -1706,7 +1710,7 @@ index 47a905c..acd1c17 100644
 +// Broadcast RGBW (DPT 251.600): colour and level to everybody in ONE command (temporary colour + DAPC to the
 +// broadcast address). The level is the largest channel (like the slider mode), the colour the mix of the channels.
 +// The colour only reaches RGBW drivers (DT8 RGBWAF), the level reaches all drivers. Channels and groups keep their
-+// own stored state and no status is sent: the broadcast is a temporary state of the lamps, "Broadcast zurueck"
++// own stored state and no status is sent: the broadcast is a temporary state of the lamps, broadcast back
 +// brings the stored states back. All channels 0 = DAPC 0 to everybody.
 +void DaliModule::koHandleBroadcastRgbw(GroupObject &ko)
 +{
@@ -1747,16 +1751,17 @@ index 47a905c..acd1c17 100644
 +    daliMaster.sendArc(BroadcastAddress, arc, true); // activates the temporary colour (automatic activation)
 +}
 +
-+// Broadcast zurueck: every RGBW group gets its stored state again, then every RGBW channel that is in no configured
-+// RGBW group (members get the state of their group: the gateway does not track the members after group commands,
-+// 5.8 G3). Locked channels and groups are skipped. Only RGBW (README 5.1, F1); one command each.
++// Broadcast back (ETS object "Zurueck"): every RGBW group gets its stored state again, then every RGBW channel that
++// is in no configured RGBW group (members get the state of their group: the gateway does not track the members after
++// group commands, so their own state may be outdated). Locked channels and groups are skipped. Only RGBW (the other
++// channel types could not be tested here); one command each.
 +void DaliModule::koHandleBroadcastBack(GroupObject &ko)
 +{
 +    if (!ko.value(DPT_Switch))
 +        return;
-+    logDebugP("Broadcast zurueck: RGBW groups and RGBW channels without group get their stored state");
-+    // Two passes (B28): first the groups and channels without a known colour (level only), then those with a colour.
-+    // A level without colour aborts a running colour fade in a driver that is also in another group (B26), so the
++    logDebugP("Broadcast back: RGBW groups and RGBW channels without group get their stored state");
++    // Two passes: first the groups and channels without a known colour (level only), then those with a colour.
++    // A level without colour aborts a running colour fade in a driver that is also in another group, so the
 +    // commands with colour come last. Within a pass the order is G0..G15, then the channels; with overlapping groups
 +    // the last command wins.
 +    for (int pass = 0; pass < 2; pass++)
@@ -1787,7 +1792,7 @@ index 47a905c..acd1c17 100644
  void DaliModule::koHandleDimm(GroupObject &ko)
  {
      uint8_t value = ko.value(Dpt(5, 1));
-@@ -800,6 +1080,7 @@ void DaliModule::koHandleScene(GroupObject &ko)
+@@ -800,6 +1081,7 @@ void DaliModule::koHandleScene(GroupObject &ko)
              continue;
  
          logDebugP("Found scene number: %u, save: %u", i, save);
@@ -2191,25 +2196,26 @@ index 78764c5..06e746e 100644
                                      <when test="2">
 diff --git a/src/RgbwHelper.h b/src/RgbwHelper.h
 new file mode 100644
-index 0000000..7edf32a
+index 0000000..b6200a4
 --- /dev/null
 +++ b/src/RgbwHelper.h
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,150 @@
 +#pragma once
 +#include <stdint.h>
 +
 +/*
-+ * Hilfsfunktionen für KNX DPT 251.600 (DPT_Colour_RGBW) und die Übersetzung auf DALI DT8.
++ * Helper functions for KNX DPT 251.600 (DPT_Colour_RGBW) and the translation to DALI DT8.
 + *
-+ * Telegramm (6 Byte). Die Feldreihenfolge entspricht der Definition in knx_master.xml (MSB zuerst):
-+ *   Byte 0: Rot    (0..255, die ETS zeigt 0..100 %)
-+ *   Byte 1: Grün
-+ *   Byte 2: Blau
-+ *   Byte 3: Weiß
-+ *   Byte 4: reserviert (0x00)
-+ *   Byte 5: Bit 7..4 reserviert, Bit 3 = mR, Bit 2 = mG, Bit 1 = mB, Bit 0 = mW  (1 = Wert gültig)
++ * Telegram (6 bytes). The field order follows the definition in knx_master.xml (MSB first):
++ *   Byte 0: red    (0..255, the ETS shows 0..100 %)
++ *   Byte 1: green
++ *   Byte 2: blue
++ *   Byte 3: white
++ *   Byte 4: reserved (0x00)
++ *   Byte 5: bits 7..4 reserved, bit 3 = mR, bit 2 = mG, bit 1 = mB, bit 0 = mW  (1 = value valid)
 + *
-+ * Bewusst ohne Abhängigkeit zu Arduino/KNX-Stack, damit die Logik auf dem Rechner testbar ist.
++ * Deliberately without dependencies on Arduino or the KNX stack, so that the logic can be tested on a PC
++ * (test/test_rgbw_helper.cpp).
 + */
 +namespace RgbwHelper
 +{
@@ -2222,9 +2228,9 @@ index 0000000..7edf32a
 +    constexpr uint8_t ValidAll = 0x0F;
 +
 +    /*
-+     * Übernimmt nur die im Telegramm als gültig markierten Kanäle nach color[0..3] (R, G, B, W).
-+     * Nicht markierte Kanäle behalten ihren bisherigen Wert.
-+     * Rückgabe: Gültigkeitsmaske (untere 4 Bit). 0 = das Telegramm ändert nichts.
++     * Takes over only the channels marked as valid in the telegram into color[0..3] (R, G, B, W).
++     * Channels that are not marked keep their previous value.
++     * Returns the validity mask (lower 4 bits). 0 = the telegram changes nothing.
 +     */
 +    inline uint8_t decode(const uint8_t *data, uint8_t *color)
 +    {
@@ -2241,7 +2247,7 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * true, wenn alle vier Kanäle (R, G, B, W) 0 sind. Das gilt als "Aus".
++     * true if all four channels (R, G, B, W) are 0. This counts as "off".
 +     */
 +    inline bool isOff(const uint8_t *color)
 +    {
@@ -2249,7 +2255,7 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * Schreibt color[0..3] als 6-Byte-Telegramm (z.B. für das Statusobjekt). Alle Kanäle gelten als gültig.
++     * Writes color[0..3] as a 6-byte telegram (e.g. for the status object). All channels are marked as valid.
 +     */
 +    inline void encode(const uint8_t *color, uint8_t *data)
 +    {
@@ -2262,7 +2268,7 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * DALI-Pegel: 255 bedeutet bei DT8 "MASK" (= Kanal nicht ändern), 254 ist der Maximalwert.
++     * DALI level: for DT8, 255 means "MASK" (= do not change this channel), 254 is the maximum.
 +     */
 +    inline uint8_t daliLevel(uint8_t value)
 +    {
@@ -2270,7 +2276,7 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * Gegenrichtung zu daliLevel(): DALI-Pegel (254 = Maximum) -> KNX-Wert (255 = 100 %).
++     * Reverse of daliLevel(): DALI level (254 = maximum) -> KNX value (255 = 100 %).
 +     */
 +    inline uint8_t knxFromDaliLevel(uint8_t level)
 +    {
@@ -2278,10 +2284,11 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * Farbe aus den vier Report-Werten (R, G, B, W) des Treibers (QUERY_COLOUR_VALUE, Selektor 233-236).
-+     * Nutzbar nur, wenn kein Wert 255 (MASK = unbekannt) ist und mindestens ein Kanal leuchtet: ein Treiber,
-+     * der nur Nullen meldet, hat (noch) keine Farbe, und eine Farbe aus lauter Nullen wäre "aus".
-+     * Gibt true zurück und schreibt color[0..3], wenn die Farbe übernommen werden kann.
++     * Colour from the four report values (R, G, B, W) of the driver (QUERY_COLOUR_VALUE, selectors 233-236).
++     * Usable only if no value is 255 (MASK = unknown) and at least one channel is lit: a driver that reports
++     * only zeros has no colour (yet), and a colour of all zeros would be "off".
++     * Returns true and writes color[0..3] if the colour can be taken over. Currently used only by the host test,
++     * kept for a later colour query of the driver.
 +     */
 +    inline bool colourFromDriver(const uint8_t *report, uint8_t *color)
 +    {
@@ -2296,9 +2303,9 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * Helligkeit aus dem RGBW-Wert ("Slider"-Modus): Der größte Kanal ist die Helligkeit (255 = 100 %), das Verhältnis
-+     * der Kanäle zueinander ist die Farbmischung. Der DA4-M wertet die Amplitude der Farbwerte nicht aus (er
-+     * normiert), die Helligkeit muss deshalb als eigener Pegel gesendet werden.
++     * Brightness from the RGBW value ("slider" mode): the largest channel is the brightness (255 = 100 %), the ratio
++     * of the channels to each other is the colour mix. The DA4-M ignores the amplitude of colour values (it
++     * normalises), so the brightness has to be sent as an own level.
 +     */
 +    inline uint8_t maxChannel(const uint8_t *color)
 +    {
@@ -2310,7 +2317,7 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * Farbmischung: color so skaliert, dass der größte Kanal 255 ist (alle 0 bleibt 0).
++     * Colour mix: color scaled so that the largest channel is 255 (all 0 stays 0).
 +     */
 +    inline void normalise(const uint8_t *color, uint8_t *mix)
 +    {
@@ -2320,7 +2327,7 @@ index 0000000..7edf32a
 +    }
 +
 +    /*
-+     * Gegenrichtung: Farbmischung (größter Kanal 255) auf die Amplitude amp (= größter Kanal) skalieren.
++     * Reverse: scale the colour mix (largest channel 255) to the amplitude amp (= largest channel).
 +     */
 +    inline void scale(const uint8_t *mix, uint8_t amp, uint8_t *color)
 +    {
@@ -2328,7 +2335,7 @@ index 0000000..7edf32a
 +            color[i] = (uint8_t)(((uint16_t)mix[i] * amp + 127) / 255);
 +    }
 +
-+    // Amplitude (0..255) <-> Helligkeit in Prozent (0..100, linear)
++    // Amplitude (0..255) <-> brightness in percent (0..100, linear)
 +    inline float percentFromAmplitude(uint8_t amp)
 +    {
 +        return amp * 100.0f / 255.0f;
