@@ -6,7 +6,7 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 
 | | |
 |---|---|
-| **Version** | `v15b` (branch `v1dev` of this fork) |
+| **Version** | `v15b`, cleaned up on 23 Nov 2026 (PR state, branch `v1dev` of this fork) |
 | **Base** | `OpenKNX/OFM-Dali`, branch `v1dev`, commit `a120578` |
 | **ETS application** | 0.13 (one version above the official release 0.12; a device on 0.12 can be updated directly) |
 | **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)). On 22 Nov 2026 with `v15`: day/night value and HCL (N1, N2, H1–H5) passed. With `v15b`: HCL together with the lock (H6a, H6b) passed (8.2) |
@@ -212,7 +212,7 @@ So *on* always takes the switch-on value (HCL, otherwise day/night), as for all 
 - **After a restart of the gateway** the colour is unknown until the first colour telegram (on/off and level are read from the driver). Until then, switching on sends the level only.
 - **Broadcast in mixed installations:** the level of *Broadcast – Farbe RGBW* also affects normal dimming and switching drivers; *Broadcast – Zurück* restores RGBW only. *Broadcast switch/dim* overwrite the stored state of all channels; afterwards *Zurück* brings that state.
 - **Scenes:** unchanged from the original code, the driver recalls level and colour itself; not tested with RGBW. Scene colour via configuration transfer has no white; store scenes in the driver with level **and** colour.
-- **HCL:** adapted in `v15` (colour temperature skipped for RGBW, brightness through the collection window, priority over day/night) and tested (H1–H5, with lock H6a/H6b in `v15b`). Not tested: curve "Zeittabelle" (time table). The HCL colour temperature has no effect on RGBW. HCL needs a valid time and the location, otherwise the log shows `Ungueltige Sonnenstandsdaten` every minute. Original code, all channel types: after *manual* → *auto*, the first *on* uses the HCL value from the switch to *manual* until the next full minute (G23).
+- **HCL:** adapted in `v15` (colour temperature skipped for RGBW, brightness through the collection window, priority over day/night) and tested (H1–H5, with lock H6a/H6b in `v15b`). Not tested: curve "Zeittabelle" (time table). The HCL colour temperature has no effect on RGBW. HCL needs a valid time and the location, otherwise the log shows `Ungueltige Sonnenstandsdaten` every minute. Original code, all channel types: after *manual* → *auto*, the first *on* uses the HCL value from the switch to *manual* until the next full minute (G23 in the [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
 - **Staircase light:** deliberately **without** RGBW handling. A staircase channel with RGBW switches the level only, as in the original code; the colour comes from the driver. An adaptation may follow in a later version if needed (section 10, ideas).
 - **Drivers:** tested with the DA4-M (RGBW mode) only. The driver must support automatic activation (DT8, on by default; check with `aastat`).
 - **Push button on the device** (`RECALL MAX`/`OFF`) without RGBW handling, as in the original code.
@@ -320,18 +320,18 @@ For every test: first describe what is sent and what counts as passed, then send
 | E5 | colour, immediately *brighter*, stop | after dimming `RGBW: colour again after relative dimming`, the new colour at the end; stop only after the maximum: `RGBW: dimming already ended, stop ignored` |
 | E6 | off, then *brighter* | switch status on immediately (not only at the stop) |
 | E7 | Home Assistant: off, then colour + 50 % | **one** line `level 229 with temporary colour (one fade)` |
-| G1 | G0 on, G0 colour only, G0 brightness only | on without colour (still unknown); then **one** line each with colour **and** level |
-| G2 | colour to G2, then colour to G0 | A1 follows G2 first, then G0 again |
-| G3 | change A0 individually, then brightness to G0 | A0 returns to the group colour |
-| G4 | G0 off, colour, on | dark during the colour change, directly the new colour on switching on |
-| B1 | *broadcast switch* off/on, *broadcast dim* 30 % | only `DAPC` to all, no colour |
-| B2 | *Broadcast – Farbe RGBW* red | colour to `0xFF`, `DAPC` to `0xFE`, **no** status |
-| B3 | flashing (red / all 0), then *Zurück* | no status while flashing; afterwards everything in the previous state, without a mixed colour |
-| B4 | *Broadcast – Farbe RGBW*, *broadcast switch* off, *Zurück* | lamps stay off (*switch* is final) |
-| S1 | lock with *switch off*/*switch on*, restore = no | off on lock, *on* during the lock is ignored (`is locked`), switch-on value on unlock |
-| S2 | lock with *fixed value* 50 %, restore = yes; colour + brightness during the lock | 50 % on lock; during the lock only `locked, stored for the unlock`; on unlock **one** command with the stored state |
-| S3 | group lock with its own values | the group uses its own parameters |
-| A1 | power on / failure "Inaktiv"; briefly disconnect the supply or the DALI bus of the driver | lamp comes back with last level and last colour, or stays unchanged |
+| GR1 | G0 on, G0 colour only, G0 brightness only | on without colour (still unknown); then **one** line each with colour **and** level |
+| GR2 | colour to G2, then colour to G0 | A1 follows G2 first, then G0 again |
+| GR3 | change A0 individually, then brightness to G0 | A0 returns to the group colour |
+| GR4 | G0 off, colour, on | dark during the colour change, directly the new colour on switching on |
+| BC1 | *broadcast switch* off/on, *broadcast dim* 30 % | only `DAPC` to all, no colour |
+| BC2 | *Broadcast – Farbe RGBW* red | colour to `0xFF`, `DAPC` to `0xFE`, **no** status |
+| BC3 | flashing (red / all 0), then *Zurück* | no status while flashing; afterwards everything in the previous state, without a mixed colour |
+| BC4 | *Broadcast – Farbe RGBW*, *broadcast switch* off, *Zurück* | lamps stay off (*switch* is final) |
+| SP1 | lock with *switch off*/*switch on*, restore = no | off on lock, *on* during the lock is ignored (`is locked`), switch-on value on unlock |
+| SP2 | lock with *fixed value* 50 %, restore = yes; colour + brightness during the lock | 50 % on lock; during the lock only `locked, stored for the unlock`; on unlock **one** command with the stored state |
+| SP3 | group lock with its own values | the group uses its own parameters |
+| AU1 | power on / failure "Inaktiv"; briefly disconnect the supply or the DALI bus of the driver | lamp comes back with last level and last colour, or stays unchanged |
 | R1 | restart the gateway (`restart`) with the lamp on, then colour | lamp unchanged; on/off and level reported; first colour with `ACTIVATE`, level stays |
 | N1 | *Tag/Nacht* to night, then *on* | `Turning on night value`, lamp with night value and stored colour in one fade. N2 likewise with day |
 | H1–H6 | HCL (brightness and colour temperature active, auto): *on*, tracking with the lamp on, colour (→ manual), *off* (→ auto); lock (H6) | HCL level instead of day value; tracking as `RGBW: level N`; colour temperature only `RGBW: colour temperature skipped`; H6 (lock with "restore"): lamp stays off during the lock, on unlock the current HCL level (procedure in the test log) |
@@ -362,13 +362,13 @@ Important log lines: `Color absolute`, `RGBW: level N with temporary colour (one
 **Open:**
 - Regression test of the other colour types (HSV, RGB, TW, xyY) and channel types on hardware.
 - Test scenes with colour (KNX scenes and scenes stored in the driver) with RGBW.
-- Rework scenes in general? Today DALI scenes are passed through 1:1; after a scene the gateway does not know the values recalled, all status objects keep their old value. Affects all channel types, so not part of this extension (question F4 to the maintainer, [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
+- Rework scenes in general: today DALI scenes are passed through 1:1; after a scene the gateway does not know the values recalled, all status objects keep their old value. Affects all channel types, so not part of this extension (proposal F4 in the [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
 - Drivers other than the DA4-M.
 
 **Ideas, deliberately postponed:**
 - Staircase light with RGBW (colour at switch-on, collection window). Deliberately not in this version; may follow in a later version if needed.
 
-**Questions to the maintainer:** about the RGBW extension in the [comparison](doc/RGBW-Gegenueberstellung.md), section 7; about places in the original code and in the DALI library in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) (German).
+**For the maintainer:** questions about the RGBW extension in the [comparison](doc/RGBW-Gegenueberstellung.md), section 7; findings and proposals for the original code and the DALI library in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) (German).
 
 ## 11. Further documents
 
@@ -381,6 +381,6 @@ All in German:
 | [doc/RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) | findings in the original code and the library, for the maintainer |
 | [doc/README-Arbeitsfassung-2026-11-21.md](doc/README-Arbeitsfassung-2026-11-21.md) | archive: working version of this README from 21 Nov 2026 |
 | [doc/README-Rohfassung-2026-11-16.md](doc/README-Rohfassung-2026-11-16.md) | archive: raw version from 16 Nov 2026 |
-| [doc/Applikationsbeschreibung-Dali.md](doc/Applikationsbeschreibung-Dali.md) | application description of the gateway (original code) |
+| [doc/Applikationsbeschreibung-Dali.md](doc/Applikationsbeschreibung-Dali.md) | application description of the gateway, with new RGBW section |
 
 **Pull request** against `OpenKNX/OFM-Dali` (base `v1dev`) only after explicit approval.

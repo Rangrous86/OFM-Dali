@@ -5,7 +5,7 @@
 - Diese Stellen werden im RGBW-PR **nicht** verändert, außer wo „bei RGBW behoben“ steht: Dort ist der Fehler nur im neuen RGBW-Zweig korrigiert, für die anderen Kanaltypen ist er unverändert.
 - Gefunden durch Code-Durchsicht (18.11.2026, G1–G15) und durch Hardware-Tests mit zwei DA4-M (RGBW) am `GW-REG1-Dali` (19.–23.11.2026). Andere Treibertypen waren nicht vorhanden; Befunde zu anderen Kanaltypen sind deshalb aus dem Code abgeleitet, nicht am Gerät bestätigt.
 - Die Nummern G1–G24 und F1–F4 sind dieselben wie im [Testprotokoll](RGBW-Testprotokoll.md); dort stehen auch die Testdetails.
-- Fragen zur RGBW-Erweiterung selbst (Speicherlayout, WAF-Befehl, Szenen mit Weiß usw.) stehen in Abschnitt 6 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
+- Fragen zur RGBW-Erweiterung selbst (Speicherlayout, WAF-Befehl, Szenen mit Weiß usw.) stehen in Abschnitt 7 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
 - Zeilenangaben beziehen sich auf den Ausgangscode (`a120578`).
 
 ## Übersicht
@@ -218,7 +218,7 @@ Hier ist der Fehler im neuen RGBW-Zweig korrigiert; für die anderen Kanaltypen 
 - **Was passiert:** Nach *Broadcast Schalten* wird bei allen Kanälen und Gruppen nur *Schalten Status* gesetzt, **nicht** *Dimmen Status*; auch der gespeicherte Pegel bleibt stehen.
 - **Folge:** Nach *Broadcast Ein* (100 %) bzw. *Aus* zeigt *Dimmen Status* weiter den alten Wert. Bei RGBW bringt *Broadcast – Zurück* danach alle RGBW-Gruppen in ihrem gespeicherten Pegel zurück, aber eingeschaltet bzw. ausgeschaltet je nach Broadcast.
 - **Betrifft:** alle Kanaltypen.
-- **Stand:** offen (gefunden 21.11. im Test B1). Genauere Erklärung folgt unter F2 und F3 (Abschnitt 5).
+- **Stand:** offen (gefunden 21.11. im Test BC1). Genauere Erklärung folgt unter F2 und F3 (Abschnitt 5).
 
 ### G23 – HCL-Werte veralten im Modus *Manu*
 

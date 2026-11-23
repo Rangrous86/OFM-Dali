@@ -6,7 +6,7 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 
 | | |
 |---|---|
-| **Stand** | `v15b` (Branch `v1dev` dieses Forks) |
+| **Stand** | `v15b`, bereinigt am 23.11.2026 (PR-Stand, Branch `v1dev` dieses Forks) |
 | **Basis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` |
 | **ETS-Applikation** | 0.13 (eine Version über dem offiziellen Release 0.12; ein Gerät mit 0.12 lässt sich direkt aktualisieren) |
 | **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Mit `v15b`: HCL zusammen mit der Sperre (H6a, H6b) bestanden (8.2) |
@@ -212,7 +212,7 @@ Ohne `brightness_address` schickt Home Assistant nur das Farbobjekt; dafür *Hel
 - **Nach einem Neustart des Gateways** ist die Farbe bis zum ersten Farbtelegramm unbekannt (Ein/Aus und Pegel werden aus dem Treiber gelesen). Bis dahin geht beim Einschalten nur der Pegel.
 - **Broadcast bei gemischten Anlagen:** Der Pegel von *Broadcast – Farbe RGBW* wirkt auch auf normale Dimm- und Schalttreiber; *Broadcast – Zurück* stellt nur RGBW zurück. *Broadcast Schalten/Dimmen* überschreiben den gespeicherten Zustand aller Kanäle; danach bringt *Zurück* diesen Zustand.
 - **Szenen:** unverändert gegenüber dem Ausgangscode, der Treiber fährt Pegel und Farbe selbst an; mit RGBW nicht getestet. Szenenfarbe per Konfigurationstransfer ohne Weiß; Szenen im Treiber mit Pegel **und** Farbe speichern.
-- **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht) und getestet (H1–H5, mit Sperre H6a/H6b in `v15b`). Nicht getestet: Kurve „Zeittabelle“. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung. Die HCL braucht eine gültige Uhrzeit und den Standort, sonst meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`. Ausgangscode, alle Kanaltypen: Nach *Manu* → *Auto* gilt beim ersten *Ein* bis zur nächsten vollen Minute noch der HCL-Wert vom Wechsel auf *Manu* (G23).
+- **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht) und getestet (H1–H5, mit Sperre H6a/H6b in `v15b`). Nicht getestet: Kurve „Zeittabelle“. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung. Die HCL braucht eine gültige Uhrzeit und den Standort, sonst meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`. Ausgangscode, alle Kanaltypen: Nach *Manu* → *Auto* gilt beim ersten *Ein* bis zur nächsten vollen Minute noch der HCL-Wert vom Wechsel auf *Manu* (G23 in den [Befunden](doc/RGBW-Befunde-Ausgangscode.md)).
 - **Treppenhauslicht:** mit Absicht **ohne** RGBW-Behandlung. Ein Treppenhauskanal mit RGBW schaltet wie im Ausgangscode nur den Pegel; die Farbe kommt aus dem Treiber. Eine Anpassung kommt bei Bedarf in einer späteren Version (Abschnitt 10, Ideen).
 - **Treiber:** getestet nur mit dem DA4-M (RGBW-Modus). Der Treiber muss die automatische Aktivierung können (DT8, ab Werk an; prüfen mit `aastat`).
 - **Taster am Gerät** (`RECALL MAX`/`OFF`) ohne RGBW-Behandlung, wie im Ausgangscode.
@@ -320,18 +320,18 @@ Jeder Test: vorher beschreiben, was gesendet wird und was als bestanden gilt; da
 | E5 | Farbe, sofort *Heller*, Stopp | nach dem Dimmen `RGBW: colour again after relative dimming`, am Ende die neue Farbe; Stopp erst nach dem Maximum: `RGBW: dimming already ended, stop ignored` |
 | E6 | Aus, dann *Heller* | *Schalten Status* Ein sofort (nicht erst beim Stopp) |
 | E7 | Home Assistant: aus, dann Farbe + 50 % | **eine** Zeile `level 229 with temporary colour (one fade)` |
-| G1 | G0 Ein, G0 Farbe allein, G0 Helligkeit allein | Ein ohne Farbe (noch unbekannt); dann jeweils **eine** Zeile mit Farbe **und** Pegel |
-| G2 | Farbe an G2, danach Farbe an G0 | A1 folgt zuerst G2, dann wieder G0 |
-| G3 | A0 einzeln umstellen, danach Helligkeit an G0 | A0 kehrt zur Gruppenfarbe zurück |
-| G4 | G0 aus, Farbe, Ein | dunkel beim Farbwechsel, beim Einschalten direkt die neue Farbe |
-| B1 | *Broadcast Schalten* Aus/Ein, *Broadcast Dimmen* 30 % | nur `DAPC` an alle, keine Farbe |
-| B2 | *Broadcast – Farbe RGBW* Rot | Farbe an `0xFF`, `DAPC` an `0xFE`, **kein** Status |
-| B3 | Blinken (Rot / alles 0), dann *Zurück* | während des Blinkens kein Status; danach alle im Zustand von vorher, ohne Mischfarbe |
-| B4 | *Broadcast – Farbe RGBW*, *Broadcast Schalten* Aus, *Zurück* | Lampen bleiben aus (*Schalten* ist endgültig) |
-| S1 | Sperre mit *Ausschalten*/*Anschalten*, wiederherstellen = Nein | aus beim Sperren, *Ein* während der Sperre wird ignoriert (`is locked`), Einschaltwert beim Entsperren |
-| S2 | Sperre mit *Fester Wert* 50 %, wiederherstellen = Ja; während der Sperre Farbe + Helligkeit | 50 % beim Sperren; während der Sperre nur `locked, stored for the unlock`; beim Entsperren **ein** Befehl mit dem gespeicherten Zustand |
-| S3 | Gruppensperre mit eigenen Werten | die Gruppe nutzt ihre eigenen Parameter |
-| A1 | Power On / Failure „Inaktiv“; Versorgung bzw. DALI-Bus des Treibers kurz trennen | Lampe kommt mit letztem Pegel und letzter Farbe zurück bzw. bleibt unverändert |
+| GR1 | G0 Ein, G0 Farbe allein, G0 Helligkeit allein | Ein ohne Farbe (noch unbekannt); dann jeweils **eine** Zeile mit Farbe **und** Pegel |
+| GR2 | Farbe an G2, danach Farbe an G0 | A1 folgt zuerst G2, dann wieder G0 |
+| GR3 | A0 einzeln umstellen, danach Helligkeit an G0 | A0 kehrt zur Gruppenfarbe zurück |
+| GR4 | G0 aus, Farbe, Ein | dunkel beim Farbwechsel, beim Einschalten direkt die neue Farbe |
+| BC1 | *Broadcast Schalten* Aus/Ein, *Broadcast Dimmen* 30 % | nur `DAPC` an alle, keine Farbe |
+| BC2 | *Broadcast – Farbe RGBW* Rot | Farbe an `0xFF`, `DAPC` an `0xFE`, **kein** Status |
+| BC3 | Blinken (Rot / alles 0), dann *Zurück* | während des Blinkens kein Status; danach alle im Zustand von vorher, ohne Mischfarbe |
+| BC4 | *Broadcast – Farbe RGBW*, *Broadcast Schalten* Aus, *Zurück* | Lampen bleiben aus (*Schalten* ist endgültig) |
+| SP1 | Sperre mit *Ausschalten*/*Anschalten*, wiederherstellen = Nein | aus beim Sperren, *Ein* während der Sperre wird ignoriert (`is locked`), Einschaltwert beim Entsperren |
+| SP2 | Sperre mit *Fester Wert* 50 %, wiederherstellen = Ja; während der Sperre Farbe + Helligkeit | 50 % beim Sperren; während der Sperre nur `locked, stored for the unlock`; beim Entsperren **ein** Befehl mit dem gespeicherten Zustand |
+| SP3 | Gruppensperre mit eigenen Werten | die Gruppe nutzt ihre eigenen Parameter |
+| AU1 | Power On / Failure „Inaktiv“; Versorgung bzw. DALI-Bus des Treibers kurz trennen | Lampe kommt mit letztem Pegel und letzter Farbe zurück bzw. bleibt unverändert |
 | R1 | Gateway neu starten (`restart`) bei brennender Lampe, danach Farbe | Lampe unverändert; Ein/Aus und Pegel gemeldet; erste Farbe mit `ACTIVATE`, Pegel bleibt |
 | N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade. N2 entsprechend mit Tag |
 | H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Sperre (H6) | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
@@ -362,13 +362,13 @@ Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one 
 **Offen:**
 - Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
 - Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen.
-- Szenen insgesamt überarbeiten? Heute werden DALI-Szenen 1:1 durchgereicht; nach einer Szene kennt das Gateway die angefahrenen Werte nicht, alle Status bleiben auf dem alten Wert. Betrifft alle Kanaltypen, deshalb nicht Teil dieser Erweiterung (Frage F4 an den Maintainer, [Befunde](doc/RGBW-Befunde-Ausgangscode.md)).
+- Szenen insgesamt überarbeiten: Heute werden DALI-Szenen 1:1 durchgereicht; nach einer Szene kennt das Gateway die angefahrenen Werte nicht, alle Status bleiben auf dem alten Wert. Betrifft alle Kanaltypen, deshalb nicht Teil dieser Erweiterung (Vorschlag F4 in den [Befunden](doc/RGBW-Befunde-Ausgangscode.md)).
 - Andere Treiber als der DA4-M.
 
 **Ideen, bewusst zurückgestellt:**
 - Treppenhauslicht mit RGBW (Farbe beim Einschalten, Sammelfenster). Mit Absicht nicht in dieser Version; bei Bedarf in einer späteren Version.
 
-**Fragen an den Maintainer:** zur RGBW-Erweiterung in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 7; zu Stellen im Ausgangscode und in der DALI-Bibliothek in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md).
+**Für den Maintainer:** Fragen zur RGBW-Erweiterung in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 7; Befunde und Vorschläge zum Ausgangscode und zur DALI-Bibliothek in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md).
 
 ## 11. Weitere Dokumente
 
@@ -379,6 +379,6 @@ Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one 
 | [doc/RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) | Befunde im Ausgangscode und in der Bibliothek, für den Maintainer |
 | [doc/README-Arbeitsfassung-2026-11-21.md](doc/README-Arbeitsfassung-2026-11-21.md) | Archiv: Arbeitsfassung dieser README vom 21.11.2026 |
 | [doc/README-Rohfassung-2026-11-16.md](doc/README-Rohfassung-2026-11-16.md) | Archiv: Rohfassung vom 16.11.2026 |
-| [doc/Applikationsbeschreibung-Dali.md](doc/Applikationsbeschreibung-Dali.md) | Applikationsbeschreibung des Gateways (Ausgangscode) |
+| [doc/Applikationsbeschreibung-Dali.md](doc/Applikationsbeschreibung-Dali.md) | Applikationsbeschreibung des Gateways, mit neuem Abschnitt RGBW |
 
 **Pull Request** gegen `OpenKNX/OFM-Dali` (Basis `v1dev`) erst nach ausdrücklicher Freigabe.
