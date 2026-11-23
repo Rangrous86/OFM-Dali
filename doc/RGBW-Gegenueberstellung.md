@@ -32,9 +32,10 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | `src/DaliModule.share.xml` | geändert | Farbtyp RGBW, Parametertyp *Helligkeit bei RGBW*, zwei Broadcast-Objekte |
 | `src/DaliModule.single.templ.xml` | geändert | Einzeladresse: `colorType` verschoben, zwei neue Parameter, zwei Objekt-Referenzen |
 | `src/DaliModule.group.templ.xml` | geändert | Gruppe: wie Einzeladresse |
+| `doc/Applikationsbeschreibung-Dali.md` | geändert | Kopf: Infrarot-Text der Vorlage durch DALI ersetzt; neuer Abschnitt RGBW am Ende |
 
 ```
- src/DaliChannel.cpp             | 654 +++++++++++++++++++++++++++++++++++++++-
+ src/DaliChannel.cpp             | 655 +++++++++++++++++++++++++++++++++++++++-
  src/DaliChannel.h               |  70 ++++-
  src/DaliModule.cpp              | 284 ++++++++++++++++-
  src/DaliModule.group.templ.xml  |  32 +-
@@ -43,7 +44,7 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
  src/DaliModule.single.templ.xml |  66 ++--
  src/RgbwHelper.h                | 150 +++++++++
  test/test_rgbw_helper.cpp       | 136 +++++++++
- 9 files changed, 1378 insertions(+), 38 deletions(-)
+ 9 files changed, 1379 insertions(+), 38 deletions(-)
 ```
 
 **Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert).
@@ -109,7 +110,7 @@ Alle Zeilen, die im Ausgangscode entfernt oder ersetzt wurden. Alles andere im D
 
 ### 3.3 `RgbwHelper.h`
 
-`decode` (Gültigkeitsbits), `isOff`, `encode` (Status), `daliLevel` (255 → 254), `maxChannel`, `normalise`, `scale`, `percentFromAmplitude`, `amplitudeFromPercent` (Slider-Modus, Broadcast RGBW). `knxFromDaliLevel` und `colourFromDriver` stammen aus `v10`–`v12` (Farbe beim Start lesen) und werden nur noch vom Host-Test benutzt (Abschnitt 7).
+`decode` (Gültigkeitsbits), `isOff`, `encode` (Status), `daliLevel` (255 → 254), `maxChannel`, `normalise`, `scale`, `percentFromAmplitude`, `amplitudeFromPercent` (Slider-Modus, Broadcast RGBW). `knxFromDaliLevel` und `colourFromDriver` stammen aus `v10`–`v12` (Farbe beim Start lesen) und werden nur noch vom Host-Test benutzt. Entschieden 23.11.: behalten als vorbereitete Helfer für eine Farbabfrage beim Treiber (z. B. bei F4); als `inline` kosten sie ungenutzt keinen Speicher.
 
 ## 4. Vorher/Nachher an den wichtigsten Stellen
 
@@ -249,6 +250,7 @@ Diese Teile gab es in Zwischenständen des Forks. Sie sind im Diff gegen den Aus
 | Modi A/B/C für einen Pegel bei laufendem Farb-Fade, Zeitmarken, Abfrage der Fade-Zeit und der DALI-Version beim Start, Konsolenbefehl `p3mode` | `v13` | Modus 0 fest: jedes Telegramm ein Befehl, keine Abfragen |
 | Farbe einzeln je Kanal und Gruppe bei Broadcast *Ein* | `v13` | Broadcast nur Pegel (≈ 0,3 s je Kanal gespart) |
 | Testdiagnose `RGBW_DIAG` (Frame-Log, Pegel- und Statusabfragen nach jedem Befehl, `diagq`) | `v13`–`v14b-diag` | nur für die Tests |
+| Versionskennung `RGBW_BUILD_TAG` im Log | 13.11. bis `v15b` | nur Testhilfe; die Logzeile heißt wieder `Color absolute` wie im Ausgangscode |
 
 ## 6. ETS-Applikation und Speicherlayout
 
@@ -263,34 +265,78 @@ Diese Teile gab es in Zwischenständen des Forks. Sie sind im Diff gegen den Aus
 | Szenen-Farbspalte | für Typ 0, 1, 3 | für Typ 0, 1, 3, **4** (nur RGB-Anteil) |
 | Applikationsversion | 0.12 | **0.13** (`ReplacesVersions="0.0 0.10 0.11 0.12"`) |
 
-`colorType` hatte 2 Bit (Werte 0–3, alle vergeben). Für RGBW = 4 braucht er 3 Bit; die Bits dahinter sind belegt, deshalb liegt er jetzt in freien Bits am Ende des Parameterblocks. Die Blockgröße ändert sich **nicht**; die frei gewordenen Bits nutzen die neuen 1-Bit-Parameter.
+`colorType` (*Farbe ansteuern per*) hatte 2 Bit (Werte 0–3, alle vergeben). Für RGBW = 4 braucht er 3 Bit; das Bit dahinter ist belegt, deshalb liegt er jetzt in freien Bits weiter hinten im Parameterblock. Die Blockgröße ändert sich **nicht**. Die frei gewordenen Bits nutzen die neuen 1-Bit-Parameter: beim Einzel-EVG beide, bei der Gruppe nur *wiederherstellen*; *Helligkeit bei RGBW* der Gruppe liegt in Byte 17, Byte 4 Bit 3 der Gruppe ist jetzt frei.
 
-| Vorlage | `colorType` vorher | `colorType` nachher | neue Parameter |
-|---|---|---|---|
-| Einzeladresse | Byte 7, Bit 5–6 (2 Bit) | Byte 21, Bit 5–7 (3 Bit) | *Helligkeit bei RGBW* Byte 7 Bit 5, *wiederherstellen* Byte 7 Bit 6 |
-| Gruppe | Byte 4, Bit 2–3 (2 Bit) | Byte 17, Bit 2–4 (3 Bit) | *Helligkeit bei RGBW* Byte 17 Bit 5, *wiederherstellen* Byte 4 Bit 2 |
+Belegung der betroffenen Bytes (Bitnummer = `BitOffset` der ETS-Vorlage):
+
+**Einzel-EVG, Byte 7**
+
+| Bit | Ausgangscode | Nachher |
+|---|---|---|
+| 0–1 | *Verhalten bei Sperren* | unverändert |
+| 2–3 | *Verhalten bei Entsperren* | unverändert |
+| 4 | *Sperren bei* | unverändert |
+| 5 | *Farbe ansteuern per* (Teil 1) | **Helligkeit bei RGBW** |
+| 6 | *Farbe ansteuern per* (Teil 2) | **Bei Entsperren vorherigen Zustand wiederherstellen** |
+| 7 | *Farbe übertragen per* | unverändert |
+
+**Einzel-EVG, Byte 21**
+
+| Bit | Ausgangscode | Nachher |
+|---|---|---|
+| 0–1 | *Einschalten bei relativ* | unverändert |
+| 2 | HCL: *Farbe/Temperatur geändert wird* | unverändert |
+| 3 | HCL: *das EVG ausgeschaltet wird* | unverändert |
+| 4 | HCL: *der Tag vorbei ist* | unverändert |
+| 5–7 | frei | ***Farbe ansteuern per*** (3 Bit) |
+
+**Gruppe, Byte 4**
+
+| Bit | Ausgangscode | Nachher |
+|---|---|---|
+| 0–1 | *Verhalten bei Entsperren* | unverändert |
+| 2 | *Farbe ansteuern per* (Teil 1) | **Bei Entsperren vorherigen Zustand wiederherstellen** |
+| 3 | *Farbe ansteuern per* (Teil 2) | frei |
+| 4 | *HCL aktivieren* | unverändert |
+| 5 | *Helligkeit ignorieren (nur xy)* | unverändert |
+| 6–7 | HCL-Kurve *Verwende* | unverändert |
+
+**Gruppe, Byte 17**
+
+| Bit | Ausgangscode | Nachher |
+|---|---|---|
+| 0 | HCL: *das EVG ausgeschaltet wird* | unverändert |
+| 1 | HCL: *der Tag vorbei ist* | unverändert |
+| 2–4 | frei | ***Farbe ansteuern per*** (3 Bit) |
+| 5 | frei | **Helligkeit bei RGBW** |
+| 6–7 | frei | frei |
 
 KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 
 ## 7. Offen und Fragen zur RGBW-Erweiterung
 
-**Offen:**
-- Szenenfarbe per Konfigurationstransfer enthält kein Weiß; keine getrennten 8-Bit-Objekte R/G/B/W.
-- Weiß über `SET TEMPORARY WAF DIMLEVEL` (236); nur mit dem DA4-M (RGBW-Modus) getestet.
-- HCL mit RGBW: in `v15` angepasst (Farbtemperatur übersprungen, Helligkeit über das Sammelfenster, Rangfolge 4.2), H1–H5 bestanden (22.11.). In `v15b` HCL-Vorrang auch für *Anschalten* bei Sperre/Entsperren und keine HCL-Nachführung während einer Sperre; H6a/H6b bestanden (22.11.).
-- Treppenhauslicht mit RGBW: **mit Absicht nicht angepasst**, läuft wie im Ausgangscode (nur Pegel). Bei Bedarf in einer späteren Version.
-- Szenen: unverändert (der Treiber fährt Pegel und Farbe selbst an), mit RGBW nicht getestet.
-- Regression der anderen Farb- und Kanaltypen auf Hardware.
-- Versionskennung im Log: am 23.11. entfernt (war nur Testhilfe); die Logzeile heißt wieder `Color absolute` wie im Ausgangscode.
-- `RgbwHelper::knxFromDaliLevel` (bis 23.11. `fromDaliLevel`) und `colourFromDriver` werden derzeit nur vom Host-Test benutzt; **entschieden 23.11.: behalten** als vorbereitete Helfer für eine Farbabfrage beim Treiber (z. B. bei einer Szenen-Überarbeitung, F4). Als `inline` kosten sie ungenutzt keinen Speicher.
+**Offen** (wie README, Abschnitt 10):
+- Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
+- Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen. Die Szenenfarbe geht per Konfigurationstransfer nur als RGB, ohne Weiß.
+- Szenen insgesamt überarbeiten: betrifft alle Kanaltypen, deshalb nicht Teil dieser Erweiterung (Vorschlag F4 in den [Befunden](RGBW-Befunde-Ausgangscode.md)).
+- Andere Treiber als der DA4-M (siehe Frage 2).
+
+**Ideen, bewusst zurückgestellt** (wie README, Abschnitt 10):
+- Treppenhauslicht mit RGBW (Farbe beim Einschalten, Sammelfenster). Mit Absicht nicht in dieser Version; heute wie im Ausgangscode nur `DAPC` (Abschnitt 4).
 
 **Fragen an den Maintainer:**
-1. Ist die Verschiebung von `colorType` im Parameterspeicher (Einzel: Byte 21, Gruppe: Byte 17) und die Nutzung der frei gewordenen Bits in Ordnung?
-2. Weiß über `SET TEMPORARY WAF DIMLEVEL` (236), oder lieber `RGBWAF` (237) bzw. ein anderer Weg?
-3. Sollen zusätzlich getrennte 8-Bit-Objekte für R/G/B/W angeboten werden (wie bei MDT)?
-4. Wie sollen Szenen/DCA-Konfiguration mit Weiß umgehen?
-5. Passt das Verfahren „temporäre Farbe + `DAPC` mit automatischer Aktivierung, Sammelfenster 80 ms“ als Grundlage, auch für die anderen Farbtypen?
-6. Sind die Änderungen für alle Kanaltypen (`currentState` in `koHandleDimmAbs`, Pegelabfrage nach dem Stopp, Startwerte) so in Ordnung?
+
+1. **Speicherplatz des Farbtyps:** Der Parameter *Farbe ansteuern per* hatte 2 Bit (vier Werte, alle vergeben). Für RGBW als fünften Wert braucht er 3 Bit; weil das Nachbarbit belegt ist, liegt er jetzt an einer freien Stelle (Einzel-EVG Byte 21 Bit 5–7, Gruppe Byte 17 Bit 2–4). Die alten Bits nutzen die neuen Parameter: beim Einzel-EVG *Helligkeit bei RGBW* und *wiederherstellen* (Byte 7 Bit 5 und 6), bei der Gruppe *wiederherstellen* (Byte 4 Bit 2); *Helligkeit bei RGBW* der Gruppe liegt in Byte 17 Bit 5, Byte 4 Bit 3 ist frei (Belegung in Abschnitt 6). Ist diese Umbelegung so in Ordnung, auch im Hinblick auf das Aktualisieren bestehender Geräte von 0.12?
+2. **Weißkanal:** Das Weiß geht mit `SET TEMPORARY WAF DIMLEVEL` (236) an den Treiber, Amber und Freecolour bleiben MASK. Am DA4-M im RGBW-Modus funktioniert das (B8). Nicht geprüft ist, ob andere RGBW-Treiber das Weiß ebenso auf diesem Kanal erwarten oder vorher eine Kanalzuordnung (`SET TEMPORARY RGBWAF CONTROL`, 237) brauchen. Ist 236 als Weg in Ordnung?
+3. **Grundverfahren:** Farbe und Helligkeit, die innerhalb von 80 ms eintreffen (Sammelfenster), gehen als **ein** Befehl an den Treiber: temporäre Farbe + `DAPC`; der Treiber übernimmt beides dank automatischer Aktivierung in einem Fade. Passt dieses Verfahren als Grundlage für RGBW?
+4. **Änderungen, die auch die anderen Kanaltypen betreffen** (nur diese Stellen ändern das Verhalten außerhalb von RGBW):
+   - `koHandleDimmAbs`: Der interne Ein/Aus-Zustand (`currentState`) folgt jetzt dem Wert (> 0 = ein, Treppenhaus ausgenommen). Im Ausgangscode blieb er nach *Dimmen absolut* stehen: Ein Kanal galt nach 0 % weiter als eingeschaltet, dann startete z. B. *Heller* nicht beim Minimum, und die HCL-Nachführung hätte die Lampe wieder eingeschaltet (aus dem Code abgeleitet).
+   - Pegelabfrage nach dem Stopp: ≈ 300 ms nach dem Stopp eines relativen Dimmens fragt das Gateway einmal den tatsächlichen Pegel ab und meldet ihn (nur wenn der Kanal eingeschaltet ist). Grund: Der letzte *Heller*/*Dunkler*-Schritt läuft im Treiber noch nach, der Status zeigte sonst einen geschätzten Wert. Kosten: eine DALI-Abfrage je Dimmstopp.
+   - Startwerte `_lastDayValue` / `_lastNightValue`: waren als 100 bzw. 10 eingetragen, wurden aber als DALI-Pegel gelesen (≈ 1,5 % bzw. 0,1 %); jetzt als 100 % bzw. 10 % umgerechnet. Wirkt nur beim ersten Einschalten nach einem Neustart mit *Einschaltwert = 0* (letzter Wert), wenn der Treiber beim Start aus war.
+   - Nebenwirkung bei HSV/RGB/TW/xyY: Ein Farbtelegramm nach *Dimmen absolut* 0 % setzt jetzt, wie schon nach *Schalten* Aus, den Status auf *Ein*/Tagwert, obwohl die Lampe aus bleibt (`TODO get real` im Ausgangscode, Hinweis am Ende der [Befunde](RGBW-Befunde-Ausgangscode.md)). Vorher blieb der Status in diesem Fall zufällig richtig, weil der Merker hing. Aus dem Code abgeleitet, nicht getestet.
+   - Ohne sichtbare Wirkung: `currentColor` wird mit 0 initialisiert; Broadcast *Schalten* läuft über `broadcastOn()`/`broadcastOff()` (gleicher `DAPC`).
+
+   Sind diese Änderungen so in Ordnung?
 
 ## Anhang A: `src/RgbwHelper.h`
 
@@ -447,11 +493,11 @@ namespace RgbwHelper
 
 ## Anhang B: vollständiges Diff
 
-Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 23.11.2026: `v15b` ohne Versionskennung, Kommentare bereinigt).
+Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 24.11.2026: `v15b` ohne Versionskennung, Kommentare bereinigt).
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..e32aca4 100644
+index dffeaaf..a9888c5 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -879,7 +925,7 @@ index dffeaaf..e32aca4 100644
          logErrorP("is locked");
          return;
      }
-@@ -633,8 +935,45 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
+@@ -633,8 +935,46 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
      uint8_t value = ko.value(Dpt(5, 1));
      logDebugP("Dimming absolute to %i%%", value);
      uint8_t arc = DaliHelper::percentToArc(value);
@@ -894,7 +940,8 @@ index dffeaaf..e32aca4 100644
 +    else
 +        daliMaster.sendArc(_channelIndex, arc, _isGroup);
      setDimmState(arc, true, true);
-+    // keep the on/off flag in sync, otherwise e.g. a colour telegram after "dimm to 0" is ignored
++    // keep the on/off flag in sync with the lamp; otherwise after "dimm to 0" e.g. "brighter" does not start at the
++    // minimum and the HCL brightness would switch the lamp on again
 +    if (!_isStaircase)
 +        currentState = arc > 0;
 +}
@@ -926,7 +973,7 @@ index dffeaaf..e32aca4 100644
  }
  
  void DaliChannel::koHandleLock(GroupObject &ko)
-@@ -655,6 +994,16 @@ void DaliChannel::koHandleLock(GroupObject &ko)
+@@ -655,6 +995,16 @@ void DaliChannel::koHandleLock(GroupObject &ko)
      if (currentIsLocked == value)
          return;
      currentIsLocked = value;
@@ -943,7 +990,7 @@ index dffeaaf..e32aca4 100644
      uint8_t behave;
      uint8_t behavevalue;
      if (currentIsLocked)
-@@ -701,15 +1050,93 @@ void DaliChannel::koHandleLock(GroupObject &ko)
+@@ -701,15 +1051,93 @@ void DaliChannel::koHandleLock(GroupObject &ko)
      }
      }
      logDebugP("%i - %i", behavevalue, DaliHelper::percentToArc(behavevalue));
@@ -1037,7 +1084,7 @@ index dffeaaf..e32aca4 100644
          logErrorP("is locked");
          return;
      }
-@@ -738,11 +1165,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
+@@ -738,11 +1166,15 @@ void DaliChannel::koHandleColor(GroupObject &ko)
          case PT_colorType_XYY:
              handleColorXYY(ko);
              break;
@@ -1054,7 +1101,7 @@ index dffeaaf..e32aca4 100644
      logDebugP("AutoConf %i %i %i", _isGroup, _isGroup ? ParamDGW_hcl_manu_col : ParamDGWG_hcl_manu_col, _hclIsAutoMode);
  }
  
-@@ -780,6 +1211,106 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
+@@ -780,6 +1212,106 @@ void DaliChannel::handleColorRGB(GroupObject &ko)
      sendColor();
  }
  
@@ -1161,7 +1208,7 @@ index dffeaaf..e32aca4 100644
  void DaliChannel::handleColorTW(GroupObject &ko)
  {
      uint16_t kelvin = ko.value(Dpt(7, 600));
-@@ -829,6 +1360,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
+@@ -829,6 +1361,11 @@ void DaliChannel::sendKoStateOnChange(uint16_t koNr, const KNXValue &value, cons
  
  void DaliChannel::setTemperature(uint16_t value)
  {
@@ -1173,7 +1220,7 @@ index dffeaaf..e32aca4 100644
      logDebugP("Set Kelvin: %i K", value);
      uint16_t mirek = 1000000.0 / value;
      //TODO check the colorType and then set RGB or TW or do nothing if it is no color Device
-@@ -842,6 +1378,25 @@ void DaliChannel::setTemperature(uint16_t value)
+@@ -842,6 +1379,25 @@ void DaliChannel::setTemperature(uint16_t value)
  void DaliChannel::setBrightness(uint8_t value)
  {
      logDebugP("Set Brightness: %i %%", value);
@@ -1199,7 +1246,7 @@ index dffeaaf..e32aca4 100644
      daliMaster.sendArc(_channelIndex, DaliHelper::percentToArc(value), _isGroup);
      sendKoStateOnChange(DGW_Kodimm_state, value, Dpt(5, 1));
  }
-@@ -867,11 +1422,21 @@ void DaliChannel::queryActualLevel()
+@@ -867,11 +1423,21 @@ void DaliChannel::queryActualLevel()
      _queryId = daliMaster.sendCommand(_isGroup ? _dimmReferenceAddress : _channelIndex, Dali::Command::QUERY_ACTUAL_LEVEL, false, true);
  }
  
@@ -1222,7 +1269,7 @@ index dffeaaf..e32aca4 100644
      if (colorType == PT_colorType_HSV)
      {
          ColorHelper::hsvToRGB(currentColor[0], currentColor[1], currentColor[2], r, g, b);
-@@ -905,6 +1470,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
+@@ -905,6 +1471,31 @@ void DaliChannel::sendColorAsRGB(uint8_t r, uint8_t g, uint8_t b)
      daliMaster.sendExtendedCommand(_channelIndex, 0x08, Dali::ExtendedCommandDT8::ACTIVATE, _isGroup);
  }
  
@@ -1254,7 +1301,7 @@ index dffeaaf..e32aca4 100644
  void DaliChannel::sendColorAsXY(uint8_t r, uint8_t g, uint8_t b)
  {
      uint16_t x;
-@@ -957,7 +1547,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
+@@ -957,7 +1548,16 @@ void DaliChannel::setSwitchState(bool value, bool isSwitchCommand)
      // bool currentState = knx.getGroupObject(calcKoNumber(_isGroup ? DGWG_Koswitch_state : DGW_Koswitch_state)).value(DPT_Switch);
      // if (value == currentState)
      //     return;
@@ -1272,7 +1319,7 @@ index dffeaaf..e32aca4 100644
  }
  
  void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCommand)
-@@ -976,6 +1575,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
+@@ -976,6 +1576,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
          currentStep = value;
      }
  
@@ -1282,7 +1329,7 @@ index dffeaaf..e32aca4 100644
      float perc = DaliHelper::arcToPercentFloat(value);
  
      GroupObject& ko = knx.getGroupObject(calcKoNumber(DGW_Kodimm_state));
-@@ -1002,6 +1604,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1605,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {
@@ -1295,7 +1342,7 @@ index dffeaaf..e32aca4 100644
              uint32_t value = currentColor[2];
              value |= currentColor[1] << 8;
              value |= currentColor[0] << 16;
-@@ -1060,13 +1668,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
+@@ -1060,13 +1669,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
  void DaliChannel::setGroupState(uint16_t group, bool state)
  {
      if (group == AllGroups || _groups & 1 << group)

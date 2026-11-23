@@ -31,6 +31,7 @@ Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026
 | `v15` | 22.11.2026 | HCL bei RGBW: Farbtemperatur übersprungen (`setTemperature`), HCL-Helligkeit bei brennender Lampe über Sammelfenster und `setDimmState` (`setBrightness`), neue Funktion `rgbwOnValue()` (HCL vor Tag/Nacht) für *Ein* während der Sperre mit „wiederherstellen“ und `rgbwStoredLevel()`; Treppenhaus mit Absicht ohne RGBW (Entscheidung 22.11.). ETS unverändert 0.13 | N1, N2, H1–H5 **bestanden** (22.11.); H6 mit `v15b` (Abschnitt 4) |
 | `v15b` | 22.11.2026 | Sperre und HCL: „Anschalten = Einschaltwert“ beim Sperren/Entsperren nimmt `rgbwOnValue()` (HCL vor Tag/Nacht, `rgbwLockArc`); HCL-Nachführung während einer Sperre sendet nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve (`setBrightness`, G24). Gefunden beim Vorbereiten von H6 | H6a, H6b **bestanden** (22.11.) |
 | (23.11.) | 23.11.2026 | Versionskennung `RGBW_BUILD_TAG` entfernt (Testhilfe); Logzeile wieder `Color absolute` wie im Ausgangscode. `fromDaliLevel` → `knxFromDaliLevel`. Kommentare im Code bereinigt: Verweise auf die alte README und interne Test-Kürzel (B…, C…, S1–S4) durch kurze Erklärungen ersetzt, deutsche Kommentare in `RgbwHelper.h` übersetzt; Logzeile `Broadcast zurueck` → `Broadcast back`. Neu: Abschnitt RGBW in `doc/Applikationsbeschreibung-Dali.md` (für den PR). Keine Funktionsänderung | – |
+| (24.11.) | 24.11.2026 | Kommentar zu `currentState` in `koHandleDimmAbs` berichtigt (Begründung für alle Kanaltypen). Keine Funktionsänderung | – |
 
 ## 2. Befunde zum Treiber DA4-M (B1–B29)
 
@@ -47,7 +48,7 @@ Diese Tabelle fasst zusammen, was wir über das Verhalten des DA4-M (und des Gat
 | B5b | Haltedauer einer Farbe, die **bei Pegel 0 gesendet** wurde: Der DA4-M hält sie mindestens etwa 1,5 min (länger nicht geprüft). ~~„Haben wir nur mit höchstens etwa 1,5 s bis zum Pegel getestet“~~ (überholt). | **bestätigt** `v13` (20.11.) | 5.1 Phase 3.9: Blau bei Pegel 0 (`ACTIVATE`), nach ≈ 1,5 min `getCol`: aktuell 0/0/254/0; danach *Heller* aus Aus (`RECALL MIN`, **ohne** Farbe vom Gateway): Lampe in reinem Blau. Ebenso 3.2 (Rot, aktuell 254/0/0/0 bei Pegel 0) | Wege ohne Farbe (*Heller* aus Aus, Broadcast Ein bei unbekannter Farbe, Einschalten durch andere Geräte) kommen in der richtigen Farbe. Das Argument „der Treiber könnte die Farbe vergessen“ für C2 ist damit für den DA4-M **widerlegt** |
 | B6 | `QUERY_STATUS` Bit 4 („Fade läuft“) meldet auch einen **Farb-Fade bei Pegel 0**. | **bestätigt** | Logs `colour fade over (status 0x00), 1350 ms` u. a. | `v7`–`v12`: Ende-Erkennung in `loopFadePoll`. **`v13`:** nicht mehr genutzt (nur noch in der Diagnose) |
 | B7 | Fade-Dauern am DA4-M (Fade-Zeit 1 s per `QUERY_FADE_SPEEDS`): Farb-Fade bei **Farbwechsel ≈ 1,35–1,58 s**, bei **unveränderter bzw. gespeicherter Farbe ≈ 0,3 s**. Der Pegel-Fade dauert etwa 1 s. | **bestätigt** | v6, v7 (1569–1571 ms), v9 (1572 ms), v10 (1350, 1476 ms), v12 (335/336 ms) | `v7`–`v12`: feste Zeiten nur als Rückfall. **`v13`:** die Fade-Zeit dient nur noch der Zeitprüfung in Modus B (1.5) |
-| B8 | Das Weiß wird am DA4-M (Modus RGBW) mit **Befehl 236** (`SET TEMPORARY WAF DIMLEVEL`) gesetzt. | **bestätigt** (nur DA4-M) | alle Weiß-Tests | Befehl 237 (`RGBWAF`) bei anderen Treibern: **offen**, andere Anwender sollen es mit ihren Treibern prüfen |
+| B8 | Das Weiß wird am DA4-M (Modus RGBW) mit **Befehl 236** (`SET TEMPORARY WAF DIMLEVEL`) gesetzt. | **bestätigt** (nur DA4-M) | alle Weiß-Tests | Andere Treiber: **offen**, ob sie das Weiß ebenso über 236 erwarten oder vorher eine Kanalzuordnung (`SET TEMPORARY RGBWAF CONTROL`, 237) brauchen; andere Anwender sollen es mit ihren Treibern prüfen |
 | B9 | Der DA4-M-Takt für relatives Dimmen: ≈ 9 Pegelstufen alle 200 ms. Im unteren Bereich der logarithmischen Kurve wirkt das langsam (Pegel 1 bis 72 in ≈ 2 s = 0,7 %). | **bestätigt** (nicht verändert) | v7 | – |
 | B10 | Die Dimmschleife (`loopDimming`) beendet das Dimmen am Minimum nicht, sondern wiederholt *Dunkler* + *Aus* bis zum Stopp (Telegrammflut, falscher Status). Struktur aus dem Ausgangscode (`git blame`); bei anderen Farbtypen ist dasselbe zu erwarten, nicht geprüft. | **behoben** (nur RGBW) v8, Test 3; in `v13` erneut bestätigt (5.1 Phase 3.10: am Minimum `Dimm Stop at: 1`, `0x0000`, ein Stopp 4 s später ohne Frame) | v7-Fund, v8 Test 3 | Der Schritt, der das Minimum erreicht, schaltet aus und beendet das Dimmen; *Dunkler* auf ausgeschalteter Lampe wird ignoriert |
 | B11 | Nach dem Stopp eines relativen Dimmens meldete das Gateway nur den **zuletzt abgefragten** Pegel (21,6 % statt 28,6 %). Betrifft den Ausgangscode, nicht nur RGBW. | **behoben** v9 (einmal `QUERY_ACTUAL_LEVEL` ≈ 300 ms nach dem Stopp, alle Kanaltypen), auf Hardware bestätigt; in `v13` erneut bestätigt (5.1 Phase 3.10: Stopp bei 162, Abfrage 172, Status 10,6 %) | v8 Test 4 (Fund), v9-Test (145 = 5,10 %, `getLvl 00` identisch). Der To-do-Eintrag „ungetestet“ in der alten README war **überholt** | – |
@@ -493,7 +494,7 @@ Die Tabelle ist der Grundtest aus `v6` mit den Erwartungen für `v13`. Für `v13
 
 ## 6. Weitere Themen, Ideen und Erledigtes
 
-**Status: für RGBW durch `v13` erledigt, ein ETS-Schalter ist vorerst nicht geplant.** Als Standard gilt bei RGBW wie bei RGB: Farbe setzen, ohne einzuschalten, damit bestehende Installationen gleich bleiben. `v13` macht das bei RGBW so (wie RGB, Lampe bleibt aus, Status bleibt *Aus*); nur der Slider-Modus schaltet ein, weil dort die Helligkeit im Farbwert steckt. Die anderen Farbtypen (HSV, RGB, TW, xyY) bleiben unverändert, einschließlich des falschen Status *Ein* (`TODO get real`); ob das korrigiert werden soll, ist eine Frage an den Maintainer.
+**Status: für RGBW durch `v13` erledigt, ein ETS-Schalter ist vorerst nicht geplant.** Als Standard gilt bei RGBW wie bei RGB: Farbe setzen, ohne einzuschalten, damit bestehende Installationen gleich bleiben. `v13` macht das bei RGBW so (wie RGB, Lampe bleibt aus, Status bleibt *Aus*); nur der Slider-Modus schaltet ein, weil dort die Helligkeit im Farbwert steckt. Die anderen Farbtypen (HSV, RGB, TW, xyY) bleiben unverändert, einschließlich des falschen Status *Ein* (`TODO get real`); eine Korrektur steht als Vorschlag in den [Befunden](RGBW-Befunde-Ausgangscode.md) (Hinweis am Ende).
 
 ### 5.3 HCL mit RGBW
 
@@ -525,12 +526,12 @@ Die Tabelle ist der Grundtest aus `v6` mit den Erwartungen für `v13`. Für `v13
 
 1. ~~Zweiter RGBW-Kanal~~ (erledigt 21.11.); mehrere Kanäle zugleich unter Last (Auslastung der DALI-Warteschlange, Farbsequenz ≈ 310 ms pro Kanal, Reihenfolge) offen
 2. ~~Gruppen~~ (erledigt 21.11., GR1–GR4; Modus A entfällt)
-3. ~~Broadcast, Sperre~~ (erledigt 21.11., BC1–BC4, SP1–SP4b); Tagwert in allen Tests benutzt; Nachtwert mit `v15` (N1/N2, bestanden 22.11.); KNX-Szenen mit Farbe, im Treiber gespeicherte Szenen (Abschnitt 4) offen; Szenen bleiben unverändert und außerhalb des RGBW-PR, Überarbeitung als Frage F4 an den Maintainer (23.11.)
+3. ~~Broadcast, Sperre~~ (erledigt 21.11., BC1–BC4, SP1–SP4b); Tagwert in allen Tests benutzt; Nachtwert mit `v15` (N1/N2, bestanden 22.11.); KNX-Szenen mit Farbe, im Treiber gespeicherte Szenen (Abschnitt 4) offen; Szenen bleiben unverändert und außerhalb des RGBW-PR, Überarbeitung als Vorschlag F4 in den Befunden (23.11.)
 4. ~~HCL mit RGBW~~ (5.3): mit `v15`/`v15b` H1–H5, H6a, H6b bestanden (22.11.); Kurve „Zeittabelle“ nicht getestet. Treppenhauslicht: mit Absicht nicht angepasst (5.4b)
-5. Regression der anderen Farbtypen (RGB, HSV, TW, xyY) und anderer Kanaltypen (Testfall 14); dabei auch der Stand **ohne** Diagnose (`v14b`)
+5. Regression der anderen Farbtypen (RGB, HSV, TW, xyY) und anderer Kanaltypen (Testfall 14); dabei mit dem PR-Stand (`v15b`, bereinigt 23.11.)
 6. Weitere Mischungen mit Weiß bei brennender Lampe
    Dazu (aus der ersten Runde): Wirkung von B21 (temporäre Werte bleiben stehen) nach einer Szene bzw. Gruppenfarbe und anschließendem Pegelbefehl ohne Farbe
-7. Test durch andere Anwender (insbesondere Befehl 237 bei anderen Treibern, B8)
+7. Test durch andere Anwender mit anderen Treibern (Weiß über 236, ggf. Kanalzuordnung über 237, B8)
 8. ~~Treiber mit unterschiedlicher Übergangszeit~~ (entfällt ab `v14`, Abschnitt 4)
 
 ## 8. Befunde im Ausgangscode: Belege

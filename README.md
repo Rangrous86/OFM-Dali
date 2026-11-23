@@ -6,10 +6,10 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 
 | | |
 |---|---|
-| **Stand** | `v15b`, bereinigt am 23.11.2026 (PR-Stand, Branch `v1dev` dieses Forks) |
+| **Stand** | `v15b`, bereinigt am 23./24.11.2026 (PR-Stand, Branch `v1dev` dieses Forks) |
 | **Basis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` |
 | **ETS-Applikation** | 0.13 (eine Version über dem offiziellen Release 0.12; ein Gerät mit 0.12 lässt sich direkt aktualisieren) |
-| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Mit `v15b`: HCL zusammen mit der Sperre (H6a, H6b) bestanden (8.2) |
+| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Mit `v15b`: HCL zusammen mit der Sperre (H6a, H6b) bestanden (8.2). Am 23.11.2026 Kurztest des PR-Stands (KT1–KT4) bestanden. |
 | **Unverändert** | die Farbtypen HSV, RGB, TW und xyY sowie alle anderen Kanaltypen (bis auf drei kleine Korrekturen, siehe 3) |
 
 ## Inhalt
@@ -71,7 +71,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 
 **Für alle Kanaltypen** (kleine Korrekturen am Ausgangscode):
 
-- *Dimmen absolut* 0 % setzt den internen Ein/Aus-Merker auf *aus*. Vorher blieb er auf *ein*, und ein folgendes Farbtelegramm wurde übergangen.
+- *Dimmen absolut* setzt den internen Ein/Aus-Merker passend zum Wert (0 % = aus). Vorher blieb er nach 0 % auf *ein*; dann startete z. B. *Heller* nicht beim Minimum, und die HCL-Nachführung hätte die Lampe wieder eingeschaltet.
 - Nach dem Stopp eines relativen Dimmens wird der Pegel ≈ 300 ms später einmal abgefragt und gemeldet (der letzte Dimmschritt läuft im Treiber noch).
 - Die Startwerte für „Einschalten mit letztem Wert“ sind DALI-Pegel für 100 % bzw. 10 % (vorher die Zahlen 100 und 10, also ≈ 1,5 % bzw. 0,1 %).
 
@@ -85,7 +85,7 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 - HCL: Die Farbtemperatur wird übersprungen (vorher ein DT8-Farbtemperaturbefehl an den RGBW-Treiber); die HCL-Helligkeit bei brennender Lampe läuft über das Sammelfenster und wird während einer Sperre nicht an die Lampe gesendet (vorher hätte sie die gesperrte Lampe wieder eingeschaltet).
 - Treppenhauslicht: mit Absicht **keine** RGBW-Behandlung, unverändert wie im Ausgangscode (Abschnitt 6).
 
-**ETS und Speicher:** Der Parameter *Farbe ansteuern per* hat jetzt 3 Bit und liegt deshalb an anderer Stelle im Parameterspeicher (Einzeladresse Byte 21, Gruppe Byte 17); die neuen Parameter nutzen frei gewordene Bits. Die Blockgröße ist unverändert. KNX-Speicher: 63 Byte frei. Die vollständige Liste aller ersetzten Stellen im Ausgangscode, einschließlich der Änderungen ohne sichtbare Wirkung (z. B. `currentColor` wird mit 0 initialisiert), steht in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 2.
+**ETS und Speicher:** Der Parameter *Farbe ansteuern per* hat jetzt 3 Bit und liegt deshalb an anderer Stelle im Parameterspeicher (Einzeladresse Byte 21, Gruppe Byte 17); die neuen Parameter liegen in frei gewordenen bzw. bisher freien Bits (Belegung im Detail: [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 6). Die Blockgröße ist unverändert. KNX-Speicher: 63 Byte frei. Die vollständige Liste aller ersetzten Stellen im Ausgangscode, einschließlich der Änderungen ohne sichtbare Wirkung (z. B. `currentColor` wird mit 0 initialisiert), steht in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 2.
 
 ## 4. Einrichtung von RGBW in der ETS
 
@@ -216,7 +216,7 @@ Ohne `brightness_address` schickt Home Assistant nur das Farbobjekt; dafür *Hel
 - **HCL:** mit `v15` angepasst (Farbtemperatur bei RGBW übersprungen, Helligkeit über das Sammelfenster, Vorrang vor Tag/Nacht) und getestet (H1–H5, mit Sperre H6a/H6b in `v15b`). Nicht getestet: Kurve „Zeittabelle“. Die HCL-Farbtemperatur hat bei RGBW keine Wirkung. Die HCL braucht eine gültige Uhrzeit und den Standort, sonst meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`. Ausgangscode, alle Kanaltypen: Nach *Manu* → *Auto* gilt beim ersten *Ein* bis zur nächsten vollen Minute noch der HCL-Wert vom Wechsel auf *Manu* (G23 in den [Befunden](doc/RGBW-Befunde-Ausgangscode.md)).
 - **Treppenhauslicht:** mit Absicht **ohne** RGBW-Behandlung. Ein Treppenhauskanal mit RGBW schaltet wie im Ausgangscode nur den Pegel; die Farbe kommt aus dem Treiber. Eine Anpassung kommt bei Bedarf in einer späteren Version (Abschnitt 10, Ideen).
 - **Treiber:** getestet nur mit dem DA4-M (RGBW-Modus). Der Treiber muss die automatische Aktivierung können (DT8, ab Werk an; prüfen mit `aastat`).
-- **Taster am Gerät** (`RECALL MAX`/`OFF`) ohne RGBW-Behandlung, wie im Ausgangscode.
+- **Func-Taste am Gerät** (*Alle Ein/Aus/Umschalten*: `RECALL MAX`/`OFF`) ohne RGBW-Behandlung, wie im Ausgangscode; Zustand und Status werden dabei nicht nachgeführt (G13 in den [Befunden](doc/RGBW-Befunde-Ausgangscode.md)).
 
 ## 7. Installation
 
@@ -337,7 +337,7 @@ Jeder Test: vorher beschreiben, was gesendet wird und was als bestanden gilt; da
 | N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade. N2 entsprechend mit Tag |
 | H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Sperre (H6) | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
 
-**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b bestanden. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
+**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b bestanden. **23.11.2026 (PR-Stand):** Kurztest KT1–KT4 bestanden. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
 
 **Host-Test ohne Hardware:**
 
@@ -429,9 +429,9 @@ Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one 
 | F1–F4 | Vorschläge zum Ausgangscode | Befunde, Abschnitt 5 |
 | S1–S4 | Fehler der Sperre im Ausgangscode (Teil von G4) | Befunde, G4 |
 | Plan Punkt 1–12 | Umbau nach der ersten Testrunde (`v14`) | Testprotokoll, Abschnitt 4 |
-| Phase 1–8 (z. B. 3.9) | Schritte des Testablaufs `v13` | Testprotokoll, Abschnitt 4 |
+| Phase 0–8 (z. B. 3.9) | Schritte des Testablaufs `v13` | Testprotokoll, Abschnitt 4 |
 | Testfall 1–14 | Grundtest seit `v6` | Testprotokoll, Abschnitt 5 |
 | E, GR, BC, SP, AU, R | Tests Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart | Abschnitt 8.2, Testprotokoll |
 | N, H | Tests Tag/Nacht und HCL (ab `v15`) | Abschnitt 8.2, Testprotokoll |
-| KR, KT | Korrekturen B27/B28 (21.11.), Kurztest PR-Stand (23.11.) | Testprotokoll, Abschnitt 4 |
+| KR, KT, T | Korrekturen B27/B28 (21.11.), Kurztest PR-Stand (23.11.), Schlusstest ohne Diagnose T1/T2 (21.11.) | Testprotokoll, Abschnitt 4 |
 | SL, SH, HC | ältere Tests: Slider-Modus direkt bzw. über Home Assistant, HCL (`v11`/`v12`) | Testprotokoll, Abschnitt 3 |

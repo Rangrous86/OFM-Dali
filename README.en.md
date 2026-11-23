@@ -6,10 +6,10 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 
 | | |
 |---|---|
-| **Version** | `v15b`, cleaned up on 23 Nov 2026 (PR state, branch `v1dev` of this fork) |
+| **Version** | `v15b`, cleaned up on 23/24 Nov 2026 (PR state, branch `v1dev` of this fork) |
 | **Base** | `OpenKNX/OFM-Dali`, branch `v1dev`, commit `a120578` |
 | **ETS application** | 0.13 (one version above the official release 0.12; a device on 0.12 can be updated directly) |
-| **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)). On 22 Nov 2026 with `v15`: day/night value and HCL (N1, N2, H1–H5) passed. With `v15b`: HCL together with the lock (H6a, H6b) passed (8.2) |
+| **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)). On 22 Nov 2026 with `v15`: day/night value and HCL (N1, N2, H1–H5) passed. With `v15b`: HCL together with the lock (H6a, H6b) passed (8.2). On 23 Nov 2026 short test of the PR state (KT1–KT4) passed. |
 | **Unchanged** | the colour types HSV, RGB, TW and xyY and all other channel types (except three small fixes, see 3) |
 
 ## Contents
@@ -71,7 +71,7 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 
 **For all channel types** (small fixes to the original code):
 
-- *Dimmen absolut* 0 % sets the internal on/off flag to *off*. Before, it stayed *on* and a following colour telegram was skipped.
+- *Dimmen absolut* sets the internal on/off flag according to the value (0 % = off). Before, it stayed *on* after 0 %; then e.g. *brighter* did not start at the minimum, and the HCL tracking would have switched the lamp on again.
 - After the stop of a relative dimming, the level is queried and reported once ≈ 300 ms later (the last dimming step is still running in the driver).
 - The start values for "switch on with last value" are DALI levels for 100 % and 10 % (before: the numbers 100 and 10, i.e. ≈ 1.5 % and 0.1 %).
 
@@ -85,7 +85,7 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 - HCL: the colour temperature is skipped (before: a DT8 colour temperature command to the RGBW driver); the HCL brightness with the lamp on goes through the collection window and is not sent to the lamp during a lock (before, it would have switched the locked lamp back on).
 - Staircase light: deliberately **no** RGBW handling, unchanged as in the original code (section 6).
 
-**ETS and memory:** the parameter *Farbe ansteuern per* (colour control) now has 3 bits and therefore moved within the parameter memory (single address byte 21, group byte 17); the new parameters use the freed bits. The block size is unchanged. KNX memory: 63 bytes free. The complete list of all replaced places in the original code, including changes without visible effect (e.g. `currentColor` is initialised with 0), is in the [comparison (German)](doc/RGBW-Gegenueberstellung.md), section 2.
+**ETS and memory:** the parameter *Farbe ansteuern per* (colour control) now has 3 bits and therefore moved within the parameter memory (single address byte 21, group byte 17); the new parameters are in freed or previously unused bits (layout in detail: [comparison, German](doc/RGBW-Gegenueberstellung.md), section 6). The block size is unchanged. KNX memory: 63 bytes free. The complete list of all replaced places in the original code, including changes without visible effect (e.g. `currentColor` is initialised with 0), is in the [comparison (German)](doc/RGBW-Gegenueberstellung.md), section 2.
 
 ## 4. Setting up RGBW in the ETS
 
@@ -216,7 +216,7 @@ So *on* always takes the switch-on value (HCL, otherwise day/night), as for all 
 - **HCL:** adapted in `v15` (colour temperature skipped for RGBW, brightness through the collection window, priority over day/night) and tested (H1–H5, with lock H6a/H6b in `v15b`). Not tested: curve "Zeittabelle" (time table). The HCL colour temperature has no effect on RGBW. HCL needs a valid time and the location, otherwise the log shows `Ungueltige Sonnenstandsdaten` every minute. Original code, all channel types: after *manual* → *auto*, the first *on* uses the HCL value from the switch to *manual* until the next full minute (G23 in the [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
 - **Staircase light:** deliberately **without** RGBW handling. A staircase channel with RGBW switches the level only, as in the original code; the colour comes from the driver. An adaptation may follow in a later version if needed (section 10, ideas).
 - **Drivers:** tested with the DA4-M (RGBW mode) only. The driver must support automatic activation (DT8, on by default; check with `aastat`).
-- **Push button on the device** (`RECALL MAX`/`OFF`) without RGBW handling, as in the original code.
+- **Func button on the device** (*Alle Ein/Aus/Umschalten*, all on/off/toggle: `RECALL MAX`/`OFF`) without RGBW handling, as in the original code; state and status are not updated (G13 in the [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
 
 ## 7. Installation
 
@@ -337,7 +337,7 @@ For every test: first describe what is sent and what counts as passed, then send
 | N1 | *Tag/Nacht* to night, then *on* | `Turning on night value`, lamp with night value and stored colour in one fade. N2 likewise with day |
 | H1–H6 | HCL (brightness and colour temperature active, auto): *on*, tracking with the lamp on, colour (→ manual), *off* (→ auto); lock (H6) | HCL level instead of day value; tracking as `RGBW: level N`; colour temperature only `RGBW: colour temperature skipped`; H6 (lock with "restore"): lamp stays off during the lock, on unlock the current HCL level (procedure in the test log) |
 
-**Result 21 Nov 2026 (`v14b`):** all tests up to R1 passed, including the final test with the firmware without diagnostics. **22 Nov 2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b passed. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
+**Result 21 Nov 2026 (`v14b`):** all tests up to R1 passed, including the final test with the firmware without diagnostics. **22 Nov 2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b passed. **23 Nov 2026 (PR state):** short test KT1–KT4 passed. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
 
 **Host test without hardware:**
 
@@ -431,9 +431,9 @@ All in German:
 | F1–F4 | proposals for the original code | findings, section 5 |
 | S1–S4 | lock errors in the original code (part of G4) | findings, G4 |
 | Plan Punkt 1–12 (plan item) | rework after the first test round (`v14`) | test log, section 4 |
-| Phase 1–8 (e.g. 3.9) | steps of the `v13` test sequence | test log, section 4 |
+| Phase 0–8 (e.g. 3.9) | steps of the `v13` test sequence | test log, section 4 |
 | Testfall 1–14 (test case) | basic test since `v6` | test log, section 5 |
 | E, GR, BC, SP, AU, R | tests single EVG, groups, broadcast, lock, driver failure, restart | section 8.2, test log |
 | N, H | tests day/night and HCL (from `v15`) | section 8.2, test log |
-| KR, KT | corrections B27/B28 (21 Nov), short test of the PR state (23 Nov) | test log, section 4 |
+| KR, KT, T | corrections B27/B28 (21 Nov), short test of the PR state (23 Nov), final test without diagnostics T1/T2 (21 Nov) | test log, section 4 |
 | SL, SH, HC | older tests: slider mode direct or via Home Assistant, HCL (`v11`/`v12`) | test log, section 3 |

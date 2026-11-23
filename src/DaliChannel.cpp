@@ -945,7 +945,8 @@ void DaliChannel::koHandleDimmAbs(GroupObject &ko)
     else
         daliMaster.sendArc(_channelIndex, arc, _isGroup);
     setDimmState(arc, true, true);
-    // keep the on/off flag in sync, otherwise e.g. a colour telegram after "dimm to 0" is ignored
+    // keep the on/off flag in sync with the lamp; otherwise after "dimm to 0" e.g. "brighter" does not start at the
+    // minimum and the HCL brightness would switch the lamp on again
     if (!_isStaircase)
         currentState = arc > 0;
 }
