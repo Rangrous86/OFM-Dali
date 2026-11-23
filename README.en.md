@@ -288,6 +288,7 @@ Import `DaliGateway.knxprod`. Update a device on 0.12, otherwise insert it again
 | ETS | A0, A1 as "DT8 – Farbe", G0–G2 as "Farbig", all *Farbe ansteuern per* = RGBW, *Helligkeit bei RGBW* = via object; day switch-on value 100 %, fade time 1 s |
 | Sending | ETS group monitor (*write value*) or Home Assistant (`knx.send`, KNX light with `rgbw_color` and `brightness`) |
 | Observing | luminaire, ETS group monitor, serial console (log level *Debug*) |
+| For N and H | *Dali-GW → Allgemein*: *Tag/Nacht Objekt* = "0=Tag / 1=Nacht". *HCL Kurven → Kurve 1*: "Sonnen Auf-/Untergang", *brightness* active (20–100 %), *colour temperature* active (2700–5000 K, to check that it is skipped). A0: switch-on value day 100 %, night 10 %, *HCL aktivieren* = yes, curve 1, *HCL anwenden* = "also when switched on". A1: like A0 but without HCL. For H6: A0 with lock, *Bei Entsperren vorherigen Zustand wiederherstellen* = yes, *Verhalten bei Sperren* = switch on (H6a) or switch off (H6b) |
 
 Group addresses in the test setup:
 
@@ -303,6 +304,8 @@ Group addresses in the test setup:
 | Lock | 20/0/40 | 20/0/41 | 20/0/42 | 20/0/43 | 20/0/44 |
 
 Broadcast: switch 20/0/36, dim absolute 20/0/37, colour RGBW 20/0/38, back 20/0/39.
+
+For N and H: day/night 20/0/45 (object 23), HCL curve 1 colour temperature 20/0/49 and brightness 20/0/50 (for observing), time/date 0/0/4 (object 4, DPT 19.001). HCL needs a valid time: a time source must send it **and** answer read requests, because the gateway reads 0/0/4 after every restart. In the test a Home Assistant automation did this. Without a time the log shows `Ungueltige Sonnenstandsdaten` every minute.
 
 ### 8.2 Test sequence
 
@@ -331,7 +334,7 @@ For every test: first describe what is sent and what counts as passed, then send
 | A1 | power on / failure "Inaktiv"; briefly disconnect the supply or the DALI bus of the driver | lamp comes back with last level and last colour, or stays unchanged |
 | R1 | restart the gateway (`restart`) with the lamp on, then colour | lamp unchanged; on/off and level reported; first colour with `ACTIVATE`, level stays |
 | N1 | *Tag/Nacht* to night, then *on* | `Turning on night value`, lamp with night value and stored colour in one fade. N2 likewise with day |
-| H1–H6 | HCL (brightness and colour temperature active, auto): *on*, tracking with the lamp on, colour (→ manual), *off* (→ auto); colour temperature activated | HCL level instead of day value; tracking as `RGBW: level N`; colour temperature only `RGBW: colour temperature skipped`; H6 (lock with "restore"): lamp stays off during the lock, on unlock the current HCL level (procedure in the test log) |
+| H1–H6 | HCL (brightness and colour temperature active, auto): *on*, tracking with the lamp on, colour (→ manual), *off* (→ auto); lock (H6) | HCL level instead of day value; tracking as `RGBW: level N`; colour temperature only `RGBW: colour temperature skipped`; H6 (lock with "restore"): lamp stays off during the lock, on unlock the current HCL level (procedure in the test log) |
 
 **Result 21 Nov 2026 (`v14b`):** all tests up to R1 passed, including the final test with the firmware without diagnostics. **22 Nov 2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b passed. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
 

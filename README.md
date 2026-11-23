@@ -288,6 +288,7 @@ Get-Volume | Where-Object FileSystemLabel -eq 'RPI-RP2'
 | ETS | A0, A1 als „DT8 – Farbe“, G0–G2 als „Farbig“, alle *Farbe ansteuern per* = RGBW, *Helligkeit bei RGBW* = über Objekt; Tag-Einschaltwert 100 %, Fade-Zeit 1 s |
 | Senden | ETS-Gruppenmonitor (*Wert schreiben*) oder Home Assistant (`knx.send`, KNX-Licht mit `rgbw_color` und `brightness`) |
 | Beobachten | Leuchte, ETS-Gruppenmonitor, serielle Konsole (Log-Level *Debug*) |
+| Für N und H | *Dali-GW → Allgemein*: *Tag/Nacht Objekt* = „0=Tag / 1=Nacht“. *HCL Kurven → Kurve 1*: „Sonnen Auf-/Untergang“, *Helligkeit* aktiv (20–100 %), *Farbtemperatur* aktiv (2700–5000 K, um das Überspringen zu prüfen). A0: Einschaltwert Tag 100 %, Nacht 10 %, *HCL aktivieren* = Ja, Kurve 1, *HCL anwenden* = „Auch wenn eingeschaltet ist“. A1: wie A0, aber ohne HCL. Für H6: A0 mit Sperre, *Bei Entsperren vorherigen Zustand wiederherstellen* = Ja, *Verhalten bei Sperren* = Anschalten (H6a) bzw. Ausschalten (H6b) |
 
 Gruppenadressen im Testaufbau:
 
@@ -303,6 +304,8 @@ Gruppenadressen im Testaufbau:
 | Sperren | 20/0/40 | 20/0/41 | 20/0/42 | 20/0/43 | 20/0/44 |
 
 Broadcast: Schalten 20/0/36, Dimmen absolut 20/0/37, Farbe RGBW 20/0/38, Zurück 20/0/39.
+
+Für N und H: Tag/Nacht 20/0/45 (Objekt 23), HCL Kurve 1 Farbtemperatur 20/0/49 und Helligkeit 20/0/50 (zum Beobachten), Uhrzeit/Datum 0/0/4 (Objekt 4, DPT 19.001). Die HCL braucht eine gültige Uhrzeit: Ein Zeitgeber muss sie senden **und** Leseanfragen beantworten, denn das Gateway liest 0/0/4 nach jedem Neustart. Im Test hat das eine Home-Assistant-Automation übernommen. Ohne Uhrzeit meldet das Log jede Minute `Ungueltige Sonnenstandsdaten`.
 
 ### 8.2 Testablauf
 
@@ -331,7 +334,7 @@ Jeder Test: vorher beschreiben, was gesendet wird und was als bestanden gilt; da
 | A1 | Power On / Failure „Inaktiv“; Versorgung bzw. DALI-Bus des Treibers kurz trennen | Lampe kommt mit letztem Pegel und letzter Farbe zurück bzw. bleibt unverändert |
 | R1 | Gateway neu starten (`restart`) bei brennender Lampe, danach Farbe | Lampe unverändert; Ein/Aus und Pegel gemeldet; erste Farbe mit `ACTIVATE`, Pegel bleibt |
 | N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade. N2 entsprechend mit Tag |
-| H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Farbtemperatur aktiviert | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
+| H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Sperre (H6) | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
 
 **Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b bestanden. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
 
