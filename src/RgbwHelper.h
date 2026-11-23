@@ -75,7 +75,7 @@ namespace RgbwHelper
     /*
      * Gegenrichtung zu daliLevel(): DALI-Pegel (254 = Maximum) -> KNX-Wert (255 = 100 %).
      */
-    inline uint8_t fromDaliLevel(uint8_t level)
+    inline uint8_t knxFromDaliLevel(uint8_t level)
     {
         return level == 254 ? 255 : level;
     }
@@ -94,7 +94,7 @@ namespace RgbwHelper
         if (report[0] == 0 && report[1] == 0 && report[2] == 0 && report[3] == 0)
             return false;
         for (uint8_t i = 0; i < 4; i++)
-            color[i] = fromDaliLevel(report[i]);
+            color[i] = knxFromDaliLevel(report[i]);
         return true;
     }
 

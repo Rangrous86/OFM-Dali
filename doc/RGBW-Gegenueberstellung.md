@@ -109,7 +109,7 @@ Alle Zeilen, die im Ausgangscode entfernt oder ersetzt wurden. Alles andere im D
 
 ### 3.3 `RgbwHelper.h`
 
-`decode` (Gültigkeitsbits), `isOff`, `encode` (Status), `daliLevel` (255 → 254), `maxChannel`, `normalise`, `scale`, `percentFromAmplitude`, `amplitudeFromPercent` (Slider-Modus, Broadcast RGBW). `fromDaliLevel` und `colourFromDriver` stammen aus `v10`–`v12` (Farbe beim Start lesen) und werden nur noch vom Host-Test benutzt (Abschnitt 7).
+`decode` (Gültigkeitsbits), `isOff`, `encode` (Status), `daliLevel` (255 → 254), `maxChannel`, `normalise`, `scale`, `percentFromAmplitude`, `amplitudeFromPercent` (Slider-Modus, Broadcast RGBW). `knxFromDaliLevel` und `colourFromDriver` stammen aus `v10`–`v12` (Farbe beim Start lesen) und werden nur noch vom Host-Test benutzt (Abschnitt 7).
 
 ## 4. Vorher/Nachher an den wichtigsten Stellen
 
@@ -282,7 +282,7 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 - Szenen: unverändert (der Treiber fährt Pegel und Farbe selbst an), mit RGBW nicht getestet.
 - Regression der anderen Farb- und Kanaltypen auf Hardware.
 - Versionskennung im Log: am 23.11. entfernt (war nur Testhilfe); die Logzeile heißt wieder `Color absolute` wie im Ausgangscode.
-- `RgbwHelper::fromDaliLevel` / `colourFromDriver` werden nur noch vom Host-Test benutzt: entfernen oder für später behalten.
+- `RgbwHelper::knxFromDaliLevel` (bis 23.11. `fromDaliLevel`) und `colourFromDriver` werden derzeit nur vom Host-Test benutzt; **entschieden 23.11.: behalten** als vorbereitete Helfer für eine Farbabfrage beim Treiber (z. B. bei einer Szenen-Überarbeitung, F4). Als `inline` kosten sie ungenutzt keinen Speicher.
 
 **Fragen an den Maintainer:**
 1. Ist die Verschiebung von `colorType` im Parameterspeicher (Einzel: Byte 21, Gruppe: Byte 17) und die Nutzung der frei gewordenen Bits in Ordnung?
@@ -372,7 +372,7 @@ namespace RgbwHelper
     /*
      * Gegenrichtung zu daliLevel(): DALI-Pegel (254 = Maximum) -> KNX-Wert (255 = 100 %).
      */
-    inline uint8_t fromDaliLevel(uint8_t level)
+    inline uint8_t knxFromDaliLevel(uint8_t level)
     {
         return level == 254 ? 255 : level;
     }
@@ -391,7 +391,7 @@ namespace RgbwHelper
         if (report[0] == 0 && report[1] == 0 && report[2] == 0 && report[3] == 0)
             return false;
         for (uint8_t i = 0; i < 4; i++)
-            color[i] = fromDaliLevel(report[i]);
+            color[i] = knxFromDaliLevel(report[i]);
         return true;
     }
 
@@ -2191,7 +2191,7 @@ index 78764c5..06e746e 100644
                                      <when test="2">
 diff --git a/src/RgbwHelper.h b/src/RgbwHelper.h
 new file mode 100644
-index 0000000..b259af8
+index 0000000..7edf32a
 --- /dev/null
 +++ b/src/RgbwHelper.h
 @@ -0,0 +1,148 @@
@@ -2272,7 +2272,7 @@ index 0000000..b259af8
 +    /*
 +     * Gegenrichtung zu daliLevel(): DALI-Pegel (254 = Maximum) -> KNX-Wert (255 = 100 %).
 +     */
-+    inline uint8_t fromDaliLevel(uint8_t level)
++    inline uint8_t knxFromDaliLevel(uint8_t level)
 +    {
 +        return level == 254 ? 255 : level;
 +    }
@@ -2291,7 +2291,7 @@ index 0000000..b259af8
 +        if (report[0] == 0 && report[1] == 0 && report[2] == 0 && report[3] == 0)
 +            return false;
 +        for (uint8_t i = 0; i < 4; i++)
-+            color[i] = fromDaliLevel(report[i]);
++            color[i] = knxFromDaliLevel(report[i]);
 +        return true;
 +    }
 +
@@ -2345,7 +2345,7 @@ index 0000000..b259af8
 +}
 diff --git a/test/test_rgbw_helper.cpp b/test/test_rgbw_helper.cpp
 new file mode 100644
-index 0000000..a9a3018
+index 0000000..f77e49b
 --- /dev/null
 +++ b/test/test_rgbw_helper.cpp
 @@ -0,0 +1,136 @@
@@ -2416,9 +2416,9 @@ index 0000000..a9a3018
 +    CHECK(RgbwHelper::daliLevel(255) == 254);
 +    CHECK(RgbwHelper::daliLevel(254) == 254);
 +    CHECK(RgbwHelper::daliLevel(0) == 0);
-+    CHECK(RgbwHelper::fromDaliLevel(254) == 255);
-+    CHECK(RgbwHelper::fromDaliLevel(128) == 128);
-+    CHECK(RgbwHelper::fromDaliLevel(0) == 0);
++    CHECK(RgbwHelper::knxFromDaliLevel(254) == 255);
++    CHECK(RgbwHelper::knxFromDaliLevel(128) == 128);
++    CHECK(RgbwHelper::knxFromDaliLevel(0) == 0);
 +
 +    // colour from the driver report values (R, G, B, W; 255 = MASK = unknown)
 +    { const uint8_t rep[4] = {0, 0, 254, 0}; uint8_t c[4] = {9, 9, 9, 9};

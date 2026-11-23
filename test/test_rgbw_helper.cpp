@@ -65,9 +65,9 @@ int main()
     CHECK(RgbwHelper::daliLevel(255) == 254);
     CHECK(RgbwHelper::daliLevel(254) == 254);
     CHECK(RgbwHelper::daliLevel(0) == 0);
-    CHECK(RgbwHelper::fromDaliLevel(254) == 255);
-    CHECK(RgbwHelper::fromDaliLevel(128) == 128);
-    CHECK(RgbwHelper::fromDaliLevel(0) == 0);
+    CHECK(RgbwHelper::knxFromDaliLevel(254) == 255);
+    CHECK(RgbwHelper::knxFromDaliLevel(128) == 128);
+    CHECK(RgbwHelper::knxFromDaliLevel(0) == 0);
 
     // colour from the driver report values (R, G, B, W; 255 = MASK = unknown)
     { const uint8_t rep[4] = {0, 0, 254, 0}; uint8_t c[4] = {9, 9, 9, 9};
