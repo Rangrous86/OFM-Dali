@@ -355,7 +355,7 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 **Funktioniert RGBW nicht wie beschrieben** (z. B. Farbe und Helligkeit kommen nicht in einem Fade): zuerst `aastat`, bei *OFF* `aaon`.
 
-Wichtige Logzeilen: `Color absolute` (in Testständen folgt die Versionskennung, z. B. `Color absolute [v15b]`), `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` bzw. `… ignored`.
+Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` bzw. `… ignored`.
 
 ## 10. Offen und Fragen
 
@@ -364,7 +364,6 @@ Wichtige Logzeilen: `Color absolute` (in Testständen folgt die Versionskennung,
 - Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen.
 - Szenen insgesamt überarbeiten? Heute werden DALI-Szenen 1:1 durchgereicht; nach einer Szene kennt das Gateway die angefahrenen Werte nicht, alle Status bleiben auf dem alten Wert. Betrifft alle Kanaltypen, deshalb nicht Teil dieser Erweiterung (Frage F4 an den Maintainer, [Befunde](doc/RGBW-Befunde-Ausgangscode.md)).
 - Andere Treiber als der DA4-M.
-- Versionskennung im Log (`[v15b]`) vor dem Pull Request entfernen oder behalten.
 
 **Ideen, bewusst zurückgestellt:**
 - Treppenhauslicht mit RGBW (Farbe beim Einschalten, Sammelfenster). Mit Absicht nicht in dieser Version; bei Bedarf in einer späteren Version.

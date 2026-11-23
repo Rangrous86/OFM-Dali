@@ -5,7 +5,7 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | | |
 |---|---|
 | **Vergleichsbasis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` (letzter Merge in diesen Fork, enthält Fix #7). Upstream ist seitdem nur um `3badb1e` („updated: lib version“, eine Zeile in `library.json`) weiter; das berührt die RGBW-Änderung nicht. |
-| **Neuer Stand** | Fork `Rangrous86/OFM-Dali`, Branch `v1dev`, Code-Stand Commit `535913c` (`v15b`, ohne Testdiagnose) |
+| **Neuer Stand** | Fork `Rangrous86/OFM-Dali`, Branch `v1dev`, Code-Stand `v15b` ohne Testdiagnose und ohne Versionskennung (Commit siehe Anhang B) |
 | **Firmware / ETS** | `GW-REG1-Dali` mit `ApplicationVersion="0.13.0"`, `ReplacesVersions="0.0 0.10 0.11 0.12"` |
 | **Bibliothek** | `OpenKNX/dali` **unverändert** |
 
@@ -34,8 +34,8 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | `src/DaliModule.group.templ.xml` | geändert | Gruppe: wie Einzeladresse |
 
 ```
- src/DaliChannel.cpp             | 652 +++++++++++++++++++++++++++++++++++++++-
- src/DaliChannel.h               |  72 ++++-
+ src/DaliChannel.cpp             | 650 +++++++++++++++++++++++++++++++++++++++-
+ src/DaliChannel.h               |  70 ++++-
  src/DaliModule.cpp              | 283 ++++++++++++++++-
  src/DaliModule.group.templ.xml  |  32 +-
  src/DaliModule.h                |   9 +
@@ -43,7 +43,7 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
  src/DaliModule.single.templ.xml |  66 ++--
  src/RgbwHelper.h                | 148 +++++++++
  test/test_rgbw_helper.cpp       | 136 +++++++++
- 9 files changed, 1374 insertions(+), 39 deletions(-)
+ 9 files changed, 1371 insertions(+), 38 deletions(-)
 ```
 
 **Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert).
@@ -60,7 +60,7 @@ Alle Zeilen, die im Ausgangscode entfernt oder ersetzt wurden. Alles andere im D
 | `DaliChannel::handleSwitchNormal`, Ein | `daliMaster.sendArc(onValue)` | RGBW: `rgbwRequestLevel(onValue)` (Sammelfenster, dann temporäre Farbe + `DAPC`) | RGBW |
 | `DaliChannel::handleSwitchNormal`, Aus | `daliMaster.sendArc(0)` | RGBW: `rgbwOff()` (`DAPC 0`, Fenster verworfen) | RGBW |
 | `DaliChannel::koHandleDimmAbs` | `daliMaster.sendArc(arc)` | RGBW: `rgbwOff()` bzw. `rgbwRequestLevel(arc)`. **Zusätzlich für alle:** `currentState = arc > 0` (außer Treppenhaus) | RGBW; **alle** (Merker) |
-| `DaliChannel::koHandleColor` | Log `Color absolute`; nach dem `switch` immer `if(!currentState) setDimmState(_onDay, …) // TODO get real` | Log mit Versionskennung; neuer `case PT_colorType_RGBW` → `handleColorRGBW()` und `return` vor dem `TODO`-Teil; gesperrt mit „wiederherstellen“: nur speichern | RGBW (andere Farbtypen unverändert, inkl. `TODO`) |
+| `DaliChannel::koHandleColor` | Log `Color absolute`; nach dem `switch` immer `if(!currentState) setDimmState(_onDay, …) // TODO get real` | neuer `case PT_colorType_RGBW` → `handleColorRGBW()` und `return` vor dem `TODO`-Teil; gesperrt mit „wiederherstellen“: nur speichern | RGBW (andere Farbtypen unverändert, inkl. `TODO`) |
 | `DaliChannel::setTemperature` (HCL-Farbtemperatur, Farbtyp TW) | DT8 `SET TEMPORARY COLOUR TEMPERATURE` + `ACTIVATE`, Status als DPT 7 in *Farbe Status* | RGBW: übersprungen, nur Log `RGBW: colour temperature skipped` (`v15`). Sonst unverändert | RGBW |
 | `DaliChannel::setBrightness` (HCL-Helligkeit bei brennender Lampe) | `sendArc(percentToArc(value))`, *Dimmen Status* | RGBW: wie *Dimmen absolut* `rgbwRequestLevel(arc)` (bei 0 `rgbwOff()`) + `setDimmState(arc, true)`: Sammelfenster, ein Fade mit Farbe, Status und letzter Pegel nachgeführt (`v15`). Während einer Sperre nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve (`v15b`, G24). Sonst und bei Treppenhaus unverändert | RGBW |
 | `DaliChannel::sendColor()` | ohne Parameter | `sendColor(bool activate = true)`; RGBW-Zweig vorab (`sendColorAsRGBW`, mit oder ohne `ACTIVATE`) | RGBW |
@@ -281,7 +281,7 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 - Treppenhauslicht mit RGBW: **mit Absicht nicht angepasst**, läuft wie im Ausgangscode (nur Pegel). Bei Bedarf in einer späteren Version.
 - Szenen: unverändert (der Treiber fährt Pegel und Farbe selbst an), mit RGBW nicht getestet.
 - Regression der anderen Farb- und Kanaltypen auf Hardware.
-- Versionskennung im Log (`Color absolute [v15b]`, `RGBW_BUILD_TAG`): vor dem PR entfernen oder behalten.
+- Versionskennung im Log: am 23.11. entfernt (war nur Testhilfe); die Logzeile heißt wieder `Color absolute` wie im Ausgangscode.
 - `RgbwHelper::fromDaliLevel` / `colourFromDriver` werden nur noch vom Host-Test benutzt: entfernen oder für später behalten.
 
 **Fragen an den Maintainer:**
@@ -447,11 +447,11 @@ namespace RgbwHelper
 
 ## Anhang B: vollständiges Diff
 
-Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand `535913c`).
+Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 23.11.2026, `v15b` ohne Versionskennung).
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..4312672 100644
+index dffeaaf..185959f 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -1022,8 +1022,7 @@ index dffeaaf..4312672 100644
 +
  void DaliChannel::koHandleColor(GroupObject &ko)
  {
--    logDebugP("Color absolute");
-+    logDebugP("Color absolute [%s]", RGBW_BUILD_TAG);
+     logDebugP("Color absolute");
      if (currentIsLocked)
      {
 +        if (rgbwRestoreOnUnlock())
@@ -1330,15 +1329,13 @@ index dffeaaf..4312672 100644
  
  void DaliChannel::setMinArc(uint8_t min)
 diff --git a/src/DaliChannel.h b/src/DaliChannel.h
-index 19b49c9..98221e2 100644
+index 19b49c9..179df63 100644
 --- a/src/DaliChannel.h
 +++ b/src/DaliChannel.h
-@@ -8,11 +8,19 @@
+@@ -8,11 +8,17 @@
  #include "DaliConstants.h"
  
  #define DimmInterval 200
-+// Version tag of the RGBW extension, shown in the log line "Color absolute [...]" (test aid, remove before a PR)
-+#define RGBW_BUILD_TAG "v15b"
 +// RGBW collection window (ms): telegrams that arrive within this time (Home Assistant: colour and brightness ~20 ms
 +// apart) are merged into one DALI command (temporary colour + DAPC = one fade). Every RGBW command goes through the
 +// window, also a colour to a switched-off channel. 0 = send at once. Changeable at runtime: console command "aawin".
@@ -1353,7 +1350,7 @@ index 19b49c9..98221e2 100644
          static constexpr uint16_t AllGroups = DaliConstants::AllGroups;
  
          DaliChannel(Dali::Master &master);
-@@ -20,6 +28,18 @@ class DaliChannel : public OpenKNX::Channel
+@@ -20,6 +26,18 @@ class DaliChannel : public OpenKNX::Channel
  
  		void loop() override;
  		void loop1();
@@ -1372,7 +1369,7 @@ index 19b49c9..98221e2 100644
  		void setup() override;
  		void processInputKo(GroupObject &ko) override;
  		const bool isConfigured();
-@@ -106,17 +126,56 @@ class DaliChannel : public OpenKNX::Channel
+@@ -106,17 +124,56 @@ class DaliChannel : public OpenKNX::Channel
  		uint8_t currentStep = 0;
  		//Current lock state
  		bool currentIsLocked = false;
@@ -1433,7 +1430,7 @@ index 19b49c9..98221e2 100644
  
  		//Group membership
  		uint16_t _groups = 0;
-@@ -129,8 +188,10 @@ class DaliChannel : public OpenKNX::Channel
+@@ -129,8 +186,10 @@ class DaliChannel : public OpenKNX::Channel
  		void setSwitchState(bool value, bool isSwitchCommand = true);
  		void setDimmState(uint8_t value, bool isDimmCommand = true, bool isLastCommand = false);
  		void updateCurrentDimmValue();
@@ -1445,7 +1442,7 @@ index 19b49c9..98221e2 100644
  		void sendColorAsXY(uint8_t r, uint8_t g, uint8_t b);
  		void sendKoStateOnChange(uint16_t koNr, const KNXValue &value, const Dpt &type);
  		void setTemperature(uint16_t value);
-@@ -148,6 +209,7 @@ class DaliChannel : public OpenKNX::Channel
+@@ -148,6 +207,7 @@ class DaliChannel : public OpenKNX::Channel
  		void handleColorRGB(GroupObject &ko);
  		void handleColorTW(GroupObject &ko);
  		void handleColorXYY(GroupObject &ko);

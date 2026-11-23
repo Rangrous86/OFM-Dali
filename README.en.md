@@ -355,7 +355,7 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 **If RGBW does not work as described** (e.g. colour and brightness do not come in one fade): first `aastat`, if *OFF* then `aaon`.
 
-Important log lines: `Color absolute` (test builds append the version tag, e.g. `Color absolute [v15b]`), `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` or `… ignored`.
+Important log lines: `Color absolute`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast zurueck: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` or `… ignored`.
 
 ## 10. Open points and questions
 
@@ -364,7 +364,6 @@ Important log lines: `Color absolute` (test builds append the version tag, e.g. 
 - Test scenes with colour (KNX scenes and scenes stored in the driver) with RGBW.
 - Rework scenes in general? Today DALI scenes are passed through 1:1; after a scene the gateway does not know the values recalled, all status objects keep their old value. Affects all channel types, so not part of this extension (question F4 to the maintainer, [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
 - Drivers other than the DA4-M.
-- Version tag in the log (`[v15b]`): remove or keep before the pull request.
 
 **Ideas, deliberately postponed:**
 - Staircase light with RGBW (colour at switch-on, collection window). Deliberately not in this version; may follow in a later version if needed.

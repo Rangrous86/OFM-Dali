@@ -1125,7 +1125,7 @@ void DaliChannel::rgbwUnlock()
 
 void DaliChannel::koHandleColor(GroupObject &ko)
 {
-    logDebugP("Color absolute [%s]", RGBW_BUILD_TAG);
+    logDebugP("Color absolute");
     if (currentIsLocked)
     {
         if (rgbwRestoreOnUnlock())
