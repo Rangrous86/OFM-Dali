@@ -362,6 +362,7 @@ Important log lines: `Color absolute` (test builds append the version tag, e.g. 
 **Open:**
 - Regression test of the other colour types (HSV, RGB, TW, xyY) and channel types on hardware.
 - Test scenes with colour (KNX scenes and scenes stored in the driver) with RGBW.
+- Rework scenes in general? Today DALI scenes are passed through 1:1; after a scene the gateway does not know the values recalled, all status objects keep their old value. Affects all channel types, so not part of this extension (question F4 to the maintainer, [findings, German](doc/RGBW-Befunde-Ausgangscode.md)).
 - Drivers other than the DA4-M.
 - Version tag in the log (`[v15b]`): remove or keep before the pull request.
 

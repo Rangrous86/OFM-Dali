@@ -362,6 +362,7 @@ Wichtige Logzeilen: `Color absolute` (in Testständen folgt die Versionskennung,
 **Offen:**
 - Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
 - Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen.
+- Szenen insgesamt überarbeiten? Heute werden DALI-Szenen 1:1 durchgereicht; nach einer Szene kennt das Gateway die angefahrenen Werte nicht, alle Status bleiben auf dem alten Wert. Betrifft alle Kanaltypen, deshalb nicht Teil dieser Erweiterung (Frage F4 an den Maintainer, [Befunde](doc/RGBW-Befunde-Ausgangscode.md)).
 - Andere Treiber als der DA4-M.
 - Versionskennung im Log (`[v15b]`) vor dem Pull Request entfernen oder behalten.
 
