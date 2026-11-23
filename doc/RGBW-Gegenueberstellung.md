@@ -262,7 +262,7 @@ Diese Teile gab es in Zwischenständen des Forks. Sie sind im Diff gegen den Aus
 | *Bei Entsperren vorherigen Zustand wiederherstellen* | – | Ja/Nein, nur bei RGBW und eingeblendetem Sperrobjekt, mit Hinweistext |
 | Modul-Objekte Broadcast | Schalten, Dimmen absolut | + *Farbe RGBW* (6, DPST-251-600) und *Zurück* (7, DPST-1-15) |
 | „Farbe übertragen per“ | sichtbar bei HSV/RGB/xyY | bei RGBW ausgeblendet |
-| Szenen-Farbspalte | für Typ 0, 1, 3 | für Typ 0, 1, 3, **4** (nur RGB-Anteil) |
+| Szenen-Farbspalte | sichtbar bei HSV, RGB, xyY (Typ 0, 1, 3) | zusätzlich bei RGBW (Typ 4). Es ist derselbe RGB-Farbwähler (3 Byte), **ohne Weiß**: Ein Weißfeld je Szene bräuchte rund 1 KB Parameterspeicher (frei sind 63 Byte) und Änderungen an Script und Übertragung; gehört zu F4. |
 | Applikationsversion | 0.12 | **0.13** (`ReplacesVersions="0.0 0.10 0.11 0.12"`) |
 
 `colorType` (*Farbe ansteuern per*) hatte 2 Bit (Werte 0–3, alle vergeben). Für RGBW = 4 braucht er 3 Bit; das Bit dahinter ist belegt, deshalb liegt er jetzt in freien Bits weiter hinten im Parameterblock. Die Blockgröße ändert sich **nicht**. Die frei gewordenen Bits nutzen die neuen 1-Bit-Parameter: beim Einzel-EVG beide, bei der Gruppe nur *wiederherstellen*; *Helligkeit bei RGBW* der Gruppe liegt in Byte 17, Byte 4 Bit 3 der Gruppe ist jetzt frei.
@@ -329,14 +329,16 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 1. **Speicherplatz des Farbtyps:** Der Parameter *Farbe ansteuern per* hatte 2 Bit (vier Werte, alle vergeben). Für RGBW als fünften Wert braucht er 3 Bit; weil das Nachbarbit belegt ist, liegt er jetzt an einer freien Stelle (Einzel-EVG Byte 21 Bit 5–7, Gruppe Byte 17 Bit 2–4). Die alten Bits nutzen die neuen Parameter: beim Einzel-EVG *Helligkeit bei RGBW* und *wiederherstellen* (Byte 7 Bit 5 und 6), bei der Gruppe *wiederherstellen* (Byte 4 Bit 2); *Helligkeit bei RGBW* der Gruppe liegt in Byte 17 Bit 5, Byte 4 Bit 3 ist frei (Belegung in Abschnitt 6). Ist diese Umbelegung so in Ordnung, auch im Hinblick auf das Aktualisieren bestehender Geräte von 0.12?
 2. **Weißkanal:** Das Weiß geht mit `SET TEMPORARY WAF DIMLEVEL` (236) an den Treiber, Amber und Freecolour bleiben MASK. Am DA4-M im RGBW-Modus funktioniert das (B8). Nicht geprüft ist, ob andere RGBW-Treiber das Weiß ebenso auf diesem Kanal erwarten oder vorher eine Kanalzuordnung (`SET TEMPORARY RGBWAF CONTROL`, 237) brauchen. Ist 236 als Weg in Ordnung?
 3. **Grundverfahren:** Farbe und Helligkeit, die innerhalb von 80 ms eintreffen (Sammelfenster), gehen als **ein** Befehl an den Treiber: temporäre Farbe + `DAPC`; der Treiber übernimmt beides dank automatischer Aktivierung in einem Fade. Passt dieses Verfahren als Grundlage für RGBW?
-4. **Änderungen, die auch die anderen Kanaltypen betreffen** (nur diese Stellen ändern das Verhalten außerhalb von RGBW):
-   - `koHandleDimmAbs`: Der interne Ein/Aus-Zustand (`currentState`) folgt jetzt dem Wert (> 0 = ein, Treppenhaus ausgenommen). Im Ausgangscode blieb er nach *Dimmen absolut* stehen: Ein Kanal galt nach 0 % weiter als eingeschaltet, dann startete z. B. *Heller* nicht beim Minimum, und die HCL-Nachführung hätte die Lampe wieder eingeschaltet (aus dem Code abgeleitet).
-   - Pegelabfrage nach dem Stopp: ≈ 300 ms nach dem Stopp eines relativen Dimmens fragt das Gateway einmal den tatsächlichen Pegel ab und meldet ihn (nur wenn der Kanal eingeschaltet ist). Grund: Der letzte *Heller*/*Dunkler*-Schritt läuft im Treiber noch nach, der Status zeigte sonst einen geschätzten Wert. Kosten: eine DALI-Abfrage je Dimmstopp.
-   - Startwerte `_lastDayValue` / `_lastNightValue`: waren als 100 bzw. 10 eingetragen, wurden aber als DALI-Pegel gelesen (≈ 1,5 % bzw. 0,1 %); jetzt als 100 % bzw. 10 % umgerechnet. Wirkt nur beim ersten Einschalten nach einem Neustart mit *Einschaltwert = 0* (letzter Wert), wenn der Treiber beim Start aus war.
-   - Nebenwirkung bei HSV/RGB/TW/xyY: Ein Farbtelegramm nach *Dimmen absolut* 0 % setzt jetzt, wie schon nach *Schalten* Aus, den Status auf *Ein*/Tagwert, obwohl die Lampe aus bleibt (`TODO get real` im Ausgangscode, Hinweis am Ende der [Befunde](RGBW-Befunde-Ausgangscode.md)). Vorher blieb der Status in diesem Fall zufällig richtig, weil der Merker hing. Aus dem Code abgeleitet, nicht getestet.
-   - Ohne sichtbare Wirkung: `currentColor` wird mit 0 initialisiert; Broadcast *Schalten* läuft über `broadcastOn()`/`broadcastOff()` (gleicher `DAPC`).
+4. **Änderungen für alle Kanaltypen:** Drei kleine Korrekturen gelten nicht nur für RGBW, sondern für alle Kanaltypen (Einzelheiten unten). Sind sie so in Ordnung?
 
-   Sind diese Änderungen so in Ordnung?
+**Zu Frage 4: die Änderungen im Einzelnen**
+
+| Stelle | Was sich ändert | Wirkung |
+|---|---|---|
+| `koHandleDimmAbs` | Der interne Ein/Aus-Merker (`currentState`) folgt dem Wert (> 0 = ein), außer im Treppenhaus. Im Ausgangscode blieb er nach 0 % auf „ein“. | *Heller* startet nach 0 % wieder beim Minimum; die HCL-Nachführung schaltet eine auf 0 % gedimmte Lampe nicht wieder ein. **Nebenwirkung** bei HSV/RGB/TW/xyY: Ein Farbtelegramm nach 0 % setzt jetzt, wie schon nach *Schalten* Aus, den Status auf *Ein*/Tagwert, obwohl die Lampe aus bleibt (`TODO get real` im Ausgangscode, Hinweis am Ende der [Befunde](RGBW-Befunde-Ausgangscode.md)). Aus dem Code abgeleitet, nicht getestet. |
+| Pegelabfrage nach dem Stopp | ≈ 300 ms nach dem Stopp eines relativen Dimmens fragt das Gateway einmal den tatsächlichen Pegel ab, wenn der Kanal eingeschaltet ist. | *Dimmen Status* zeigt den echten Endwert statt eines geschätzten; eine DALI-Abfrage je Dimmstopp. |
+| Startwerte `_lastDayValue` / `_lastNightValue` | Statt der Zahlen 100 und 10 (als DALI-Pegel ≈ 1,5 % bzw. 0,1 %) jetzt die Pegel für 100 % bzw. 10 %. | Nur beim ersten Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war. |
+| `currentColor`, Broadcast *Schalten* | `currentColor` wird mit 0 initialisiert; Broadcast *Schalten* läuft über `broadcastOn()`/`broadcastOff()`. | keine sichtbare Wirkung (gleicher `DAPC`) |
 
 ## Anhang A: `src/RgbwHelper.h`
 
