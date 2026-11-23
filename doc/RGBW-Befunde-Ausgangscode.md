@@ -34,7 +34,7 @@ Kurzliste:
 | G10 | HSV schreibt V in *Dimmen Status* | Farbtyp HSV |
 | G11 | Start: toter Code, Gruppen ohne Zustand | alle |
 | G12 | `RECALL MIN` mit Antworterwartung | relatives Dimmen |
-| G13 | Taster am Gerät ohne Zustand/Status | alle |
+| G13 | Func-Taste: Zustand/Status nicht nachgeführt | alle, nur wenn Func-Aktion *Alle …* belegt |
 | G14 | Randwerte der Prozent-Umrechnung | alle (derzeit nicht erreichbar) |
 | G16 | *Schalten Status* erst beim Dimmstopp | alle außer RGBW |
 | G21 | Zeiger `currentDimmValue` anfangs nicht gesetzt | alle |
@@ -173,13 +173,27 @@ Hier ist der Fehler im neuen RGBW-Zweig korrigiert; für die anderen Kanaltypen 
 - **Stand:** offen.
 - **Vorschlag:** letzten Parameter auf `false`.
 
-### G13 – Taster am Gerät ohne Zustand und Status
+### G13 – Func-Taste am Gateway: Zustand und Status werden nicht nachgeführt
 
-- **Wo:** `DaliModule` (Funktionstasten, Zeilen 76–89).
-- **Was passiert:** Die Taster am Gateway senden per Broadcast `RECALL MAX` bzw. `OFF`, führen aber weder den internen Zustand noch die Statusobjekte der Kanäle und Gruppen nach.
-- **Folge:** Nach Bedienung am Gerät zeigen alle Statusobjekte den alten Zustand; folgende Befehle gehen von falschen Werten aus.
-- **Betrifft:** alle Kanaltypen.
+- **Hintergrund:** Der Func-Taste am Gateway kann man in der ETS drei Aktionen zuweisen: *Func Aktion Klick*, *Doppelklick* und *Langer Klick*. Zur Auswahl stehen *Deaktiviert*, *Alle Einschalten*, *Alle Ausschalten*, *Alle Umschalten*, *Sperren*, *Entsperren* und *Sperre Umschalten*. Ab Werk stehen alle drei auf *Deaktiviert*.
+- **Wo:** `DaliModule::handleFunc`. Die Zuordnung zur Taste steht in `DaliModule::setup`.
+- **Was passiert:**
+  - Bei *Alle Einschalten/Ausschalten/Umschalten* sendet das Gateway einen DALI-Broadcast, `RECALL MAX` oder `OFF`. Die Lampen schalten richtig. Anders als beim KNX-Objekt *Broadcast Schalten* (`koHandleSwitch`) wird danach aber `broadcastGroupState()` nicht aufgerufen. Der interne Zustand der Einzel-EVGs und Gruppen bleibt deshalb alt, und deren *Schalten Status* und *Dimmen Status* werden nicht gesendet.
+  - *Alle Umschalten* merkt sich die Richtung in einer eigenen Variable (`_currentToggleState`), die nur die Taste selbst ändert. Wurde vorher über KNX geschaltet, kann der erste Druck in die falsche Richtung gehen, zum Beispiel „Ein“, obwohl schon alles an ist. Dann braucht es einen zweiten Druck.
+  - *Alle Einschalten* nutzt immer `RECALL MAX`, also den Maximalwert des Treibers. Die Einschaltwerte Tag/Nacht und HCL werden dabei nicht beachtet.
+- **Folge:** Nach Bedienung am Gerät zeigen Visualisierung und Statusobjekte den alten Zustand. Der nächste KNX-Befehl an einen Kanal geht von falschen Werten aus, genauso wie bei G3. Ein Beispiel: Nach *Alle Ausschalten* an der Taste hält sich A0 noch für eingeschaltet.
+- **Betrifft:** alle Kanaltypen, aber nur, wenn eine Func-Aktion *Alle …* eingestellt ist. Ab Werk ist das nicht der Fall.
 - **Stand:** offen.
+- **Vorschlag:**
+  - Nach dem Broadcast `broadcastGroupState(true/false)` aufrufen, wie bei `koHandleSwitch`.
+  - Bei *Alle Einschalten* Status 100 % setzen, passend zu `RECALL MAX`.
+  - Für *Umschalten* die Richtung aus dem aktuellen Zustand ableiten, statt sie in einer eigenen Variable zu führen.
+- **Hinweis zu *Sperren* (kein Fehler, zur Einordnung; aus dem Code gelesen, nicht am Gerät getestet):**
+  - Ist das Gerät gesperrt, verwirft `processInputKo` **alle** eingehenden Telegramme: Einzel-EVGs, Gruppen, HCL-Werte, Broadcast und Tag/Nacht. Sie werden auch nach dem Entsperren nicht nachgeholt. Wird zum Beispiel während der Sperre auf Nacht umgeschaltet, bleibt das Gateway danach auf Tag.
+  - Es gibt kein Objekt, das die Sperre meldet. Die LED-Anzeige ist im Code auskommentiert (`info1Led.errorCode()`).
+  - Die Sperre wird nicht gespeichert: Nach einem Neustart ist das Gerät wieder entsperrt.
+  - Die Func-Taste selbst ist von der Sperre nicht betroffen. *Alle Ein/Aus* an der Taste funktioniert auch im gesperrten Zustand.
+  - Diese Sperre des ganzen Geräts ist eine andere als die Sperre je Einzel-EVG oder Gruppe (G4).
 
 ### G14 – Randwerte der Prozent-Umrechnung
 
