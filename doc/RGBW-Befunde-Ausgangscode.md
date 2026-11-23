@@ -16,7 +16,7 @@
 | Fehler im Ausgangscode, bei RGBW behoben | G4, G16, G24 |
 | Fehler im Ausgangscode, offen | G3, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G21, G22, G23 |
 | Nur Log, Warnungen, Hinweise | G15, G17, G18, G19 |
-| Ideen und Fragen | G20, F1, F2, F3, F4 |
+| Ideen und Vorschläge | G20, F1, F2, F3, F4 |
 
 Kurzliste:
 
@@ -218,7 +218,7 @@ Hier ist der Fehler im neuen RGBW-Zweig korrigiert; für die anderen Kanaltypen 
 - **Was passiert:** Nach *Broadcast Schalten* wird bei allen Kanälen und Gruppen nur *Schalten Status* gesetzt, **nicht** *Dimmen Status*; auch der gespeicherte Pegel bleibt stehen.
 - **Folge:** Nach *Broadcast Ein* (100 %) bzw. *Aus* zeigt *Dimmen Status* weiter den alten Wert. Bei RGBW bringt *Broadcast – Zurück* danach alle RGBW-Gruppen in ihrem gespeicherten Pegel zurück, aber eingeschaltet bzw. ausgeschaltet je nach Broadcast.
 - **Betrifft:** alle Kanaltypen.
-- **Stand:** offen (gefunden 21.11. im Test B1). Siehe auch F2/F3.
+- **Stand:** offen (gefunden 21.11. im Test B1). Genauere Erklärung folgt unter F2 und F3 (Abschnitt 5).
 
 ### G23 – HCL-Werte veralten im Modus *Manu*
 
@@ -247,21 +247,21 @@ Warnung des OpenKNX-Kerns, z. B. 171 ms beim Start. Nur Log; zusammen mit G2 (An
 
 Im Parameterspeicher (`KNX_FLASH`) sind nur noch 63 Byte frei. Vor neuen ETS-Parametern (z. B. G20, F3, F4) prüfen; ggf. Speicherbereich vergrößern.
 
-## 5. Ideen und Fragen
+## 5. Ideen und Vorschläge
 
 ### G20 – Idee: einstellbare Dimmkurve
 
 Das Gateway rechnet *Prozent* fest mit der logarithmischen DALI-Standardkurve (`DaliHelper::percentToArc`/`arcToPercent`; 1 % → 85, 20 % → 195, 50 % → 229, 100 % → 254). Vorschlag: ein allgemeiner ETS-Parameter „DALI logarithmisch (Standard)“ / „wahrnehmungsgleich“ (z. B. nach CIE L*: 10 % → 90, 50 % → 192). Die vier Funktionen in `DaliHelper.cpp` bekämen einen Modus; alle Stellen laufen schon über diese Funktionen (außer G5). Der Standard muss die heutige Kurve bleiben; braucht freie Bits (G19) und eine neue ETS-Version. Nicht RGBW-spezifisch.
 
-### F1 – *Broadcast – Zurück* auch für die anderen Kanaltypen?
+### F1 – Vorschlag: *Broadcast – Zurück* auch für die anderen Kanaltypen
 
-*Broadcast – Farbe RGBW* und *Broadcast – Zurück* gelten heute nur für RGBW, weil andere Treibertypen hier nicht testbar waren. Die Erweiterung auf die anderen Kanaltypen wäre klein (`rgbwRestore`/`rgbwSendState` als Vorlage). Frage an den Maintainer.
+*Broadcast – Farbe RGBW* und *Broadcast – Zurück* gelten heute nur für RGBW, weil andere Treibertypen hier nicht testbar waren. Die Erweiterung auf die anderen Kanaltypen wäre klein (`rgbwRestore`/`rgbwSendState` als Vorlage). **Vorschlag:** *Broadcast – Farbe RGBW* und *Broadcast – Zurück* auf alle Kanaltypen erweitern.
 
-### F2 – Soll der normale Broadcast den gespeicherten Zustand stehen lassen?
+### F2 – Vorschlag: normaler Broadcast lässt den gespeicherten Zustand stehen
 
-Heute überschreiben *Broadcast Schalten* und *Dimmen* den gespeicherten Zustand aller Kanäle; danach bringt *Zurück* den Broadcast-Zustand, nicht den von vorher. Würde der Broadcast den gespeicherten Zustand stehen lassen, wirkte *Zurück* auch nach „Alarm alles an“. Das ändert das Verhalten aller Typen (Status würde beim Broadcast nicht mehr nachgeführt). Frage an den Maintainer.
+Heute überschreiben *Broadcast Schalten* und *Dimmen* den gespeicherten Zustand aller Kanäle; danach bringt *Zurück* den Broadcast-Zustand, nicht den von vorher. Würde der Broadcast den gespeicherten Zustand stehen lassen, wirkte *Zurück* auch nach „Alarm alles an“. Das ändert das Verhalten aller Typen (Status würde beim Broadcast nicht mehr nachgeführt). **Vorschlag:** *Broadcast Schalten* und *Dimmen* als vorübergehenden Zustand behandeln, wie *Broadcast – Farbe RGBW*.
 
-### F3 – Broadcast insgesamt überarbeiten?
+### F3 – Vorschlag: Broadcast insgesamt überarbeiten
 
 Heute verhalten sich die Broadcast-Objekte unterschiedlich:
 - *Schalten* setzt Ein/Aus aller Kanäle und Gruppen, aber nicht *Dimmen Status* (G22).
@@ -275,7 +275,7 @@ Bei gemischten Anlagen (RGBW mit normalen Dimm- oder Schalttreibern) wirkt der P
 
 **Umsetzungsidee (wie bei RGBW):** Broadcast-Befehle als vorübergehenden Zustand behandeln, also kein Status und kein Überschreiben des gespeicherten Zustands; *Zurück* sendet für alle Kanaltypen den gespeicherten Zustand der Gruppen und der Kanäle ohne Gruppe erneut. Reine Schalttreiber können nur Ein/Aus. Nicht getestet (keine anderen Treibertypen vorhanden); Grundlage sind die RGBW-Tests. Zusammen mit F1, F2, G5 und G22 entscheiden. Bis dahin bleibt RGBW getrennt behandelt (Entscheidung 21.11.).
 
-### F4 – Szenen insgesamt überarbeiten?
+### F4 – Vorschlag: Szenen insgesamt überarbeiten
 
 Heute werden DALI-Szenen 1:1 durchgereicht:
 - Die Werte stehen nur im Treiber (in der ETS über Schaltflächen hineingeschrieben, keine Projektparameter; bei einem Treibertausch verloren).
@@ -287,4 +287,4 @@ Heute werden DALI-Szenen 1:1 durchgereicht:
 
 ### Hinweis: Farbtelegramm bei ausgeschaltetem Kanal (andere Farbtypen)
 
-Bei HSV, RGB, TW und xyY schickt ein Farbtelegramm an einen ausgeschalteten Kanal die Farbe an den Treiber und setzt die Statusobjekte auf *Ein* mit dem Tag-Einschaltwert (`// TODO get real` in `koHandleColor`), obwohl die Lampe aus bleibt. RGBW lässt den Status auf *Aus*. Soll das für die anderen Farbtypen ebenso korrigiert werden?
+Bei HSV, RGB, TW und xyY schickt ein Farbtelegramm an einen ausgeschalteten Kanal die Farbe an den Treiber und setzt die Statusobjekte auf *Ein* mit dem Tag-Einschaltwert (`// TODO get real` in `koHandleColor`), obwohl die Lampe aus bleibt. RGBW lässt den Status auf *Aus*. Die anderen Farbtypen haben wir bewusst nicht geändert. **Vorschlag:** HSV, RGB, TW und xyY ebenso anpassen, damit sich alle Farbtypen gleich verhalten und der Status überall den tatsächlichen Zustand der Lampe zeigt.
