@@ -451,6 +451,19 @@ Jeder Test wird vorher angekündigt und erst nach „Go“ gesendet.
 
 **Testumgebung: Zeitübergabe (nicht RGBW).** Zunächst kam keine Uhrzeit im Gateway an (`Ungueltige Sonnenstandsdaten` jede Minute, das Gateway liest 0/0/4 alle ≈ 32 s). Ursachen: Der IP-Router (Zeitgeber) beantwortet keine Leseanfragen, und Home Assistant hatte einen veralteten Keyring, in dem 0/0/4 noch als sichere Gruppenadresse stand (gesendet mit „E“, `SAI=A+C`; unverschlüsselte Leseanfragen wurden verworfen). Behoben durch einen neuen Keyring in Home Assistant und die Automation „KNX Uhrzeit und Datum senden“ (EG 0/0/2–0/0/4, OG 10/0/0–10/0/2; beim Start, stündlich und als Antwort auf Leseanfragen). Hinweis: Der IP-Router sendete auf 0/0/4 ein falsches Datum (15.11.2026).
 
+### Kurztest PR-Stand (23.11.2026, 02:46)
+
+Stand `fd15af0` (`v15b` ohne Versionskennung, Kommentare bereinigt) gebaut (`SUCCESS`), per 1200-Baud-Reset geflasht; `i`: 0.13.0, Configured; `aastat`: A0/A1 ON; Uhrzeit nach dem Neustart sofort vorhanden (Home Assistant beantwortet die Leseanfrage).
+
+| # | Gesendet | Ergebnis |
+|---|---|---|
+| K1 | G0 Grün, G0 Ein | **bestanden**: `Color absolute` (ohne Kennung), `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`; Ein: `Turning on day value` (nach dem Neustart gilt Tag, das Tag/Nacht-Objekt wird beim Start nicht gelesen, Ausgangscode), `RGBW: level 254 with temporary colour (one fade)`; beide grün; *G0 Schalten Status* Ein, *Dimmen Status* 100 % |
+| K2 | A0 Blau | **bestanden**: A0 wird blau, A1 bleibt grün. Log `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, weil A0 für das Gateway nach dem Gruppenbefehl noch „aus“ ist (Mitglieder werden nach Gruppenbefehlen nicht nachgeführt, G3); das `ACTIVATE` färbt die brennende Lampe trotzdem um. Erwartet war `RGBW: colour (ACTIVATE)`; Abweichung nur im Logtext, Folge von G3 |
+| K3 | Broadcast Rot, Broadcast Zurück | **bestanden**: `Broadcast RGBW: 255 0 0 0 -> mix 255 0 0 0, level 254 (one fade)`; `Broadcast back: RGBW groups and RGBW channels without group get their stored state` (neuer Logtext); G1/G2 (Farbe unbekannt) zuerst `off, level 0`, dann G0 `Send RGBW: 0 254 0 0 (temporary …)`, `stored state sent again: on, level 254`; beide wieder grün |
+| K4 | G0 Aus | **bestanden**: `RGBW: off`, `SetDimmState 0.0/0`, beide aus |
+
+Ergebnis: Der PR-Stand kompiliert und läuft wie `v15b`.
+
 ## 5. Grundtest (Testfälle seit v6)
 
 1. **DALI-Adressierung** (ETS: *Dali-GW → Adressierung*): Treiber scannen, lange Adresse eintragen, Kurzadresse `0` setzen (Kurzadresse n gehört zu Kanal An).
