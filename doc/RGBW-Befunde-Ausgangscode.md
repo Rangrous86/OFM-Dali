@@ -24,7 +24,7 @@ Kurzliste:
 |---|---|---|
 | G1 | `getResponse` gibt nach dem Löschen die falsche Antwort zurück | alle Treiberabfragen |
 | G2 | `process` löscht Einträge während der Schleife | alle Treiberabfragen |
-| G3 | Einzelkanäle übernehmen Gruppenbefehle nicht | alle Kanaltypen |
+| G3 | Zustand/Status der Einzelkanäle nach Gruppenbefehl nicht nachgeführt | alle Kanaltypen |
 | G4 | Sperre: vier Fehler | alle außer RGBW |
 | G5 | Broadcast *Dimmen absolut* rechnet falsch | alle |
 | G6 | Fehlerobjekt wird nie gesetzt | alle Einzel-EVGs |
@@ -97,10 +97,10 @@ Hier ist der Fehler im neuen RGBW-Zweig korrigiert; für die anderen Kanaltypen 
 
 ## 3. Fehler im Ausgangscode, offen
 
-### G3 – Einzelkanäle übernehmen Gruppenbefehle nicht
+### G3 – Zustand und Status der Einzelkanäle werden nach einem Gruppenbefehl nicht nachgeführt
 
 - **Wo:** `DaliModule::loopGroupState()` und `DaliModule::processGroupKo()`.
-- **Was passiert:** `loopGroupState()` soll nach einem Gruppenbefehl den Zustand der Einzelkanäle in dieser Gruppe nachführen, wird aber **nirgends aufgerufen**. Zusätzlich wären die Werte falsch kodiert: Der Ein/Aus-Wert (0/1) wird mit `percentToArc` umgerechnet und danach mit `== 1` verglichen (ergibt nie „Ein“), der Dimmwert wird als 1-Bit-Wert (`DPT_Switch`) gelesen statt als Prozent.
+- **Was passiert:** Es geht nur um den Zustand im Gateway und die Statusobjekte; der Befehl selbst erreicht die Treiber richtig, und es werden keine Befehle an Einzeladressen gesendet. `loopGroupState()` soll nach einem Gruppenbefehl den Zustand der Einzelkanäle in dieser Gruppe nachführen, wird aber **nirgends aufgerufen**. Zusätzlich wären die Werte falsch kodiert: Der Ein/Aus-Wert (0/1) wird mit `percentToArc` umgerechnet und danach mit `== 1` verglichen (ergibt nie „Ein“), der Dimmwert wird als 1-Bit-Wert (`DPT_Switch`) gelesen statt als Prozent.
 - **Folge:** Nach einem Befehl an eine Gruppe kennen die Einzelkanäle den neuen Zustand nicht: *Schalten Status*, *Dimmen Status* (und bei RGBW *Farbe Status*) der Einzel-EVGs bleiben alt, der interne Zustand ebenso. Ein folgender Einzelbefehl geht von falschen Werten aus. Im Kurztest am 23.11. sichtbar: Nach „G0 Ein“ meldet A0 beim Farbbefehl „Kanal ist aus“, obwohl die Lampe brennt.
 - **Betrifft:** alle Kanaltypen.
 - **Stand:** offen, als bekanntes Verhalten akzeptiert. Wirkt auf RGBW: Deshalb schickt ein Einzel-EVG bei einer reinen Farbänderung keinen Pegel mit, und *Broadcast – Zurück* nimmt bei Kanälen in einer Gruppe den Zustand der Gruppe.
