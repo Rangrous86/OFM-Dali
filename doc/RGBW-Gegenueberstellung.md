@@ -340,6 +340,8 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 | Startwerte `_lastDayValue` / `_lastNightValue` | Statt der Zahlen 100 und 10 (als DALI-Pegel ≈ 1,5 % bzw. 0,1 %) jetzt die Pegel für 100 % bzw. 10 %. | Nur beim ersten Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war. |
 | `currentColor`, Broadcast *Schalten* | `currentColor` wird mit 0 initialisiert; Broadcast *Schalten* läuft über `broadcastOn()`/`broadcastOff()`. | keine sichtbare Wirkung (gleicher `DAPC`) |
 
+Darüber hinaus für alle sichtbar, ohne Verhaltensänderung: die Broadcast-Objekte *Farbe RGBW* (26) und *Zurück* (27) in der ETS und die neuen Konsolenbefehle (`getCol`, `aastat`, `aaon`, `aawin`); der Speicherplatz des Farbtyps siehe Frage 1.
+
 ## Anhang A: `src/RgbwHelper.h`
 
 ```cpp
