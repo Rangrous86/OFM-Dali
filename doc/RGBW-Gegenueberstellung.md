@@ -35,16 +35,16 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | `doc/Applikationsbeschreibung-Dali.md` | geändert | Kopf: Infrarot-Text der Vorlage durch DALI ersetzt; neuer Abschnitt RGBW am Ende |
 
 ```
- src/DaliChannel.cpp             | 655 +++++++++++++++++++++++++++++++++++++++-
- src/DaliChannel.h               |  70 ++++-
- src/DaliModule.cpp              | 284 ++++++++++++++++-
+ src/DaliChannel.cpp             | 654 +++++++++++++++++++++++++++++++++++++++-
+ src/DaliChannel.h               |  69 ++++-
+ src/DaliModule.cpp              | 283 ++++++++++++++++-
  src/DaliModule.group.templ.xml  |  48 ++-
  src/DaliModule.h                |   9 +
  src/DaliModule.share.xml        |  15 +-
  src/DaliModule.single.templ.xml | 122 +++++---
  src/RgbwHelper.h                | 150 +++++++++
  test/test_rgbw_helper.cpp       | 136 +++++++++
- 9 files changed, 1415 insertions(+), 74 deletions(-)
+ 9 files changed, 1412 insertions(+), 74 deletions(-)
 ```
 
 **Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei kleine Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert, mit dem Maintainer abgestimmt, Abschnitt 7). Dazu kommt eine reine Darstellungsänderung in der ETS (Reihenfolge der Blöcke, Abschnitt 6).
@@ -88,7 +88,7 @@ Alle Zeilen, die im Ausgangscode entfernt oder ersetzt wurden. Alles andere im D
 | `rgbwOnValue()` | Einschaltwert für den RGBW-Code (`v15`): HCL-Helligkeit (HCL aktiv, Modus Auto, Helligkeit aktiv) vor Tag-/Nachtwert, bei 0 der letzte Tag-/Nachtwert. Gleiche Rangfolge wie `handleSwitchNormal` im Ausgangscode, das selbst unverändert bleibt. Benutzt bei *Ein* während der Sperre mit „wiederherstellen“, in `rgbwStoredLevel()` und für *Anschalten* beim Sperren/Entsperren (`rgbwLockArc`, `v15b`) |
 | `rgbwRestore()`, `rgbwColourKnown()`, `isInRgbwGroup()` | *Broadcast – Zurück*: Zustand erneut senden, Reihenfolge nach bekannter Farbe (B28), Einzelkanäle in RGBW-Gruppen überspringen |
 | `loopStopQuery()`, `_stopQueryAt` | nach dem relativen Dimmen: Pegelabfrage (alle) und bei RGBW die Farbe erneut mit `ACTIVATE` (B25); später Stopp nach Max/Min ohne Wirkung (B27) |
-| `rgbwSliderMode()`, `rgbwArcFromColour()`, `rgbwSliderStatus()`, `_mix`, `_lastLevelArc` | *Helligkeit bei RGBW = aus dem RGBW-Wert*: größter Kanal = Helligkeit, Mischung als Farbe, Status = Mischung × Pegel |
+| `rgbwSliderMode()`, `rgbwArcFromColour()`, `rgbwSliderStatus()`, `_mix` | *Helligkeit bei RGBW = aus dem RGBW-Wert*: größter Kanal = Helligkeit, Mischung als Farbe, Status = Mischung × Pegel |
 | `rgbwRestoreOnUnlock()`, `rgbwLockArc()`, `rgbwLock()`, `rgbwUnlock()` | Sperre bei RGBW mit korrigiertem Verhalten (S1–S4, Befunde G4) und Parameter „Bei Entsperren vorherigen Zustand wiederherstellen“. *Anschalten = Einschaltwert* beim Sperren und Entsperren nimmt `rgbwOnValue()`, also HCL vor Tag/Nacht (`v15b`) |
 | `sendRgbwState()` | 6-Byte-Status `[R,G,B,W,0x00,0x0F]` direkt in den Objektspeicher (nur bei Änderung), weil `sendKoStateOnChange` keinen 6-Byte-DPT kann |
 | `sendColorAsRGBW(r, g, b, w, activate)` | DALI: DTR0–2 + `SET TEMPORARY RGB DIMLEVEL` (235), DTR0–2 + `SET TEMPORARY WAF DIMLEVEL` (236, Amber/Freecolour = MASK), optional `ACTIVATE` (226) |
@@ -504,7 +504,7 @@ Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 26.11.20
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
-index dffeaaf..a9888c5 100644
+index dffeaaf..b6c6e7b 100644
 --- a/src/DaliChannel.cpp
 +++ b/src/DaliChannel.cpp
 @@ -1,4 +1,5 @@
@@ -1326,17 +1326,16 @@ index dffeaaf..a9888c5 100644
  }
  
  void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCommand)
-@@ -976,6 +1576,9 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
+@@ -976,6 +1576,8 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
          currentStep = value;
      }
  
-+    _lastLevelArc = value;
 +    rgbwSliderStatus(value);
 +
      float perc = DaliHelper::arcToPercentFloat(value);
  
      GroupObject& ko = knx.getGroupObject(calcKoNumber(DGW_Kodimm_state));
-@@ -1002,6 +1605,12 @@ void DaliChannel::updateCurrentDimmValue()
+@@ -1002,6 +1604,12 @@ void DaliChannel::updateCurrentDimmValue()
  
          case DimmType::Color:
          {
@@ -1349,7 +1348,7 @@ index dffeaaf..a9888c5 100644
              uint32_t value = currentColor[2];
              value |= currentColor[1] << 8;
              value |= currentColor[0] << 16;
-@@ -1060,13 +1669,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
+@@ -1060,13 +1668,35 @@ void DaliChannel::setDimmRef(uint8_t ref)
  void DaliChannel::setGroupState(uint16_t group, bool state)
  {
      if (group == AllGroups || _groups & 1 << group)
@@ -1387,7 +1386,7 @@ index dffeaaf..a9888c5 100644
  
  void DaliChannel::setMinArc(uint8_t min)
 diff --git a/src/DaliChannel.h b/src/DaliChannel.h
-index 19b49c9..3b70f6c 100644
+index 19b49c9..b0a47f4 100644
 --- a/src/DaliChannel.h
 +++ b/src/DaliChannel.h
 @@ -8,11 +8,17 @@
@@ -1427,7 +1426,7 @@ index 19b49c9..3b70f6c 100644
  		void setup() override;
  		void processInputKo(GroupObject &ko) override;
  		const bool isConfigured();
-@@ -106,17 +124,56 @@ class DaliChannel : public OpenKNX::Channel
+@@ -106,17 +124,55 @@ class DaliChannel : public OpenKNX::Channel
  		uint8_t currentStep = 0;
  		//Current lock state
  		bool currentIsLocked = false;
@@ -1468,7 +1467,6 @@ index 19b49c9..3b70f6c 100644
 +		// the amplitude of colour values (it normalises), so the level is sent as an own level command and the
 +		// colour as normalised mix (_mix, largest channel 255). The colour status shows mix x level.
 +		uint8_t _mix[4] = {0, 0, 0, 0};
-+		uint8_t _lastLevelArc = 0; // last level reported through setDimmState (DALI arc value)
 +		bool rgbwSliderMode();
 +		uint8_t rgbwArcFromColour();
 +		void rgbwSliderStatus(uint8_t arc);
@@ -1488,7 +1486,7 @@ index 19b49c9..3b70f6c 100644
  
  		//Group membership
  		uint16_t _groups = 0;
-@@ -129,8 +186,10 @@ class DaliChannel : public OpenKNX::Channel
+@@ -129,8 +185,10 @@ class DaliChannel : public OpenKNX::Channel
  		void setSwitchState(bool value, bool isSwitchCommand = true);
  		void setDimmState(uint8_t value, bool isDimmCommand = true, bool isLastCommand = false);
  		void updateCurrentDimmValue();
@@ -1500,7 +1498,7 @@ index 19b49c9..3b70f6c 100644
  		void sendColorAsXY(uint8_t r, uint8_t g, uint8_t b);
  		void sendKoStateOnChange(uint16_t koNr, const KNXValue &value, const Dpt &type);
  		void setTemperature(uint16_t value);
-@@ -148,6 +207,7 @@ class DaliChannel : public OpenKNX::Channel
+@@ -148,6 +206,7 @@ class DaliChannel : public OpenKNX::Channel
  		void handleColorRGB(GroupObject &ko);
  		void handleColorTW(GroupObject &ko);
  		void handleColorXYY(GroupObject &ko);
@@ -1509,7 +1507,7 @@ index 19b49c9..3b70f6c 100644
  		void koHandleColorAbs(GroupObject &ko, ColorChannel channel);
  		void koHandleHclCurve(GroupObject &ko);
 diff --git a/src/DaliModule.cpp b/src/DaliModule.cpp
-index 47a905c..51ed921 100644
+index 47a905c..432c57d 100644
 --- a/src/DaliModule.cpp
 +++ b/src/DaliModule.cpp
 @@ -1,4 +1,6 @@
@@ -1530,11 +1528,10 @@ index 47a905c..51ed921 100644
  }
  
  bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
-@@ -396,12 +402,46 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
+@@ -396,12 +402,45 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
          return true;
      }
  
-+
 +    if (command == "aawin")
 +    {
 +        if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
@@ -1577,7 +1574,7 @@ index 47a905c..51ed921 100644
      return false;
  }
  
-@@ -467,6 +507,137 @@ void DaliModule::cmdHandleGetLvl(bool hasArg, std::string arg)
+@@ -467,6 +506,137 @@ void DaliModule::cmdHandleGetLvl(bool hasArg, std::string arg)
          logErrorP("Fehler beim Auslesen %i", resp);
  }
  
@@ -1636,7 +1633,7 @@ index 47a905c..51ed921 100644
 +}
 +
 +// DT8 "automatic activation" (gear features/status bit 0): a temporary colour is taken over by the next arc power
-+// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start:
++// command (DAPC) without ACTIVATE. RGBW depends on it. Console only, never at start:
 +// "aastat" reads it from all configured RGBW channels, "aaon [yy]" switches it on permanently (stored in the driver).
 +int16_t DaliModule::rgbwQueryGearFeatures(uint8_t addr)
 +{
@@ -1715,7 +1712,7 @@ index 47a905c..51ed921 100644
  void DaliModule::cmdHandleScan(bool hasArg, std::string arg)
  {
      if (!hasArg || arg.length() != 4)
-@@ -688,6 +859,16 @@ void DaliModule::processGlobalKo(int koNum, GroupObject &ko)
+@@ -688,6 +858,16 @@ void DaliModule::processGlobalKo(int koNum, GroupObject &ko)
              koHandleDimm(ko);
              break;
  
@@ -1732,7 +1729,7 @@ index 47a905c..51ed921 100644
          // Tag/Nacht Objekt
          case DGW_Kodaynight:
              koHandleDayNight(ko);
-@@ -712,12 +893,112 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
+@@ -712,12 +892,112 @@ void DaliModule::koHandleSwitch(GroupObject &ko)
  {
      bool value = ko.value(DPT_Switch);
      logDebugP("Broadcast Switch %i", value);
@@ -1846,7 +1843,7 @@ index 47a905c..51ed921 100644
  void DaliModule::koHandleDimm(GroupObject &ko)
  {
      uint8_t value = ko.value(Dpt(5, 1));
-@@ -800,6 +1081,7 @@ void DaliModule::koHandleScene(GroupObject &ko)
+@@ -800,6 +1080,7 @@ void DaliModule::koHandleScene(GroupObject &ko)
              continue;
  
          logDebugP("Found scene number: %u, save: %u", i, save);

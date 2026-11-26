@@ -402,7 +402,6 @@ bool DaliModule::processCommand(const std::string cmd, bool diagnoseKo)
         return true;
     }
 
-
     if (command == "aawin")
     {
         if (!hasArg || arg.empty() || arg.length() > 4 || arg.find_first_not_of("0123456789") != std::string::npos)
@@ -562,7 +561,7 @@ void DaliModule::cmdHandleGetCol(bool hasArg, std::string arg)
 }
 
 // DT8 "automatic activation" (gear features/status bit 0): a temporary colour is taken over by the next arc power
-// command (DAPC, GO TO LAST ACTIVE LEVEL) without ACTIVATE. RGBW depends on it. Console only, never at start:
+// command (DAPC) without ACTIVATE. RGBW depends on it. Console only, never at start:
 // "aastat" reads it from all configured RGBW channels, "aaon [yy]" switches it on permanently (stored in the driver).
 int16_t DaliModule::rgbwQueryGearFeatures(uint8_t addr)
 {

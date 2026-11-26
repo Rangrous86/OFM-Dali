@@ -1576,7 +1576,6 @@ void DaliChannel::setDimmState(uint8_t value, bool isDimmCommand, bool isLastCom
         currentStep = value;
     }
 
-    _lastLevelArc = value;
     rgbwSliderStatus(value);
 
     float perc = DaliHelper::arcToPercentFloat(value);

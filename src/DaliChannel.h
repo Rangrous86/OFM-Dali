@@ -159,7 +159,6 @@ class DaliChannel : public OpenKNX::Channel
 		// the amplitude of colour values (it normalises), so the level is sent as an own level command and the
 		// colour as normalised mix (_mix, largest channel 255). The colour status shows mix x level.
 		uint8_t _mix[4] = {0, 0, 0, 0};
-		uint8_t _lastLevelArc = 0; // last level reported through setDimmState (DALI arc value)
 		bool rgbwSliderMode();
 		uint8_t rgbwArcFromColour();
 		void rgbwSliderStatus(uint8_t arc);

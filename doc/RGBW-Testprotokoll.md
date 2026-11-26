@@ -33,6 +33,7 @@ Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026
 | (23.11.) | 23.11.2026 | Versionskennung `RGBW_BUILD_TAG` entfernt (Testhilfe); Logzeile wieder `Color absolute` wie im Ausgangscode. `fromDaliLevel` → `knxFromDaliLevel`. Kommentare im Code bereinigt: Verweise auf die alte README und interne Test-Kürzel (B…, C…, S1–S4) durch kurze Erklärungen ersetzt, deutsche Kommentare in `RgbwHelper.h` übersetzt; Logzeile `Broadcast zurueck` → `Broadcast back`. Neu: Abschnitt RGBW in `doc/Applikationsbeschreibung-Dali.md` (für den PR). Keine Funktionsänderung | – |
 | (24.11.) | 24.11.2026 | Kommentar zu `currentState` in `koHandleDimmAbs` berichtigt (Begründung für alle Kanaltypen). Keine Funktionsänderung | – |
 | (26.11.) | 26.11.2026 | ETS, nur Darstellung: Einzel-EVG und Gruppe mit gleicher Reihenfolge *Farbe*, *Treppenlicht*, *Sperre*; Text *Verhalten bei Sperre* bei beiden. Abstimmung mit dem Maintainer eingetragen (Speicherplatz, Grundverfahren, kleine Änderungen für alle Kanaltypen) | O1 (offen) |
+| (26.11.b) | 26.11.2026 | Aufräumen ohne Funktionsänderung: ungenutzte Variable `_lastLevelArc` entfernt (Rest aus `v12`), Kommentar zur automatischen Aktivierung ohne `GO TO LAST ACTIVE LEVEL`, doppelte Leerzeile entfernt | O1 (offen) |
 
 ## 2. Befunde zum Treiber DA4-M (B1–B29)
 
