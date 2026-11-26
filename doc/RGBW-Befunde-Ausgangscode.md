@@ -18,6 +18,8 @@
 | Nur Log, Warnungen, Hinweise | G15, G17, G18, G19 |
 | Ideen und Vorschläge | G20, F1, F2, F3, F4 |
 
+**Vorgehen:** Diese Befunde sind nicht Teil des RGBW-PR. Vorschlag: nach dem RGBW-PR in eigenen, kleinen PRs nach Themen beheben (Reihenfolge nach Absprache); G1 und G2 betreffen die Bibliothek `OpenKNX/dali` und können unabhängig davon dort korrigiert werden.
+
 Kurzliste:
 
 | # | Thema | betrifft |
@@ -25,7 +27,7 @@ Kurzliste:
 | G1 | `getResponse` gibt nach dem Löschen die falsche Antwort zurück | alle Treiberabfragen |
 | G2 | `process` löscht Einträge während der Schleife | alle Treiberabfragen |
 | G3 | Zustand/Status der Einzelkanäle nach Gruppenbefehl nicht nachgeführt | alle Kanaltypen |
-| G4 | Sperre: vier Fehler | alle außer RGBW |
+| G4 | Sperre: fünf Fehler | alle außer RGBW |
 | G5 | Broadcast *Dimmen absolut* rechnet falsch | alle |
 | G6 | Fehlerobjekt wird nie gesetzt | alle Einzel-EVGs |
 | G7 | Treppenhaus: falscher *Dimmen Status* beim Einschalten | Treppenhaus |
@@ -68,16 +70,18 @@ Diese Punkte gehören an das Repository der Bibliothek. Sie betreffen **jede** A
 
 Hier ist der Fehler im neuen RGBW-Zweig korrigiert; für die anderen Kanaltypen besteht er weiter.
 
-### G4 – Sperre: vier Fehler in `koHandleLock`
+### G4 – Sperre: fünf Fehler in `koHandleLock`
 
 - **Wo:** `DaliChannel::koHandleLock`.
 - **Was passiert:**
   1. „Anschalten“ und „Ausschalten“ bei *Verhalten bei Sperren/Entsperren* sind vertauscht: „Anschalten“ schaltet aus und umgekehrt.
   2. „Fester Wert in %“ wird direkt als DALI-Pegel gesendet, ohne Umrechnung: 50 % werden als Pegel 50 gesendet, das sind etwa 0,1 %.
-  3. Gruppen lesen die Sperr-Parameter des **Kanals** mit derselben Nummer (`ParamDGW_…` statt `ParamDGWG_…`), nicht ihre eigenen.
+  3. Gruppen lesen *Verhalten bei Sperre/Entsperren* und *Fester Wert* vom **Einzel-EVG mit derselben Nummer** (`ParamDGW_…` statt `ParamDGWG_…`), nicht ihre eigenen; Gruppe 3 sperrt sich also mit den Einstellungen von A3. Der Befehl selbst geht an die richtige Gruppe, und *Sperren bei* liest die Gruppe richtig.
   4. Der interne Ein/Aus-Zustand (`currentState`) wird beim Sperren und Entsperren nicht nachgeführt; folgende Befehle (z. B. Dimmen relativ, *Zurück*) gehen von einem falschen Zustand aus.
+  5. Der *Dimmen Status* wird mit `setDimmState(percentToArc(behavevalue))` gesetzt: Beim Einschaltwert ist `behavevalue` schon ein DALI-Pegel und wird doppelt umgerechnet (wie G7); beim festen Wert ist der Status richtig umgerechnet, die Lampe bekommt aber den unumgerechneten Wert (Punkt 2), Status und Lampe passen nicht zusammen.
 - **Betrifft:** alle Kanaltypen außer RGBW.
 - **Stand:** bei RGBW behoben (eigener Zweig `rgbwLock`/`rgbwUnlock`/`rgbwLockArc`), getestet. Andere Kanaltypen offen.
+- **Vorschlag:** nach dem RGBW-PR in einem eigenen PR für alle Kanaltypen beheben (zusammen mit G24). Die ETS-Parameter bleiben dieselben; `rgbwLockArc` wird dabei zur gemeinsamen Funktion, im RGBW-Zweig bleiben nur die RGBW-Teile (Farbe mit dem Pegel, Sammelfenster, *wiederherstellen*).
 
 ### G16 – *Schalten Status* erst beim Dimmstopp
 
