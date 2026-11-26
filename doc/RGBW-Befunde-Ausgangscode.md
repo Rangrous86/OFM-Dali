@@ -5,7 +5,7 @@
 - Diese Stellen werden im RGBW-PR **nicht** verändert, außer wo „bei RGBW behoben“ steht: Dort ist der Fehler nur im neuen RGBW-Zweig korrigiert, für die anderen Kanaltypen ist er unverändert.
 - Gefunden durch Code-Durchsicht (18.11.2026, G1–G15) und durch Hardware-Tests mit zwei DA4-M (RGBW) am `GW-REG1-Dali` (19.–23.11.2026). Andere Treibertypen waren nicht vorhanden; Befunde zu anderen Kanaltypen sind deshalb aus dem Code abgeleitet, nicht am Gerät bestätigt.
 - Die Nummern G1–G24 und F1–F4 sind dieselben wie im [Testprotokoll](RGBW-Testprotokoll.md); dort stehen auch die Testdetails. Begriffe und Kürzel: [README, Abschnitt 12](../README.md#12-begriffe-und-kürzel).
-- Fragen zur RGBW-Erweiterung selbst (Speicherlayout, Weißkanal, Grundverfahren, Änderungen für alle Kanaltypen) stehen in Abschnitt 7 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
+- Die Abstimmung zur RGBW-Erweiterung selbst (Speicherplatz, Grundverfahren, kleine Änderungen für alle Kanaltypen) steht in Abschnitt 7 der [Gegenüberstellung](RGBW-Gegenueberstellung.md).
 - Zeilenangaben beziehen sich auf den Ausgangscode (`a120578`).
 
 ## Übersicht

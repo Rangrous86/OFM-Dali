@@ -23,7 +23,7 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 7. [Installation](#7-installation)
 8. [Test](#8-test)
 9. [Console](#9-console)
-10. [Open points and questions](#10-open-points-and-questions)
+10. [Open points](#10-open-points)
 11. [Further documents](#11-further-documents)
 12. [Terms and abbreviations](#12-terms-and-abbreviations)
 
@@ -69,11 +69,12 @@ Whether values below 100 % change the brightness depends on the parameter *Helli
 
 ## 3. What has changed?
 
-**For all channel types** (small fixes to the original code):
+**For all channel types** (small fixes to the original code, agreed with the maintainer):
 
 - *Dimmen absolut* sets the internal on/off flag according to the value (0 % = off). Before, it stayed *on* after 0 %; then e.g. *brighter* did not start at the minimum, and the HCL tracking would have switched the lamp on again.
 - After the stop of a relative dimming, the level is queried and reported once ≈ 300 ms later (the last dimming step is still running in the driver).
 - The start values for "switch on with last value" are DALI levels for 100 % and 10 % (before: the numbers 100 and 10, i.e. ≈ 1.5 % and 0.1 %).
+- ETS, display only: single EVG and group now show the blocks the same way, in the order *Farbe* (colour), *Treppenlicht* (staircase), *Sperre* (lock); the single EVG now says *Verhalten bei Sperre* like the group (before *Sperren*).
 
 **RGBW only** (the existing path is kept for all other types):
 
@@ -110,7 +111,7 @@ Requirement: the ETS application 0.13 is imported and the device inserted or upd
 | *Farbe ansteuern per* (colour control) | **RGBW** |
 | *Helligkeit bei RGBW* (brightness with RGBW) | **Via object "Dimmen absolut"** (default): the colour is the mix only, the brightness comes from *Dimmen absolut*, *Schalten* and *Dimmen relativ*. Right for visualisations with their own brightness address (e.g. Home Assistant with `brightness_address`).<br>**From the RGBW value:** the largest channel is the brightness. For clients that only have one colour object. |
 | *Einschaltwert Tag / Nacht* (switch-on value day/night) | brightness when switching on if no HCL brightness is active; **0 = last dim value**. To get the last dim value at switch-on, set 0 here, otherwise the set value applies (order in section 5) |
-| *Sperrobjekt anzeigen* (show lock object) | optional; then *Sperren bei*, *Verhalten bei Sperren* (no change / switch on = switch-on value / switch off / fixed value in %) and *Verhalten bei Entsperren*. For RGBW, *switch on* takes the switch-on value by the order in section 5 (HCL before day/night) |
+| *Sperrobjekt anzeigen* (show lock object) | optional; then *Sperren bei*, *Verhalten bei Sperre* (no change / switch on = switch-on value / switch off / fixed value in %) and *Verhalten bei Entsperren*. For RGBW, *switch on* takes the switch-on value by the order in section 5 (HCL before day/night) |
 | *Bei Entsperren vorherigen Zustand wiederherstellen* (restore previous state on unlock) | RGBW with lock object only. **No:** commands during the lock are discarded, *Verhalten bei Entsperren* applies on unlock. **Yes:** *Schalten*, *Dimmen absolut* and *Farbe* during the lock are stored and executed as one command on unlock; *Verhalten bei Entsperren* does not apply then. |
 | *HCL aktivieren* | brightness possible, takes priority over day/night at switch-on; an activated colour temperature is skipped for RGBW. Tested with `v15`/`v15b` (H1–H6) (section 6) |
 | *Farbe übertragen per* | not relevant for RGBW (hidden) |
@@ -358,7 +359,7 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 Important log lines: `Color absolute`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast back: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` or `… ignored`.
 
-## 10. Open points and questions
+## 10. Open points
 
 **Open:**
 - Regression test of the other colour types (HSV, RGB, TW, xyY) and channel types on hardware.
@@ -369,7 +370,7 @@ Important log lines: `Color absolute`, `RGBW: level N with temporary colour (one
 **Ideas, deliberately postponed:**
 - Staircase light with RGBW (colour at switch-on, collection window). Deliberately not in this version; may follow in a later version if needed.
 
-**For the maintainer:** questions about the RGBW extension in the [comparison](doc/RGBW-Gegenueberstellung.md), section 7; findings and proposals for the original code and the DALI library in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) (German).
+**For the maintainer:** agreement on the RGBW extension in the [comparison](doc/RGBW-Gegenueberstellung.md), section 7; findings and proposals for the original code and the DALI library in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md) (German).
 
 ## 11. Further documents
 

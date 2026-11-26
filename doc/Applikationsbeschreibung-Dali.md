@@ -70,7 +70,7 @@ Nur bei RGBW und eingeblendetem Sperrobjekt.
 ### **Weitere Parameter bei RGBW**
 
 * *Einschaltwert Tag / Nacht*: Helligkeit beim Einschalten, wenn keine HCL-Helligkeit aktiv ist. 0 = letzter Dimmwert.
-* *Verhalten bei Sperren / Entsperren*: Bei RGBW wirkt die Sperre nur auf die Helligkeit, die Farbe bleibt im Treiber. *Anschalten* = Einschaltwert, *Ausschalten* = aus, *Fester Wert* in Prozent; Gruppen verwenden ihre eigenen Sperr-Parameter.
+* *Verhalten bei Sperre / Entsperren*: Bei RGBW wirkt die Sperre nur auf die Helligkeit, die Farbe bleibt im Treiber. *Anschalten* = Einschaltwert, *Ausschalten* = aus, *Fester Wert* in Prozent; Gruppen verwenden ihre eigenen Sperr-Parameter.
 * *HCL aktivieren*: Die HCL-Helligkeit wird bei RGBW verwendet, eine aktivierte Farbtemperatur wird übersprungen.
 * *Farbe übertragen per*: ohne Bedeutung bei RGBW.
 

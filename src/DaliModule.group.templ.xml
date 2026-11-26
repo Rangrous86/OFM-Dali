@@ -325,6 +325,14 @@
                       <ComObjectRefRef RefId="%AID%_O-%T%3%CC%018_R-%T%3%CC%01801" />
                     </when>
                   </choose>
+                  <choose ParamRefId="%AID%_P-%T%3%CC%004_R-%T%3%CC%00401">
+                    <when test="1">
+                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
+                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%006_R-%T%3%CC%00601" />
+                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%007_R-%T%3%CC%00701" />
+                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%005_R-%T%3%CC%00501" />
+                    </when>
+                  </choose>
                   <choose ParamRefId="%AID%_P-%T%3%CC%003_R-%T%3%CC%00301">
                     <when test="1">
                       <ComObjectRefRef RefId="%AID%_O-%T%3%CC%005_R-%T%3%CC%00501" />
@@ -352,14 +360,6 @@
                           </choose>
                         </when>
                       </choose>
-                    </when>
-                  </choose>
-                  <choose ParamRefId="%AID%_P-%T%3%CC%004_R-%T%3%CC%00401">
-                    <when test="1">
-                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
-                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%006_R-%T%3%CC%00601" />
-                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%007_R-%T%3%CC%00701" />
-                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%005_R-%T%3%CC%00501" />
                     </when>
                   </choose>
                 </when>

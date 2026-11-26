@@ -23,7 +23,7 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 7. [Installation](#7-installation)
 8. [Test](#8-test)
 9. [Konsole](#9-konsole)
-10. [Offen und Fragen](#10-offen-und-fragen)
+10. [Offen](#10-offen)
 11. [Weitere Dokumente](#11-weitere-dokumente)
 12. [Begriffe und Kürzel](#12-begriffe-und-kürzel)
 
@@ -69,11 +69,12 @@ Ob Werte unter 100 % die Helligkeit ändern, hängt vom Parameter *Helligkeit be
 
 ## 3. Was ist geändert?
 
-**Für alle Kanaltypen** (kleine Korrekturen am Ausgangscode):
+**Für alle Kanaltypen** (kleine Korrekturen am Ausgangscode, mit dem Maintainer abgestimmt):
 
 - *Dimmen absolut* setzt den internen Ein/Aus-Merker passend zum Wert (0 % = aus). Vorher blieb er nach 0 % auf *ein*; dann startete z. B. *Heller* nicht beim Minimum, und die HCL-Nachführung hätte die Lampe wieder eingeschaltet.
 - Nach dem Stopp eines relativen Dimmens wird der Pegel ≈ 300 ms später einmal abgefragt und gemeldet (der letzte Dimmschritt läuft im Treiber noch).
 - Die Startwerte für „Einschalten mit letztem Wert“ sind DALI-Pegel für 100 % bzw. 10 % (vorher die Zahlen 100 und 10, also ≈ 1,5 % bzw. 0,1 %).
+- ETS, nur Darstellung: Einzel-EVG und Gruppe zeigen die Blöcke jetzt gleich, in der Reihenfolge *Farbe*, *Treppenlicht*, *Sperre*; beim Einzel-EVG heißt es wie bei der Gruppe *Verhalten bei Sperre* (vorher *Sperren*).
 
 **Nur bei RGBW** (der bisherige Weg bleibt für alle anderen Typen):
 
@@ -110,7 +111,7 @@ Voraussetzung: Die ETS-Applikation 0.13 ist importiert und das Gerät eingefügt
 | *Farbe ansteuern per* | **RGBW** |
 | *Helligkeit bei RGBW* | **Über Objekt „Dimmen absolut“** (Standard): Die Farbe ist nur die Mischung, die Helligkeit kommt über *Dimmen absolut*, *Schalten* und *Dimmen relativ*. Richtig für Visualisierungen mit eigener Helligkeitsadresse (z. B. Home Assistant mit `brightness_address`).<br>**Aus dem RGBW-Wert:** Der größte Kanal ist die Helligkeit. Für Clients, die nur ein Farbobjekt haben. |
 | *Einschaltwert Tag / Nacht* | Helligkeit beim Einschalten, wenn keine HCL-Helligkeit aktiv ist; **0 = letzter Dimmwert**. Wer beim Einschalten den letzten Dimmwert will, muss hier 0 einstellen, sonst gilt der eingestellte Wert (Rangfolge in Abschnitt 5) |
-| *Sperrobjekt anzeigen* | optional; dann *Sperren bei*, *Verhalten bei Sperren* (Keine Änderung / Anschalten = Einschaltwert / Ausschalten / Fester Wert in %) und *Verhalten bei Entsperren*. *Anschalten* nimmt bei RGBW den Einschaltwert nach der Rangfolge in Abschnitt 5 (HCL vor Tag/Nacht) |
+| *Sperrobjekt anzeigen* | optional; dann *Sperren bei*, *Verhalten bei Sperre* (Keine Änderung / Anschalten = Einschaltwert / Ausschalten / Fester Wert in %) und *Verhalten bei Entsperren*. *Anschalten* nimmt bei RGBW den Einschaltwert nach der Rangfolge in Abschnitt 5 (HCL vor Tag/Nacht) |
 | *Bei Entsperren vorherigen Zustand wiederherstellen* | nur bei RGBW mit Sperrobjekt. **Nein:** Befehle während der Sperre werden verworfen, beim Entsperren gilt *Verhalten bei Entsperren*. **Ja:** *Schalten*, *Dimmen absolut* und *Farbe* während der Sperre werden gespeichert und beim Entsperren als ein Befehl ausgeführt; *Verhalten bei Entsperren* gilt dann nicht. |
 | *HCL aktivieren* | Helligkeit möglich, hat beim Einschalten Vorrang vor Tag/Nacht; eine aktivierte Farbtemperatur wird bei RGBW übersprungen. Getestet mit `v15`/`v15b` (H1–H6) (Abschnitt 6) |
 | *Farbe übertragen per* | ohne Bedeutung bei RGBW (ausgeblendet) |
@@ -358,7 +359,7 @@ g++ -std=c++11 -Wall -Isrc test/test_rgbw_helper.cpp -o /tmp/test_rgbw && /tmp/t
 
 Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one fade)`, `RGBW: group colour with the group level N (one fade)`, `RGBW: colour (ACTIVATE)`, `RGBW: colour for a switched-off channel, lamp stays off (ACTIVATE)`, `RGBW: off`, `RGBW: colour again after relative dimming`, `RGBW: locking`/`unlocking`, `RGBW: stored state sent again`, `Broadcast RGBW: …`, `Broadcast back: …`, `RGBW: colour temperature skipped (N K)`, `RGBW: locked, HCL level stored for the unlock` bzw. `… ignored`.
 
-## 10. Offen und Fragen
+## 10. Offen
 
 **Offen:**
 - Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
@@ -369,7 +370,7 @@ Wichtige Logzeilen: `Color absolute`, `RGBW: level N with temporary colour (one 
 **Ideen, bewusst zurückgestellt:**
 - Treppenhauslicht mit RGBW (Farbe beim Einschalten, Sammelfenster). Mit Absicht nicht in dieser Version; bei Bedarf in einer späteren Version.
 
-**Für den Maintainer:** Fragen zur RGBW-Erweiterung in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 7; Befunde und Vorschläge zum Ausgangscode und zur DALI-Bibliothek in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md).
+**Für den Maintainer:** Abstimmung zur RGBW-Erweiterung in der [Gegenüberstellung](doc/RGBW-Gegenueberstellung.md), Abschnitt 7; Befunde und Vorschläge zum Ausgangscode und zur DALI-Bibliothek in [RGBW-Befunde-Ausgangscode.md](doc/RGBW-Befunde-Ausgangscode.md).
 
 ## 11. Weitere Dokumente
 

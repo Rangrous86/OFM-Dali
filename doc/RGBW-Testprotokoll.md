@@ -32,6 +32,7 @@ Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026
 | `v15b` | 22.11.2026 | Sperre und HCL: „Anschalten = Einschaltwert“ beim Sperren/Entsperren nimmt `rgbwOnValue()` (HCL vor Tag/Nacht, `rgbwLockArc`); HCL-Nachführung während einer Sperre sendet nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve (`setBrightness`, G24). Gefunden beim Vorbereiten von H6 | H6a, H6b **bestanden** (22.11.) |
 | (23.11.) | 23.11.2026 | Versionskennung `RGBW_BUILD_TAG` entfernt (Testhilfe); Logzeile wieder `Color absolute` wie im Ausgangscode. `fromDaliLevel` → `knxFromDaliLevel`. Kommentare im Code bereinigt: Verweise auf die alte README und interne Test-Kürzel (B…, C…, S1–S4) durch kurze Erklärungen ersetzt, deutsche Kommentare in `RgbwHelper.h` übersetzt; Logzeile `Broadcast zurueck` → `Broadcast back`. Neu: Abschnitt RGBW in `doc/Applikationsbeschreibung-Dali.md` (für den PR). Keine Funktionsänderung | – |
 | (24.11.) | 24.11.2026 | Kommentar zu `currentState` in `koHandleDimmAbs` berichtigt (Begründung für alle Kanaltypen). Keine Funktionsänderung | – |
+| (26.11.) | 26.11.2026 | ETS, nur Darstellung: Einzel-EVG und Gruppe mit gleicher Reihenfolge *Farbe*, *Treppenlicht*, *Sperre*; Text *Verhalten bei Sperre* bei beiden. Abstimmung mit dem Maintainer eingetragen (Speicherplatz, Grundverfahren, kleine Änderungen für alle Kanaltypen) | O1 (offen) |
 
 ## 2. Befunde zum Treiber DA4-M (B1–B29)
 

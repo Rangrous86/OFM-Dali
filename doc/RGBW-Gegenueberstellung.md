@@ -17,7 +17,7 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 4. [Vorher/Nachher an den wichtigsten Stellen](#4-vorhernachher-an-den-wichtigsten-stellen)
 5. [Im Laufe der Entwicklung wieder entfernt](#5-im-laufe-der-entwicklung-wieder-entfernt)
 6. [ETS-Applikation und Speicherlayout](#6-ets-applikation-und-speicherlayout)
-7. [Offen und Fragen zur RGBW-Erweiterung](#7-offen-und-fragen-zur-rgbw-erweiterung)
+7. [Offen und Abstimmung zur RGBW-Erweiterung](#7-offen-und-abstimmung-zur-rgbw-erweiterung)
 8. [Anhang A: `src/RgbwHelper.h`](#anhang-a-srcrgbwhelperh)
 9. [Anhang B: vollständiges Diff](#anhang-b-vollständiges-diff)
 
@@ -30,24 +30,24 @@ Diese Gegenüberstellung zeigt, **was am Code geändert ist**: welche Dateien ne
 | `src/DaliChannel.cpp` / `.h` | geändert | RGBW-Zweig je Kanal und Gruppe: Sammelfenster, Senden, Status, relatives Dimmen, Sperre, Zurück, Slider-Modus, HCL |
 | `src/DaliModule.cpp` / `.h` | geändert | Broadcast (Schalten ohne Farbe, neu *Farbe RGBW* und *Zurück*), Szenen, Konsolenbefehle |
 | `src/DaliModule.share.xml` | geändert | Farbtyp RGBW, Parametertyp *Helligkeit bei RGBW*, zwei Broadcast-Objekte |
-| `src/DaliModule.single.templ.xml` | geändert | Einzeladresse: `colorType` verschoben, zwei neue Parameter, zwei Objekt-Referenzen |
-| `src/DaliModule.group.templ.xml` | geändert | Gruppe: wie Einzeladresse |
+| `src/DaliModule.single.templ.xml` | geändert | Einzeladresse: `colorType` verschoben, zwei neue Parameter, zwei Objekt-Referenzen; Text *Verhalten bei Sperre* wie bei der Gruppe; Blöcke in der Reihenfolge *Farbe*, *Treppenlicht*, *Sperre* (nur Darstellung) |
+| `src/DaliModule.group.templ.xml` | geändert | Gruppe: wie Einzeladresse; Blöcke wie beim Einzel-EVG in der Reihenfolge *Farbe*, *Treppenlicht*, *Sperre* (nur Darstellung) |
 | `doc/Applikationsbeschreibung-Dali.md` | geändert | Kopf: Infrarot-Text der Vorlage durch DALI ersetzt; neuer Abschnitt RGBW am Ende |
 
 ```
  src/DaliChannel.cpp             | 655 +++++++++++++++++++++++++++++++++++++++-
  src/DaliChannel.h               |  70 ++++-
  src/DaliModule.cpp              | 284 ++++++++++++++++-
- src/DaliModule.group.templ.xml  |  32 +-
+ src/DaliModule.group.templ.xml  |  48 ++-
  src/DaliModule.h                |   9 +
  src/DaliModule.share.xml        |  15 +-
- src/DaliModule.single.templ.xml |  66 ++--
+ src/DaliModule.single.templ.xml | 122 +++++---
  src/RgbwHelper.h                | 150 +++++++++
  test/test_rgbw_helper.cpp       | 136 +++++++++
- 9 files changed, 1379 insertions(+), 38 deletions(-)
+ 9 files changed, 1415 insertions(+), 74 deletions(-)
 ```
 
-**Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert).
+**Grundsatz:** Der Ausgangscode bleibt für alle anderen Kanal- und Farbtypen unverändert. Die RGBW-Logik hängt sich an die bestehenden Stellen mit `if (isRgbw())` an; der bisherige Weg steht jeweils im `else`. Nur drei kleine Änderungen gelten für **alle** Kanaltypen (in Abschnitt 2 mit „alle“ markiert, mit dem Maintainer abgestimmt, Abschnitt 7). Dazu kommt eine reine Darstellungsänderung in der ETS (Reihenfolge der Blöcke, Abschnitt 6).
 
 ## 2. Ersetzte Stellen im Ausgangscode
 
@@ -263,6 +263,8 @@ Diese Teile gab es in Zwischenständen des Forks. Sie sind im Diff gegen den Aus
 | Modul-Objekte Broadcast | Schalten, Dimmen absolut | + *Farbe RGBW* (6, DPST-251-600) und *Zurück* (7, DPST-1-15) |
 | „Farbe übertragen per“ | sichtbar bei HSV/RGB/xyY | bei RGBW ausgeblendet |
 | Szenen-Farbspalte | sichtbar bei HSV, RGB, xyY (Typ 0, 1, 3) | zusätzlich bei RGBW (Typ 4). Es ist derselbe RGB-Farbwähler (3 Byte), **ohne Weiß**: Ein Weißfeld je Szene bräuchte rund 1 KB Parameterspeicher (frei sind 63 Byte) und Änderungen an Script und Übertragung; gehört zu F4. |
+| Reihenfolge der Blöcke (nur Darstellung) | Einzel-EVG: *Treppenlicht*, *Sperre*, *Farbe*; Gruppe: *Farbe*, *Sperre*, *Treppenlicht* | bei beiden *Farbe*, *Treppenlicht*, *Sperre* (Sperre am Ende); kein Einfluss auf Speicher, Objekte oder Firmware |
+| Text *Verhalten bei Sperre(n)* (nur Darstellung) | Einzel-EVG „Verhalten bei Sperren“, Gruppe „Verhalten bei Sperre“ | bei beiden „Verhalten bei Sperre“ |
 | Applikationsversion | 0.12 | **0.13** (`ReplacesVersions="0.0 0.10 0.11 0.12"`) |
 
 `colorType` (*Farbe ansteuern per*) hatte 2 Bit (Werte 0–3, alle vergeben). Für RGBW = 4 braucht er 3 Bit; das Bit dahinter ist belegt, deshalb liegt er jetzt in freien Bits weiter hinten im Parameterblock. Die Blockgröße ändert sich **nicht**. Die frei gewordenen Bits nutzen die neuen 1-Bit-Parameter: beim Einzel-EVG beide, bei der Gruppe nur *wiederherstellen*; *Helligkeit bei RGBW* der Gruppe liegt in Byte 17, Byte 4 Bit 3 der Gruppe ist jetzt frei.
@@ -273,7 +275,7 @@ Belegung der betroffenen Bytes (Bitnummer = `BitOffset` der ETS-Vorlage):
 
 | Bit | Ausgangscode | Nachher |
 |---|---|---|
-| 0–1 | *Verhalten bei Sperren* | unverändert |
+| 0–1 | *Verhalten bei Sperren* | unverändert (Text jetzt *Verhalten bei Sperre*) |
 | 2–3 | *Verhalten bei Entsperren* | unverändert |
 | 4 | *Sperren bei* | unverändert |
 | 5 | *Farbe ansteuern per* (Teil 1) | **Helligkeit bei RGBW** |
@@ -313,25 +315,26 @@ Belegung der betroffenen Bytes (Bitnummer = `BitOffset` der ETS-Vorlage):
 
 KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 
-## 7. Offen und Fragen zur RGBW-Erweiterung
+## 7. Offen und Abstimmung zur RGBW-Erweiterung
 
 **Offen** (wie README, Abschnitt 10):
 - Regression der anderen Farbtypen (HSV, RGB, TW, xyY) und Kanaltypen auf Hardware.
 - Szenen mit Farbe (KNX-Szenen und im Treiber gespeicherte Szenen) mit RGBW testen. Die Szenenfarbe geht per Konfigurationstransfer nur als RGB, ohne Weiß.
 - Szenen insgesamt überarbeiten: betrifft alle Kanaltypen, deshalb nicht Teil dieser Erweiterung (Vorschlag F4 in den [Befunden](RGBW-Befunde-Ausgangscode.md)).
-- Andere Treiber als der DA4-M (siehe Frage 2).
+- Andere Treiber als der DA4-M: Das Weiß geht mit `SET TEMPORARY WAF DIMLEVEL` (236) an den Treiber (B8). Ob andere RGBW-Treiber das ebenso erwarten oder vorher eine Kanalzuordnung (`SET TEMPORARY RGBWAF CONTROL`, 237) brauchen, ist nicht geprüft.
 
 **Ideen, bewusst zurückgestellt** (wie README, Abschnitt 10):
 - Treppenhauslicht mit RGBW (Farbe beim Einschalten, Sammelfenster). Mit Absicht nicht in dieser Version; heute wie im Ausgangscode nur `DAPC` (Abschnitt 4).
 
-**Fragen an den Maintainer:**
+**Mit dem Maintainer abgestimmt** (nach Absprache):
 
-1. **Speicherplatz des Farbtyps:** Der Parameter *Farbe ansteuern per* hatte 2 Bit (vier Werte, alle vergeben). Für RGBW als fünften Wert braucht er 3 Bit; weil das Nachbarbit belegt ist, liegt er jetzt an einer freien Stelle (Einzel-EVG Byte 21 Bit 5–7, Gruppe Byte 17 Bit 2–4). Die alten Bits nutzen die neuen Parameter: beim Einzel-EVG *Helligkeit bei RGBW* und *wiederherstellen* (Byte 7 Bit 5 und 6), bei der Gruppe *wiederherstellen* (Byte 4 Bit 2); *Helligkeit bei RGBW* der Gruppe liegt in Byte 17 Bit 5, Byte 4 Bit 3 ist frei (Belegung in Abschnitt 6). Ist diese Umbelegung so in Ordnung, auch im Hinblick auf das Aktualisieren bestehender Geräte von 0.12?
-2. **Weißkanal:** Das Weiß geht mit `SET TEMPORARY WAF DIMLEVEL` (236) an den Treiber, Amber und Freecolour bleiben MASK. Am DA4-M im RGBW-Modus funktioniert das (B8). Nicht geprüft ist, ob andere RGBW-Treiber das Weiß ebenso auf diesem Kanal erwarten oder vorher eine Kanalzuordnung (`SET TEMPORARY RGBWAF CONTROL`, 237) brauchen. Ist 236 als Weg in Ordnung?
-3. **Grundverfahren:** Farbe und Helligkeit, die innerhalb von 80 ms eintreffen (Sammelfenster), gehen als **ein** Befehl an den Treiber: temporäre Farbe + `DAPC`; der Treiber übernimmt beides dank automatischer Aktivierung in einem Fade. Passt dieses Verfahren als Grundlage für RGBW?
-4. **Änderungen für alle Kanaltypen:** Drei kleine Korrekturen gelten nicht nur für RGBW, sondern für alle Kanaltypen (Einzelheiten unten). Sind sie so in Ordnung?
+1. **Speicherplatz des Farbtyps:** zugestimmt. Der Parameter *Farbe ansteuern per* hatte 2 Bit (vier Werte, alle vergeben); für RGBW als fünften Wert braucht er 3 Bit und liegt deshalb an einer freien Stelle (Einzel-EVG Byte 21 Bit 5–7, Gruppe Byte 17 Bit 2–4). Die alten Bits nutzen die neuen Parameter (Belegung in Abschnitt 6).
+2. **Grundverfahren:** zugestimmt. Farbe und Helligkeit, die innerhalb von 80 ms eintreffen (Sammelfenster), gehen als **ein** Befehl an den Treiber: temporäre Farbe + `DAPC`; der Treiber übernimmt beides dank automatischer Aktivierung in einem Fade.
+3. **Kleine Änderungen für alle Kanaltypen:** in Ordnung (Einzelheiten unten).
 
-**Zu Frage 4: die Änderungen im Einzelnen**
+Die frühere Frage zum Weißkanal (Befehl 236 oder Kanalzuordnung über 237) ist eine allgemeine Frage zu anderen Treibern und steht jetzt unter *Offen*.
+
+**Kleine Änderungen für alle Kanaltypen**
 
 | Stelle | Was sich ändert | Wirkung |
 |---|---|---|
@@ -340,7 +343,7 @@ KNX-Speicher laut Build: 36801 von 36864 Byte belegt, **63 Byte frei**.
 | Startwerte `_lastDayValue` / `_lastNightValue` | Statt der Zahlen 100 und 10 (als DALI-Pegel ≈ 1,5 % bzw. 0,1 %) jetzt die Pegel für 100 % bzw. 10 %. | Nur beim ersten Einschalten nach einem Neustart mit *Einschaltwert = 0*, wenn der Treiber beim Start aus war. |
 | `currentColor`, Broadcast *Schalten* | `currentColor` wird mit 0 initialisiert; Broadcast *Schalten* läuft über `broadcastOn()`/`broadcastOff()`. | keine sichtbare Wirkung (gleicher `DAPC`) |
 
-Darüber hinaus für alle sichtbar, ohne Verhaltensänderung: die Broadcast-Objekte *Farbe RGBW* (26) und *Zurück* (27) in der ETS und die neuen Konsolenbefehle (`getCol`, `aastat`, `aaon`, `aawin`); der Speicherplatz des Farbtyps siehe Frage 1.
+Darüber hinaus für alle sichtbar, ohne Verhaltensänderung: die Broadcast-Objekte *Farbe RGBW* (26) und *Zurück* (27) in der ETS und die neuen Konsolenbefehle (`getCol`, `aastat`, `aaon`, `aawin`); der Speicherplatz des Farbtyps siehe oben, Punkt 1.
 
 ## Anhang A: `src/RgbwHelper.h`
 
@@ -497,7 +500,7 @@ namespace RgbwHelper
 
 ## Anhang B: vollständiges Diff
 
-Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 24.11.2026: `v15b` ohne Versionskennung, Kommentare bereinigt).
+Erzeugt mit `git diff a120578 -- src test library.json` (Code-Stand vom 26.11.2026: `v15b` ohne Versionskennung, Kommentare bereinigt, ETS-Reihenfolge angeglichen).
 
 ```diff
 diff --git a/src/DaliChannel.cpp b/src/DaliChannel.cpp
@@ -1852,7 +1855,7 @@ index 47a905c..51ed921 100644
          {
              logDebugP("Save not allowed. Skip!");
 diff --git a/src/DaliModule.group.templ.xml b/src/DaliModule.group.templ.xml
-index ba96936..48a4742 100644
+index ba96936..793195c 100644
 --- a/src/DaliModule.group.templ.xml
 +++ b/src/DaliModule.group.templ.xml
 @@ -44,7 +44,7 @@
@@ -1912,10 +1915,33 @@ index ba96936..48a4742 100644
                        </choose>
                        <choose ParamRefId="%AID%_P-%T%3%CC%020_R-%T%3%CC%02001">
                          <when test="!=0">
-@@ -322,6 +342,16 @@
+@@ -305,6 +325,14 @@
+                       <ComObjectRefRef RefId="%AID%_O-%T%3%CC%018_R-%T%3%CC%01801" />
+                     </when>
+                   </choose>
++                  <choose ParamRefId="%AID%_P-%T%3%CC%004_R-%T%3%CC%00401">
++                    <when test="1">
++                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
++                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%006_R-%T%3%CC%00601" />
++                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%007_R-%T%3%CC%00701" />
++                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%005_R-%T%3%CC%00501" />
++                    </when>
++                  </choose>
+                   <choose ParamRefId="%AID%_P-%T%3%CC%003_R-%T%3%CC%00301">
+                     <when test="1">
+                       <ComObjectRefRef RefId="%AID%_O-%T%3%CC%005_R-%T%3%CC%00501" />
+@@ -322,14 +350,16 @@
                            <ParameterRefRef RefId="%AID%_P-%T%3%CC%011_R-%T%3%CC%01101" />
                          </when>
                        </choose>
+-                    </when>
+-                  </choose>
+-                  <choose ParamRefId="%AID%_P-%T%3%CC%004_R-%T%3%CC%00401">
+-                    <when test="1">
+-                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%006_R-%T%3%CC%00601" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%007_R-%T%3%CC%00701" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%3%CC%005_R-%T%3%CC%00501" />
 +                      <choose ParamRefId="%AID%_P-%T%3%CC%019_R-%T%3%CC%01901">
 +                        <when test="4">
 +                          <ParameterRefRef RefId="%AID%_P-%T%3%CC%037_R-%T%3%CC%03701" />
@@ -1928,7 +1954,7 @@ index ba96936..48a4742 100644
 +                      </choose>
                      </when>
                    </choose>
-                   <choose ParamRefId="%AID%_P-%T%3%CC%004_R-%T%3%CC%00401">
+                 </when>
 diff --git a/src/DaliModule.h b/src/DaliModule.h
 index 1206625..a52928f 100644
 --- a/src/DaliModule.h
@@ -2015,9 +2041,18 @@ index 1219e9f..b820fed 100644
                  <ComObjectRefRef RefId="%AID%_O-%T%100005_R-%T%10000501" />
  
 diff --git a/src/DaliModule.single.templ.xml b/src/DaliModule.single.templ.xml
-index 78764c5..06e746e 100644
+index 78764c5..ddc886c 100644
 --- a/src/DaliModule.single.templ.xml
 +++ b/src/DaliModule.single.templ.xml
+@@ -79,7 +79,7 @@
+               <Parameter Id="%AID%_P-%T%2%CC%058" Name="%C%manuoff" ParameterType="%AID%_PT-noyes" Text="Manuelles ausschalten" Value="0">
+               <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="7" />
+               </Parameter>
+-              <Parameter Id="%AID%_P-%T%2%CC%059" Name="%C%lockbehave" ParameterType="%AID%_PT-lock" Text="Verhalten bei Sperren" Value="0">
++              <Parameter Id="%AID%_P-%T%2%CC%059" Name="%C%lockbehave" ParameterType="%AID%_PT-lock" Text="Verhalten bei Sperre" Value="0">
+               <Memory CodeSegment="%AID%_RS-04-00000" Offset="7" BitOffset="0" />
+               </Parameter>
+               <Parameter Id="%AID%_P-%T%2%CC%066" Name="%C%lockvalue" ParameterType="%AID%_PT-percent" Text="" Value="100">
 @@ -105,7 +105,7 @@
                <Memory CodeSegment="%AID%_RS-04-00000" Offset="7" BitOffset="4" />
                </Parameter>
@@ -2058,24 +2093,41 @@ index 78764c5..06e746e 100644
                <ComObjectRef RefId="%AID%_O-%T%2%CC%017" Id="%AID%_O-%T%2%CC%017_R-%T%2%CC%01701" TextParameterRefId="%AID%_P-%T%2%CC%002_R-%T%2%CC%00201" />
                <ComObjectRef RefId="%AID%_O-%T%2%CC%018" Id="%AID%_O-%T%2%CC%018_R-%T%2%CC%01801" TextParameterRefId="%AID%_P-%T%2%CC%002_R-%T%2%CC%00201" />
              </ComObjectRefs>
-@@ -453,6 +463,16 @@
-                           <ParameterRefRef RefId="%AID%_P-%T%2%CC%067_R-%T%2%CC%06701" />
-                         </when>
+@@ -428,33 +438,6 @@
                        </choose>
-+                      <choose ParamRefId="%AID%_P-%T%2%CC%073_R-%T%2%CC%07301">
-+                        <when test="4">
-+                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301" />
-+                          <choose ParamRefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301">
-+                            <when test="1">
-+                              <ParameterSeparator Id="%AID%_PS-nnn" Text="RGBW: Befehle während der Sperre werden gespeichert. Beim Entsperren kommt der gespeicherte Zustand (Ein/Aus, Helligkeit, Farbe); &quot;Verhalten bei Entsperren&quot; gilt dann nicht." UIHint="Information" />
-+                            </when>
-+                          </choose>
-+                        </when>
-+                      </choose>
                      </when>
                    </choose>
+-                  <choose ParamRefId="%AID%_P-%T%2%CC%004_R-%T%2%CC%00401">
+-                    <when test="1">
+-                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%057_R-%T%2%CC%05701" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%058_R-%T%2%CC%05801" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%008_R-%T%2%CC%00801" />
+-                    </when>
+-                  </choose>
+-                  <choose ParamRefId="%AID%_P-%T%2%CC%003_R-%T%2%CC%00301">
+-                    <when test="1">
+-                      <ComObjectRefRef RefId="%AID%_O-%T%2%CC%005_R-%T%2%CC%00501" />
+-                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Sperre" UIHint="Headline" Icon="lock-outline" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%070_R-%T%2%CC%07001" />
+-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901" />
+-                      <choose ParamRefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901">
+-                        <when test="3">
+-                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%066_R-%T%2%CC%06601" />
+-                        </when>
+-                      </choose>
+-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001" />
+-                      <choose ParamRefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001">
+-                        <when test="3">
+-                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%067_R-%T%2%CC%06701" />
+-                        </when>
+-                      </choose>
+-                    </when>
+-                  </choose>
                    <choose ParamRefId="%AID%_P-%T%2%CC%005_R-%T%2%CC%00501">
-@@ -502,6 +522,16 @@
+                     <when test="1">
+                       <ComObjectRefRef RefId="%AID%_O-%T%2%CC%019_R-%T%2%CC%01901" />
+@@ -502,6 +485,16 @@
                            <ComObjectRefRef RefId="%AID%_O-%T%2%CC%006_R-%T%2%CC%00604" />
                            <ComObjectRefRef RefId="%AID%_O-%T%2%CC%007_R-%T%2%CC%00704" />
                          </when>
@@ -2092,6 +2144,50 @@ index 78764c5..06e746e 100644
                        </choose>
                        <choose ParamRefId="%AID%_P-%T%2%CC%074_R-%T%2%CC%07401">
                          <when test="!=0">
+@@ -514,6 +507,43 @@
+                       </choose>
+                     </when>
+                   </choose>
++                  <choose ParamRefId="%AID%_P-%T%2%CC%004_R-%T%2%CC%00401">
++                    <when test="1">
++                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
++                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%057_R-%T%2%CC%05701" />
++                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%058_R-%T%2%CC%05801" />
++                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%008_R-%T%2%CC%00801" />
++                    </when>
++                  </choose>
++                  <choose ParamRefId="%AID%_P-%T%2%CC%003_R-%T%2%CC%00301">
++                    <when test="1">
++                      <ComObjectRefRef RefId="%AID%_O-%T%2%CC%005_R-%T%2%CC%00501" />
++                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Sperre" UIHint="Headline" Icon="lock-outline" />
++                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%070_R-%T%2%CC%07001" />
++                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901" />
++                      <choose ParamRefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901">
++                        <when test="3">
++                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%066_R-%T%2%CC%06601" />
++                        </when>
++                      </choose>
++                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001" />
++                      <choose ParamRefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001">
++                        <when test="3">
++                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%067_R-%T%2%CC%06701" />
++                        </when>
++                      </choose>
++                      <choose ParamRefId="%AID%_P-%T%2%CC%073_R-%T%2%CC%07301">
++                        <when test="4">
++                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301" />
++                          <choose ParamRefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301">
++                            <when test="1">
++                              <ParameterSeparator Id="%AID%_PS-nnn" Text="RGBW: Befehle während der Sperre werden gespeichert. Beim Entsperren kommt der gespeicherte Zustand (Ein/Aus, Helligkeit, Farbe); &quot;Verhalten bei Entsperren&quot; gilt dann nicht." UIHint="Information" />
++                            </when>
++                          </choose>
++                        </when>
++                      </choose>
++                    </when>
++                  </choose>
+                   <choose ParamRefId="%AID%_P-4100008_R-410000801">
+                     <when test="1">
+                       <ParameterSeparator Id="%AID%_PS-nnn" Text="" />
 @@ -676,7 +706,7 @@
                            <choose ParamRefId="%AID%_P-%T%2%CC%001_R-%T%2%CC%00101">
                              <when test="9">

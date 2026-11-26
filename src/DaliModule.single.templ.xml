@@ -79,7 +79,7 @@
               <Parameter Id="%AID%_P-%T%2%CC%058" Name="%C%manuoff" ParameterType="%AID%_PT-noyes" Text="Manuelles ausschalten" Value="0">
               <Memory CodeSegment="%AID%_RS-04-00000" Offset="0" BitOffset="7" />
               </Parameter>
-              <Parameter Id="%AID%_P-%T%2%CC%059" Name="%C%lockbehave" ParameterType="%AID%_PT-lock" Text="Verhalten bei Sperren" Value="0">
+              <Parameter Id="%AID%_P-%T%2%CC%059" Name="%C%lockbehave" ParameterType="%AID%_PT-lock" Text="Verhalten bei Sperre" Value="0">
               <Memory CodeSegment="%AID%_RS-04-00000" Offset="7" BitOffset="0" />
               </Parameter>
               <Parameter Id="%AID%_P-%T%2%CC%066" Name="%C%lockvalue" ParameterType="%AID%_PT-percent" Text="" Value="100">
@@ -438,43 +438,6 @@
                       </choose>
                     </when>
                   </choose>
-                  <choose ParamRefId="%AID%_P-%T%2%CC%004_R-%T%2%CC%00401">
-                    <when test="1">
-                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%057_R-%T%2%CC%05701" />
-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%058_R-%T%2%CC%05801" />
-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%008_R-%T%2%CC%00801" />
-                    </when>
-                  </choose>
-                  <choose ParamRefId="%AID%_P-%T%2%CC%003_R-%T%2%CC%00301">
-                    <when test="1">
-                      <ComObjectRefRef RefId="%AID%_O-%T%2%CC%005_R-%T%2%CC%00501" />
-                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Sperre" UIHint="Headline" Icon="lock-outline" />
-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%070_R-%T%2%CC%07001" />
-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901" />
-                      <choose ParamRefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901">
-                        <when test="3">
-                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%066_R-%T%2%CC%06601" />
-                        </when>
-                      </choose>
-                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001" />
-                      <choose ParamRefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001">
-                        <when test="3">
-                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%067_R-%T%2%CC%06701" />
-                        </when>
-                      </choose>
-                      <choose ParamRefId="%AID%_P-%T%2%CC%073_R-%T%2%CC%07301">
-                        <when test="4">
-                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301" />
-                          <choose ParamRefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301">
-                            <when test="1">
-                              <ParameterSeparator Id="%AID%_PS-nnn" Text="RGBW: Befehle während der Sperre werden gespeichert. Beim Entsperren kommt der gespeicherte Zustand (Ein/Aus, Helligkeit, Farbe); &quot;Verhalten bei Entsperren&quot; gilt dann nicht." UIHint="Information" />
-                            </when>
-                          </choose>
-                        </when>
-                      </choose>
-                    </when>
-                  </choose>
                   <choose ParamRefId="%AID%_P-%T%2%CC%005_R-%T%2%CC%00501">
                     <when test="1">
                       <ComObjectRefRef RefId="%AID%_O-%T%2%CC%019_R-%T%2%CC%01901" />
@@ -538,6 +501,43 @@
                           <choose ParamRefId="%AID%_P-%T%2%CC%089_R-%T%2%CC%08901">
                             <when test="1">
                               <ParameterSeparator Id="%AID%_PS-nnn" Text="Diese Konfiguration ist nicht zulässig. Wenn die Helligkeit bei xyY ignoriert werden soll, MUSS die Ansteuerung über XY erfolgen." UIHint="Error" />
+                            </when>
+                          </choose>
+                        </when>
+                      </choose>
+                    </when>
+                  </choose>
+                  <choose ParamRefId="%AID%_P-%T%2%CC%004_R-%T%2%CC%00401">
+                    <when test="1">
+                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Treppenlicht" UIHint="Headline" Icon="timer-outline" />
+                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%057_R-%T%2%CC%05701" />
+                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%058_R-%T%2%CC%05801" />
+                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%008_R-%T%2%CC%00801" />
+                    </when>
+                  </choose>
+                  <choose ParamRefId="%AID%_P-%T%2%CC%003_R-%T%2%CC%00301">
+                    <when test="1">
+                      <ComObjectRefRef RefId="%AID%_O-%T%2%CC%005_R-%T%2%CC%00501" />
+                      <ParameterSeparator Id="%AID%_PS-nnn" Text="Sperre" UIHint="Headline" Icon="lock-outline" />
+                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%070_R-%T%2%CC%07001" />
+                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901" />
+                      <choose ParamRefId="%AID%_P-%T%2%CC%059_R-%T%2%CC%05901">
+                        <when test="3">
+                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%066_R-%T%2%CC%06601" />
+                        </when>
+                      </choose>
+                      <ParameterRefRef RefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001" />
+                      <choose ParamRefId="%AID%_P-%T%2%CC%060_R-%T%2%CC%06001">
+                        <when test="3">
+                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%067_R-%T%2%CC%06701" />
+                        </when>
+                      </choose>
+                      <choose ParamRefId="%AID%_P-%T%2%CC%073_R-%T%2%CC%07301">
+                        <when test="4">
+                          <ParameterRefRef RefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301" />
+                          <choose ParamRefId="%AID%_P-%T%2%CC%133_R-%T%2%CC%13301">
+                            <when test="1">
+                              <ParameterSeparator Id="%AID%_PS-nnn" Text="RGBW: Befehle während der Sperre werden gespeichert. Beim Entsperren kommt der gespeicherte Zustand (Ein/Aus, Helligkeit, Farbe); &quot;Verhalten bei Entsperren&quot; gilt dann nicht." UIHint="Information" />
                             </when>
                           </choose>
                         </when>
