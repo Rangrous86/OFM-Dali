@@ -32,8 +32,8 @@ Zusammengestellt am 22.11.2026 aus der [Arbeitsfassung der README vom 21.11.2026
 | `v15b` | 22.11.2026 | Sperre und HCL: „Anschalten = Einschaltwert“ beim Sperren/Entsperren nimmt `rgbwOnValue()` (HCL vor Tag/Nacht, `rgbwLockArc`); HCL-Nachführung während einer Sperre sendet nichts an die Lampe, mit „wiederherstellen“ folgt der gespeicherte Pegel der Kurve (`setBrightness`, G24). Gefunden beim Vorbereiten von H6 | H6a, H6b **bestanden** (22.11.) |
 | (23.11.) | 23.11.2026 | Versionskennung `RGBW_BUILD_TAG` entfernt (Testhilfe); Logzeile wieder `Color absolute` wie im Ausgangscode. `fromDaliLevel` → `knxFromDaliLevel`. Kommentare im Code bereinigt: Verweise auf die alte README und interne Test-Kürzel (B…, C…, S1–S4) durch kurze Erklärungen ersetzt, deutsche Kommentare in `RgbwHelper.h` übersetzt; Logzeile `Broadcast zurueck` → `Broadcast back`. Neu: Abschnitt RGBW in `doc/Applikationsbeschreibung-Dali.md` (für den PR). Keine Funktionsänderung | – |
 | (24.11.) | 24.11.2026 | Kommentar zu `currentState` in `koHandleDimmAbs` berichtigt (Begründung für alle Kanaltypen). Keine Funktionsänderung | – |
-| (26.11.) | 26.11.2026 | ETS, nur Darstellung: Einzel-EVG und Gruppe mit gleicher Reihenfolge *Farbe*, *Treppenlicht*, *Sperre*; Text *Verhalten bei Sperre* bei beiden. Abstimmung mit dem Maintainer eingetragen (Speicherplatz, Grundverfahren, kleine Änderungen für alle Kanaltypen) | O1 (offen) |
-| (26.11.b) | 26.11.2026 | Aufräumen ohne Funktionsänderung: ungenutzte Variable `_lastLevelArc` entfernt (Rest aus `v12`), Kommentar zur automatischen Aktivierung ohne `GO TO LAST ACTIVE LEVEL`, doppelte Leerzeile entfernt | O1 (offen) |
+| (26.11.) | 26.11.2026 | ETS, nur Darstellung: Einzel-EVG und Gruppe mit gleicher Reihenfolge *Farbe*, *Treppenlicht*, *Sperre*; Text *Verhalten bei Sperre* bei beiden. Abstimmung mit dem Maintainer eingetragen (Speicherplatz, Grundverfahren, kleine Änderungen für alle Kanaltypen) | O1 bestanden |
+| (26.11.b) | 26.11.2026 | Aufräumen ohne Funktionsänderung: ungenutzte Variable `_lastLevelArc` entfernt (Rest aus `v12`), Kommentar zur automatischen Aktivierung ohne `GO TO LAST ACTIVE LEVEL`, doppelte Leerzeile entfernt | O1 bestanden |
 
 ## 2. Befunde zum Treiber DA4-M (B1–B29)
 
@@ -468,6 +468,23 @@ Stand `fd15af0` (`v15b` ohne Versionskennung, Kommentare bereinigt) gebaut (`SUC
 | KT4 | G0 Aus | **bestanden**: `RGBW: off`, `SetDimmState 0.0/0`, beide aus |
 
 Ergebnis: Der PR-Stand kompiliert und läuft wie `v15b`.
+
+### Test O1: ETS-Darstellung und Funktionsprobe (27.11.2026, 00:28)
+
+Stand `2d84cbc` (ETS-Reihenfolge angeglichen, Aufräumen ohne Funktionsänderung). Applikation 0.13 im ETS-Katalog ersetzt, Gerät neu eingefügt und vollständig programmiert; Parameter dabei auf Werkseinstellung (A0 ohne HCL, *wiederherstellen* = Nein), Gruppenadressen wie in README 8.1. Gesendet über Home Assistant (`knx.send`).
+
+| Schritt | Telegramm | Ergebnis |
+|---|---|---|
+| ETS | A0 und G0 öffnen | **bestanden**: bei beiden *Farbe*, dann *Sperre* (Treppenlicht ausgeblendet, Normalbetrieb); bei beiden „Verhalten bei Sperre“ |
+| F1 | A0 Ein (20/0/0) | **bestanden**: `RGBW: level 254` (nach dem Flashen keine Farbe bekannt, nur `DAPC`), Status Ein, 100 % |
+| F2 | A0 Rot (20/0/2) | **bestanden**: `Send RGBW: 254 0 0 0`, `RGBW: colour (ACTIVATE)`, Farbstatus `#FF0000` |
+| F3 | A0 50 % (20/0/1) | **bestanden**: `RGBW: level 229`, *Dimmen Status* 50,6 % |
+| F4 | A0 Dunkler, nach ≈ 2,6 s Stopp (20/0/6) | **bestanden**: Pegel 229 → 113, nach dem Stopp `RGBW: colour again after relative dimming` und `Query actual level after the dimming stop` → 103, *Dimmen Status* 1,6 % |
+| F5 | G0 Ein (20/0/15) | **bestanden**: `RGBW: level 254` (keine Gruppenfarbe bekannt), G0 Status Ein, 100 % |
+| F6 | G0 Blau (20/0/20) | **bestanden**: `Send RGBW: 0 0 254 0 (temporary …)`, `RGBW: group colour with the group level 254 (one fade)`, Farbstatus `#0000FF` |
+| F7 | G0 Aus (20/0/15) | **bestanden**: `RGBW: off`, G0 Status Aus, 0 % |
+
+Ergebnis: Die ETS-Seiten von Einzel-EVG und Gruppe sind gleich aufgebaut, die Funktion ist unverändert. Erwartungsgemäß meldet A0 nach den G0-Befehlen keinen eigenen Status (G3).
 
 ## 5. Grundtest (Testfälle seit v6)
 
