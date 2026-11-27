@@ -9,7 +9,7 @@ This fork extends the OpenKNX DALI gateway (`OFM-Dali`, device `GW-REG1-Dali`) w
 | **Version** | `v15b`, cleaned up on 23/24 Nov 2026 (PR state, branch `v1dev` of this fork) |
 | **Base** | `OpenKNX/OFM-Dali`, branch `v1dev`, commit `a120578` |
 | **ETS application** | 0.13 (one version above the official release 0.12; a device on 0.12 can be updated directly) |
-| **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)). On 22 Nov 2026 with `v15`: day/night value and HCL (N1, N2, H1–H5) passed. With `v15b`: HCL together with the lock (H6a, H6b) passed (8.2). On 23 Nov 2026 short test of the PR state (KT1–KT4) passed. |
+| **Tested** | on 21 Nov 2026 with two DA4-M (RGBW) on a `GW-REG1-Dali`: single gear, groups, broadcast, lock, driver power loss, restart, all passed ([test log, German](doc/RGBW-Testprotokoll.md)). On 22 Nov 2026 with `v15`: day/night value and HCL (N1, N2, H1–H5) passed. With `v15b`: HCL together with the lock (H6a, H6b) passed (8.2). On 23 Nov 2026 short test of the PR state (KT1–KT4) passed. On 27 Nov 2026, after aligning the ETS pages, test O1 (ETS display, function check F1–F7) passed. |
 | **Unchanged** | the colour types HSV, RGB, TW and xyY and all other channel types (except three small fixes, see 3) |
 
 ## Contents
@@ -338,7 +338,7 @@ For every test: first describe what is sent and what counts as passed, then send
 | N1 | *Tag/Nacht* to night, then *on* | `Turning on night value`, lamp with night value and stored colour in one fade. N2 likewise with day |
 | H1–H6 | HCL (brightness and colour temperature active, auto): *on*, tracking with the lamp on, colour (→ manual), *off* (→ auto); lock (H6) | HCL level instead of day value; tracking as `RGBW: level N`; colour temperature only `RGBW: colour temperature skipped`; H6 (lock with "restore"): lamp stays off during the lock, on unlock the current HCL level (procedure in the test log) |
 
-**Result 21 Nov 2026 (`v14b`):** all tests up to R1 passed, including the final test with the firmware without diagnostics. **22 Nov 2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b passed. **23 Nov 2026 (PR state):** short test KT1–KT4 passed. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
+**Result 21 Nov 2026 (`v14b`):** all tests up to R1 passed, including the final test with the firmware without diagnostics. **22 Nov 2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b passed. **23 Nov 2026 (PR state):** short test KT1–KT4 passed. **27 Nov 2026 (ETS aligned):** test O1 passed. Logs and details: [test log (German)](doc/RGBW-Testprotokoll.md).
 
 **Host test without hardware:**
 

@@ -9,7 +9,7 @@ Dieser Fork erweitert das OpenKNX-DALI-Gateway (`OFM-Dali`, Gerät `GW-REG1-Dali
 | **Stand** | `v15b`, bereinigt am 23./24.11.2026 (PR-Stand, Branch `v1dev` dieses Forks) |
 | **Basis** | `OpenKNX/OFM-Dali`, Branch `v1dev`, Commit `a120578` |
 | **ETS-Applikation** | 0.13 (eine Version über dem offiziellen Release 0.12; ein Gerät mit 0.12 lässt sich direkt aktualisieren) |
-| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Mit `v15b`: HCL zusammen mit der Sperre (H6a, H6b) bestanden (8.2). Am 23.11.2026 Kurztest des PR-Stands (KT1–KT4) bestanden. |
+| **Getestet** | am 21.11.2026 mit zwei DA4-M (RGBW) am `GW-REG1-Dali`: Einzel-EVG, Gruppen, Broadcast, Sperre, Ausfall des Treibers, Neustart, bestanden ([Testprotokoll](doc/RGBW-Testprotokoll.md)). Am 22.11.2026 mit `v15`: Tag-/Nachtwert und HCL (N1, N2, H1–H5) bestanden. Mit `v15b`: HCL zusammen mit der Sperre (H6a, H6b) bestanden (8.2). Am 23.11.2026 Kurztest des PR-Stands (KT1–KT4) bestanden. Am 27.11.2026 nach der Angleichung der ETS-Seiten Test O1 (ETS-Darstellung, Funktionsprobe F1–F7) bestanden. |
 | **Unverändert** | die Farbtypen HSV, RGB, TW und xyY sowie alle anderen Kanaltypen (bis auf drei kleine Korrekturen, siehe 3) |
 
 ## Inhalt
@@ -338,7 +338,7 @@ Jeder Test: vorher beschreiben, was gesendet wird und was als bestanden gilt; da
 | N1 | *Tag/Nacht* auf Nacht, dann *Ein* | `Turning on night value`, Lampe mit Nachtwert und gespeicherter Farbe in einem Fade. N2 entsprechend mit Tag |
 | H1–H6 | HCL (Helligkeit und Farbtemperatur aktiv, Auto): *Ein*, Nachführung bei brennender Lampe, Farbe (→ Manu), *Aus* (→ Auto); Sperre (H6) | HCL-Pegel statt Tagwert; Nachführung als `RGBW: level N`; Farbtemperatur nur `RGBW: colour temperature skipped`; H6 (Sperre mit „wiederherstellen“): Lampe bleibt während der Sperre aus, beim Entsperren der aktuelle HCL-Pegel (Ablauf im Testprotokoll) |
 
-**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b bestanden. **23.11.2026 (PR-Stand):** Kurztest KT1–KT4 bestanden. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
+**Ergebnis 21.11.2026 (`v14b`):** alle Tests bis R1 bestanden, auch der Schlusstest mit der Firmware ohne Diagnose. **22.11.2026 (`v15`/`v15b`):** N1, N2, H1–H5, H6a, H6b bestanden. **23.11.2026 (PR-Stand):** Kurztest KT1–KT4 bestanden. **27.11.2026 (ETS angeglichen):** Test O1 bestanden. Logs und Einzelheiten: [Testprotokoll](doc/RGBW-Testprotokoll.md).
 
 **Host-Test ohne Hardware:**
 
