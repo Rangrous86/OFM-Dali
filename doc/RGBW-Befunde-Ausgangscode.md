@@ -17,6 +17,7 @@
 | Fehler im Ausgangscode, offen | G3, G5, G6, G7, G8, G9, G10, G11, G12, G13, G14, G21, G22, G23 |
 | Nur Log, Warnungen, Hinweise | G15, G17, G18, G19 |
 | Ideen und Vorschläge | G20, F1, F2, F3, F4 |
+| Mögliche Verbesserungen an der RGBW-Erweiterung | Abschnitt 6 (ohne Nummer) |
 
 **Vorgehen:** Diese Befunde sind nicht Teil des RGBW-PR. Vorschlag: nach dem RGBW-PR in eigenen, kleinen PRs nach Themen beheben (Reihenfolge nach Absprache); G1 und G2 betreffen die Bibliothek `OpenKNX/dali` und können unabhängig davon dort korrigiert werden.
 
@@ -292,3 +293,15 @@ Heute werden DALI-Szenen 1:1 durchgereicht:
 ### Hinweis: Farbtelegramm bei ausgeschaltetem Kanal (andere Farbtypen)
 
 Bei HSV, RGB, TW und xyY schickt ein Farbtelegramm an einen ausgeschalteten Kanal die Farbe an den Treiber und setzt die Statusobjekte auf *Ein* mit dem Tag-Einschaltwert (`// TODO get real` in `koHandleColor`), obwohl die Lampe aus bleibt. RGBW lässt den Status auf *Aus*. Die anderen Farbtypen haben wir bewusst nicht geändert. **Vorschlag:** HSV, RGB, TW und xyY ebenso anpassen, damit sich alle Farbtypen gleich verhalten und der Status überall den tatsächlichen Zustand der Lampe zeigt.
+
+## 6. Mögliche Verbesserungen an der RGBW-Erweiterung
+
+Diese Punkte betreffen nicht den Ausgangscode, sondern unsere RGBW-Erweiterung selbst. Sie sind nicht Teil des RGBW-PR.
+
+### RGBW-Broadcast-Objekte nur bei Bedarf einblenden
+
+- **Heute:** Die Objekte *Broadcast Farbe RGBW* (26) und *Broadcast Zurück* (27) sind in der ETS bei jedem Gerät sichtbar, auch wenn kein Kanal und keine Gruppe auf RGBW steht. Ohne RGBW haben sie keine Funktion.
+- **Vorschlag:** neuer Parameter auf *Dali-GW → Allgemein*, z. B. „RGBW-Broadcast-Objekte anzeigen“ (Nein/Ja, ab Werk Nein), der nur in der ETS existiert und keinen Speicher im Gerät belegt (wie „Einschaltwert Tag über KO setzen“). Die Objekte 26 und 27 erscheinen nur bei *Ja*. Firmware und Speicherlayout bleiben unverändert.
+- **Nicht möglich:** automatisch einblenden, sobald ein Kanal oder eine Gruppe auf RGBW steht. Die ETS kann ein Objekt nur von **einem** Parameter abhängig machen, nicht von 64 Kanälen und 16 Gruppen; das ginge höchstens über das ETS-Script.
+- **Zu beachten:** Bei bestehenden Projekten mit verknüpften Objekten 26/27 würde die ETS die Objekte nach dem Update ausblenden (ab Werk *Nein*); die Verknüpfungen müssten nach *Ja* neu gesetzt werden.
+- **Stand:** vorbereitet und wieder zurückgenommen (27.11.), soll mit einem späteren PR kommen.

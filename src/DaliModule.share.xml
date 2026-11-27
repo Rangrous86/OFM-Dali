@@ -289,7 +289,6 @@
               </Parameter>
               <Parameter Id="%AID%_P-%T%100012" Name="deleteAll" ParameterType="%AID%_PT-checkbox" Text="" SuffixText="Kurzadressen löschen" Value="0" />
               <Parameter Id="%AID%_P-%T%100013" Name="assignNew" ParameterType="%AID%_PT-checkbox" Text="" SuffixText="Kurzadressen setzen" Value="0" />
-              <Parameter Id="%AID%_P-%T%100014" Name="rgbwBroadcastKO" ParameterType="%AID%_PT-noyes" Text="RGBW-Broadcast-Objekte anzeigen" Value="0" />
               
             </Parameters>
             <ParameterRefs>
@@ -369,7 +368,6 @@
               <ParameterRef Id="%AID%_P-%T%100011_R-%T%10001101" RefId="%AID%_P-%T%100011" Name="funcBtnLong" />
               <ParameterRef Id="%AID%_P-%T%100012_R-%T%10001201" RefId="%AID%_P-%T%100012" Name="deleteAll" />
               <ParameterRef Id="%AID%_P-%T%100013_R-%T%10001301" RefId="%AID%_P-%T%100013" Name="assignNew" />
-              <ParameterRef Id="%AID%_P-%T%100014_R-%T%10001401" RefId="%AID%_P-%T%100014" Name="rgbwBroadcastKO" />
             </ParameterRefs>
             <ComObjectTable>
               <ComObject Id="%AID%_O-%T%100001" Name="broadcast_switch" Text="Dali: Broadcast" Number="1" FunctionText="Schalten" ObjectSize="1 Bit" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" DatapointType="DPST-1-1" />
@@ -430,6 +428,8 @@
                 
                 <ComObjectRefRef RefId="%AID%_O-%T%100001_R-%T%10000101" />
                 <ComObjectRefRef RefId="%AID%_O-%T%100002_R-%T%10000201" />
+                <ComObjectRefRef RefId="%AID%_O-%T%100006_R-%T%10000601" />
+                <ComObjectRefRef RefId="%AID%_O-%T%100007_R-%T%10000701" />
                 <ComObjectRefRef RefId="%AID%_O-%T%100003_R-%T%10000301" />
                 <ComObjectRefRef RefId="%AID%_O-%T%100005_R-%T%10000501" />
 
@@ -439,13 +439,6 @@
                 <choose ParamRefId="%AID%_P-%T%100001_R-%T%10000101">
                   <when test="1">
                     <ComObjectRefRef RefId="%AID%_O-%T%100004_R-%T%10000401" />
-                  </when>
-                </choose>
-                <ParameterRefRef RefId="%AID%_P-%T%100014_R-%T%10001401" />
-                <choose ParamRefId="%AID%_P-%T%100014_R-%T%10001401">
-                  <when test="1">
-                    <ComObjectRefRef RefId="%AID%_O-%T%100006_R-%T%10000601" />
-                    <ComObjectRefRef RefId="%AID%_O-%T%100007_R-%T%10000701" />
                   </when>
                 </choose>
                 <ParameterRefRef RefId="%AID%_P-%T%100009_R-%T%10000901" />
